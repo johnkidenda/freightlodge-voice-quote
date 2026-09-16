@@ -201,14 +201,68 @@ export function extractSlots(text, { now, awaiting } = {}) {
   return extracted;
 }
 
+const PLACE_STOP = new Set([
+  "to",
+  "through",
+  "on",
+  "for",
+  "weighing",
+  "weight",
+  "class",
+  "pickup",
+  "pick",
+  "pieces",
+  "piece",
+  "pallets",
+  "pallet",
+  "pcs",
+  "skids",
+  "skid",
+  "boxes",
+  "box",
+  "crates",
+  "crate",
+  "cartons",
+  "carton",
+  "lb",
+  "lbs",
+  "pound",
+  "pounds",
+  "email",
+  "commodity",
+  "freight",
+  "need",
+  "want",
+  "with",
+  "and",
+  "tomorrow",
+  "today",
+  "yesterday",
+  "liftgate",
+  "residential",
+  "inside",
+  "appointment",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+  "none",
+  "hazmat",
+  "quote",
+  "quoting",
+  "please",
+  "thanks",
+]);
+
+const LEADING_FILLER = /^(need|please|want|hi|hello|quote|ship|shipping|can|we|i|get)\b/i;
+
 function extractLane(raw, extracted, awaiting) {
-  const leading = raw.match(
-    /^([A-Za-z .']+?)\s+([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)/,
-  );
-  if (leading && normalizeState(leading[2])) {
-    extracted.origin.city = titleCase(leading[1].trim());
-    extracted.origin.state = normalizeState(leading[2]);
-    extracted.origin.postal_code = leading[3];
+  if (!LEADING_FILLER.test(raw)) {
+    const leading = takePlace(raw);
+    if (leading?.postal_code) Object.assign(extracted.origin, leading);
   }
 
   const fromToZips = raw.match(
@@ -263,38 +317,59 @@ function matchPlaceAfter(raw, prefixRe) {
   const start = raw.search(prefixRe);
   if (start < 0) return null;
   const after = raw.slice(start).replace(prefixRe, "");
-  const stop = after.search(/\b(to|through|on|for|weighing|weight|class|pickup|pieces?|pallets?)\b/i);
-  const chunk = (stop >= 0 ? after.slice(0, stop) : after).trim();
-  const zipMatch = chunk.match(/(\d{5}(?:-\d{4})?)/);
-  const stateMatch =
-    chunk.match(/,\s*([A-Za-z]{2})\b/) ||
-    chunk.match(/\b([A-Za-z]{2})\s+\d{5}/) ||
-    matchStateName(chunk);
-  const cityMatch = chunk
-    .replace(/(\d{5}(?:-\d{4})?)/, "")
-    .replace(/\b[A-Za-z]{2}\b/, (abbr) => (STATE_CODES.has(abbr.toUpperCase()) ? "" : abbr))
-    .replace(/,+/g, " ")
-    .trim();
-
-  const place = {};
-  if (zipMatch && !inWeightContext(raw, raw.indexOf(zipMatch[1]))) {
-    place.postal_code = zipMatch[1];
-  }
-  if (stateMatch) {
-    const code = normalizeState(stateMatch[1] || stateMatch.state);
-    if (code) place.state = code;
-  }
-  const city = cleanCity(cityMatch);
-  if (city) place.city = city;
-  return Object.keys(place).length ? place : null;
+  return takePlace(after);
 }
 
-function matchStateName(chunk) {
-  const lower = chunk.toLowerCase();
-  for (const [name, code] of Object.entries(STATE_NAME_TO_CODE)) {
-    if (lower.includes(name)) return { 1: code, state: code };
+/**
+ * Read only a leading city / state / ZIP. Stop before weight, pieces,
+ * dates, accessorials, or other chat leftovers.
+ */
+export function takePlace(text) {
+  if (!text) return null;
+  const tokens = text.trim().split(/\s+/).filter(Boolean);
+  const cityWords = [];
+  let state = null;
+  let zip = null;
+
+  for (let i = 0; i < tokens.length; i += 1) {
+    const bare = tokens[i].replace(/^[,\.;:]+|[,\.;:]+$/g, "");
+    if (!bare) continue;
+
+    if (/^\d{5}(?:-\d{4})?$/.test(bare)) {
+      zip = bare;
+      break;
+    }
+
+    if (/^[\d,]+(?:\.\d+)?$/.test(bare)) break;
+    if (bare.includes("@")) break;
+
+    const nextBare = tokens[i + 1] ? tokens[i + 1].replace(/^[,\.;:]+|[,\.;:]+$/g, "") : "";
+    const twoWord = nextBare ? normalizeState(`${bare} ${nextBare}`) : null;
+    if (twoWord) {
+      state = twoWord;
+      i += 1;
+      continue;
+    }
+
+    const st = normalizeState(bare);
+    if (st) {
+      state = st;
+      continue;
+    }
+
+    if (PLACE_STOP.has(bare.toLowerCase())) break;
+    if (!/^[A-Za-z][A-Za-z.'-]*$/.test(bare)) break;
+
+    cityWords.push(bare);
+    if (cityWords.length >= 4) break;
   }
-  return null;
+
+  const place = {};
+  if (zip) place.postal_code = zip;
+  if (state) place.state = state;
+  const city = cleanCity(cityWords.join(" "));
+  if (city) place.city = city;
+  return Object.keys(place).length ? place : null;
 }
 
 function normalizeState(value) {
@@ -312,8 +387,10 @@ function cleanCity(value) {
     .replace(/\s+/g, " ")
     .trim();
   if (cleaned.length < 2 || cleaned.length > 40) return null;
-  if (/^(from|to|the|a|an)$/i.test(cleaned)) return null;
-  return titleCase(cleaned);
+  if (/^(from|to|the|a|an|and|for|need|want)$/i.test(cleaned)) return null;
+  const words = cleaned.split(/\s+/).filter((w) => !PLACE_STOP.has(w.toLowerCase()));
+  if (!words.length) return null;
+  return titleCase(words.join(" "));
 }
 
 function titleCase(s) {
@@ -322,8 +399,15 @@ function titleCase(s) {
 
 function inWeightContext(raw, index) {
   if (index == null || index < 0) return false;
-  const window = raw.slice(index, index + 18);
-  return /^\d[\d,.]*(?:\s*(?:lbs?|pounds?|lb\.))/i.test(window);
+  const window = raw.slice(index, index + 24);
+  return /^[\d,]+(?:\.\d+)?(?:\s*(?:lbs?|pounds?|lb\.))/i.test(window);
+}
+
+export function parseWeightPounds(token) {
+  if (token == null) return null;
+  const normalized = String(token).replace(/,/g, "").trim();
+  const n = Number(normalized);
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 function extractPieces(raw, extracted, awaiting) {
@@ -353,10 +437,10 @@ function parseCount(token) {
 }
 
 function extractWeight(raw, extracted) {
-  const m = raw.match(/\b(\d{1,6}(?:\.\d+)?)\s*(?:lbs?|pounds?)\b/i);
+  const m = raw.match(/\b([\d,]+(?:\.\d+)?)\s*(?:lbs?|pounds?)\b/i);
   if (!m) return;
-  const n = Number(m[1]);
-  if (Number.isFinite(n) && n > 0) extracted.freight.total_weight_lbs = n;
+  const n = parseWeightPounds(m[1]);
+  if (n != null) extracted.freight.total_weight_lbs = n;
 }
 
 function extractDims(raw, extracted) {
@@ -379,14 +463,34 @@ function extractClass(raw, extracted) {
   if (NMFC_CLASSES.has(value)) extracted.freight.freight_class = value;
 }
 
+const COMMODITY_STOP =
+  /\s*(?:,|$|\b(?:from|to|weighing|weight|class|pickup|email|liftgate|residential|none|tomorrow|today)\b)/i;
+
 function extractCommodity(raw, extracted, awaiting) {
   const labeled = raw.match(
-    /\b(?:commodity|product|freight|goods|shipping|it's|its|of)\s+(?:is\s+)?([a-z0-9][a-z0-9 \-/]{1,48})/i,
+    new RegExp(
+      String.raw`\b(?:commodity|product|goods)(?:\s+is|\s*[:=])?\s+([a-z0-9][a-z0-9 \-/]{1,48}?)` +
+        COMMODITY_STOP.source,
+      "i",
+    ),
   );
   if (labeled) {
     const commodity = sanitizeCommodity(labeled[1]);
     if (commodity) extracted.freight.commodity = commodity;
   }
+
+  if (!extracted.freight.commodity) {
+    const ofGoods = raw.match(
+      new RegExp(
+        String.raw`\b(?:pallets?|pieces?|skids?|boxes?|crates?|cartons?)\s+of\s+([a-z0-9][a-z0-9 \-/]{1,48}?)` +
+          COMMODITY_STOP.source,
+        "i",
+      ),
+    );
+    const commodity = ofGoods && sanitizeCommodity(ofGoods[1]);
+    if (commodity) extracted.freight.commodity = commodity;
+  }
+
   if (!extracted.freight.commodity && awaiting === "commodity") {
     const commodity = sanitizeCommodity(raw);
     if (commodity) extracted.freight.commodity = commodity;
@@ -405,11 +509,14 @@ function sanitizeCommodity(value) {
     .replace(/\b(please|thanks|thank you|need a quote|get a quote)\b/gi, "")
     .replace(/\s+/g, " ")
     .trim();
-  s = s.replace(/\s+\b(from|to|weighing|class|on|pickup).*$/i, "").trim();
+  s = s.replace(/\s+\b(from|to|weighing|class|on|pickup|email|liftgate).*$/i, "").trim();
+  s = s.replace(/[,\.;:]+$/g, "").trim();
   if (s.length < 2 || s.length > 48) return null;
   if (/^\d+$/.test(s)) return null;
   if (
-    /^(yes|no|ok|okay|sure|hi|hello|zip|email|tomorrow|today|pounds|lbs|class)$/i.test(s)
+    /^(yes|no|ok|okay|sure|hi|hello|zip|email|tomorrow|today|pounds|lbs|class|pallets?|pieces?)$/i.test(
+      s,
+    )
   ) {
     return null;
   }
