@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "freightlodge.quote_sheet.v1",
+  "title": "Freight Lodge Quote Sheet v1",
+  "description": "Stable contract between voice-to-quote app (Anthony) and Exfresso computer-use runner (Freight Ops). Never invent ZIPs, dims, weights, or class — leave null and ask.",
+  "type": "object",
+  "required": ["schema_version", "status", "lanes", "freight", "pickup", "contact"],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "quote_request_id": { "type": "string", "description": "Client-generated UUID for this sheet" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "status": {
+      "type": "string",
+      "enum": ["collecting", "ready_for_quote", "quoting", "quoted", "out_of_scope", "error"]
+    },
+    "out_of_scope_reason": {
+      "type": ["string", "null"],
+      "description": "Set when status=out_of_scope (e.g. hard international). Honest handoff — no fake rate."
+    },
+    "lanes": {
+      "type": "object",
+      "required": ["origin", "destination"],
+      "properties": {
+        "origin": { "$ref": "#/$defs/place" },
+        "destination": { "$ref": "#/$defs/place" }
+      }
+    },
+    "freight": {
+      "type": "object",
+      "required": ["pieces", "commodity"],
+      "properties": {
+        "pieces": { "type": ["integer", "null"], "minimum": 1 },
+        "total_weight_lbs": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "dims": {
+          "type": ["object", "null"],
+          "properties": {
+            "length_in": { "type": ["number", "null"] },
+            "width_in": { "type": ["number", "null"] },
+            "height_in": { "type": ["number", "null"] },
+            "per_piece": { "type": "boolean", "default": true }
+          }
+        },
+        "freight_class": {
+          "type": ["string", "null"],
+          "description": "NMFC class if known; null if unknown — do not invent"
+        },
+        "commodity": { "type": ["string", "null"] },
+        "hazmat": { "type": ["boolean", "null"] },
+        "stackable": { "type": ["boolean", "null"] }
+      }
+    },
+    "pickup": {
+      "type": "object",
+      "properties": {
+        "date": { "type": ["string", "null"], "format": "date", "description": "YYYY-MM-DD local shipper intent" },
+        "ready_time_local": { "type": ["string", "null"], "description": "HH:MM 24h optional" },
+        "accessorials": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "liftgate_pickup",
+              "liftgate_delivery",
+              "inside_pickup",
+              "inside_delivery",
+              "residential_pickup",
+              "residential_delivery",
+              "limited_access_pickup",
+              "limited_access_delivery",
+              "appointment_delivery",
+              "notify_before_delivery",
+              "protect_from_freeze",
+              "other"
+            ]
+          },
+          "default": []
+        },
+        "accessorials_other": { "type": ["string", "null"] }
+      }
+    },
+    "contact": {
+      "type": "object",
+      "required": ["email"],
+      "properties": {
+        "name": { "type": ["string", "null"] },
+        "email": { "type": ["string", "null"], "format": "email" },
+        "phone": { "type": ["string", "null"] },
+        "company": { "type": ["string", "null"] }
+      }
+    },
+    "notes": { "type": ["string", "null"] },
+    "quote_result": {
+      "type": ["object", "null"],
+      "description": "Filled by Exfresso runner; shown as quote card in-app",
+      "properties": {
+        "carrier": { "type": ["string", "null"] },
+        "service": { "type": ["string", "null"] },
+        "total_usd": { "type": ["number", "null"] },
+        "transit_days_min": { "type": ["integer", "null"] },
+        "transit_days_max": { "type": ["integer", "null"] },
+        "quote_id": { "type": ["string", "null"] },
+        "raw_summary": { "type": ["string", "null"] },
+        "quoted_at": { "type": ["string", "null"], "format": "date-time" }
+      }
+    }
+  },
+  "$defs": {
+    "place": {
+      "type": "object",
+      "properties": {
+        "city": { "type": ["string", "null"] },
+        "state": { "type": ["string", "null"], "description": "US state code preferred" },
+        "postal_code": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9]{5}(-[0-9]{4})?$",
+          "description": "Required before ready_for_quote; never invent"
+        },
+        "country": { "type": "string", "default": "US" }
+      }
+    }
+  },
+  "ready_for_quote_minimum": [
+    "lanes.origin.postal_code",
+    "lanes.destination.postal_code",
+    "freight.pieces",
+    "freight.total_weight_lbs OR (freight.dims with L/W/H) OR freight.freight_class",
+    "freight.commodity",
+    "pickup.date",
+    "contact.email"
+  ]
+}
