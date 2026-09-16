@@ -9,6 +9,7 @@ import {
 } from "../src/lib/completeness.js";
 import { handleUtterance, createSession } from "../src/lib/dialog.js";
 import { pickLowestRate, simulateExfressoRunner } from "../src/lib/handoff.js";
+import { formatQuoteEmail } from "../src/lib/email.js";
 
 function completeSheet(overrides = {}) {
   const sheet = emptySheet({ id: "test-sheet", now: "2026-09-16T12:00:00.000Z" });
@@ -160,5 +161,20 @@ describe("handoff stub", () => {
     expect(result.quote_sheet.status).toBe("error");
     expect(result.quote_sheet.quote_result).toBeNull();
     expect(result.quote_sheet.error_reason).toMatch(/not ready/i);
+  });
+
+  it("mirrors error_reason onto the email body like out_of_scope_reason", () => {
+    const errored = completeSheet();
+    errored.status = "error";
+    errored.error_reason = "Exfresso login timeout";
+    errored.quote_result = null;
+    expect(formatQuoteEmail(errored).body).toMatch(/Exfresso login timeout/);
+
+    const oos = completeSheet();
+    oos.status = "out_of_scope";
+    oos.out_of_scope_reason = "Hard international";
+    oos.quote_result = null;
+    expect(formatQuoteEmail(oos).body).toMatch(/Hard international/);
+    expect(formatQuoteEmail(oos).body).not.toMatch(/\$\d/);
   });
 });

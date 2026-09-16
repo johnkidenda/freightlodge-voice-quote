@@ -102,11 +102,16 @@ Do not put SMTP secrets in `VITE_*` or in the GitHub Pages bundle.
 
 ## Deploy (GitHub Pages)
 
-This is a Vite static build. Workflow: [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml).
+This is a Vite static build. Workflow: [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml). Every push to `main` builds, tests, and publishes `dist` to the `gh-pages` branch.
 
-1. Merge to `main` (or run the workflow via **Actions → Deploy to GitHub Pages → Run workflow**)
-2. Repo **Settings → Pages → Source: GitHub Actions** (first time only)
-3. Site: `https://johnkidenda.github.io/freightlodge-voice-quote/`
+**One-time enable** (the Actions token cannot create the Pages site):
+
+1. Open https://github.com/johnkidenda/freightlodge-voice-quote/settings/pages
+2. **Build and deployment → Source:** Deploy from a branch
+3. Branch: `gh-pages` / `/ (root)` → Save  
+   *or* Source: GitHub Actions, if you prefer the official Pages environment
+
+Site: `https://johnkidenda.github.io/freightlodge-voice-quote/`
 
 `public/.nojekyll` is copied into `dist` so GitHub does not process the build as Jekyll.
 
