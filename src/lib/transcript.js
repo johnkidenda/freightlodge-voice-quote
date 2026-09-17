@@ -16,6 +16,7 @@ export function formatQaTranscript(messages, session) {
   const pieces = sheet?.freight?.pieces ?? "—";
   const awaiting = session?.awaiting || "—";
   const status = sheet?.status || "—";
+  const accessorials = (sheet?.pickup?.accessorials || []).join(", ") || "—";
   return [
     ...turns,
     "",
@@ -24,6 +25,7 @@ export function formatQaTranscript(messages, session) {
     `Dest: ${dest}`,
     `Weight: ${weight}`,
     `Pieces: ${pieces}`,
+    `Accessorials: ${accessorials}`,
     `Awaiting: ${awaiting}`,
     `Status: ${status}`,
   ].join("\n");

@@ -57,9 +57,18 @@ export function isAlreadyMentioned(text) {
   );
 }
 
-export function zipClarifyQuestion(clarify) {
+export function zipClarifyQuestion(clarify, sheet) {
   if (!clarify?.zip || !clarify?.metro?.city) return PROMPTS.origin_zip;
   const place = clarify.metro.city;
+  const destCity = sheet?.lanes?.destination?.city;
+  const destConflicts =
+    destCity && clarify.metro && destCity.toLowerCase() !== place.toLowerCase();
+  if (destConflicts && clarify.altZip) {
+    return `${clarify.zip} looks like ${place} — did you mean ${destCity} ${clarify.altZip}?`;
+  }
+  if (destConflicts && destCity) {
+    return `${clarify.zip} looks like ${place} — dest is ${destCity}. Is ${clarify.zip} the origin ZIP?`;
+  }
   if (clarify.suggestedRole === "dest") {
     return `${clarify.zip} looks like ${place} — is that the destination ZIP?`;
   }
@@ -135,24 +144,38 @@ export function handleUtterance(session, text, { now } = {}) {
     }
   }
 
-  const extracted = extractSlots(raw, { now, awaiting: awaitingNow });
+  const extracted = extractSlots(raw, {
+    now,
+    awaiting: awaitingNow,
+    originCity: sheetFromClarify.lanes?.origin?.city,
+    destCity: sheetFromClarify.lanes?.destination?.city,
+  });
+  const bothDistinctZips =
+    extracted.origin?.postal_code &&
+    extracted.destination?.postal_code &&
+    extracted.origin.postal_code !== extracted.destination.postal_code;
   const zipIntent =
-    awaitingNow === "origin_zip" && extracted.origin?.postal_code
-      ? "origin"
-      : awaitingNow === "dest_zip" && extracted.destination?.postal_code
-        ? "dest"
-        : extracted.origin?.postal_code
-          ? "origin"
-          : extracted.destination?.postal_code
-            ? "dest"
-            : null;
+    bothDistinctZips
+      ? null
+      : awaitingNow === "origin_zip" && extracted.origin?.postal_code
+        ? "origin"
+        : awaitingNow === "dest_zip" && extracted.destination?.postal_code
+          ? "dest"
+          : extracted.origin?.postal_code
+            ? "origin"
+            : extracted.destination?.postal_code
+              ? "dest"
+              : null;
   const zipForIntent =
     zipIntent === "origin" ? extracted.origin.postal_code : zipIntent === "dest" ? extracted.destination.postal_code : null;
   if (zipIntent && zipForIntent) {
     const verdict = resolveZipAttachment(sheetFromClarify, zipForIntent, zipIntent);
     if (verdict.clarify) {
+      const uttered = [...String(raw).matchAll(/\b(\d{5})(?:-\d{4})?\b/g)].map((m) => m[1]);
+      const altZip = uttered.find((z) => z !== zipForIntent) || null;
       if (zipIntent === "origin") delete extracted.origin.postal_code;
       if (zipIntent === "dest") delete extracted.destination.postal_code;
+      verdict.clarify.altZip = altZip;
       extracted.flags.zipClarify = verdict.clarify;
       zipClarify = verdict.clarify;
     }
@@ -181,7 +204,7 @@ export function handleUtterance(session, text, { now } = {}) {
   }
 
   if (extracted.flags.zipClarify) {
-    const reply = zipClarifyQuestion(extracted.flags.zipClarify);
+    const reply = zipClarifyQuestion(extracted.flags.zipClarify, sheet);
     return finish(session, sheet, askedAccessorials, reply, extracted, awaitingNow, undefined, lastBareZip, zipClarify);
   }
 
@@ -336,6 +359,9 @@ function acknowledge(extracted, sheet) {
   if (extracted.freight?.freight_class) bits.push(`class ${extracted.freight.freight_class}`);
   if (extracted.freight?.commodity) bits.push(extracted.freight.commodity);
   if (extracted.pickup?.date) bits.push(`pickup ${extracted.pickup.date}`);
+  if (extracted.pickup?.accessorials?.length) {
+    bits.push(extracted.pickup.accessorials.join(", ").replaceAll("_", " "));
+  }
   if (extracted.contact?.email) bits.push(extracted.contact.email);
   if (!bits.length) return "";
   return `Got ${bits.join(", ")}.`;

@@ -150,7 +150,7 @@ const ACCESSORIAL_PATTERNS = [
   { re: /limited\s+access\s+deliv/i, ids: ["limited_access_delivery"] },
   { re: /appointment/i, ids: ["appointment_delivery"] },
   { re: /notify/i, ids: ["notify_before_delivery"] },
-  { re: /protect\s+from\s+freeze|freeze\s+protect/i, ids: ["protect_from_freeze"] },
+  { re: /protect\s+from\s+freeze|freeze\s+protect|freeze\b[\s\w]{0,24}\bprotect|\bprotect\b[\s\w]{0,24}\bfreeze/i, ids: ["protect_from_freeze"] },
   { re: /lift\s*-?\s*gates?/i, ids: ["liftgate_pickup", "liftgate_delivery"] },
   { re: /residential/i, ids: ["residential_pickup", "residential_delivery"] },
   { re: /limited\s+access/i, ids: ["limited_access_pickup", "limited_access_delivery"] },
@@ -169,7 +169,7 @@ const VAGUE_DATE = /\b(asap|soon|whenever|next week sometime|flexible)\b/i;
  * Extract only values the speaker stated. Never city→ZIP, commodity→class,
  * or vague measures. Callers must leave nulls alone when a field is absent.
  */
-export function extractSlots(text, { now, awaiting } = {}) {
+export function extractSlots(text, { now, awaiting, originCity, destCity } = {}) {
   const raw = (text || "").trim();
   const extracted = {
     origin: {},
@@ -187,7 +187,7 @@ export function extractSlots(text, { now, awaiting } = {}) {
   };
   if (!raw) return extracted;
 
-  extractLane(raw, extracted, awaiting);
+  extractLane(raw, extracted, awaiting, { originCity, destCity });
   extractPieces(raw, extracted, awaiting);
   extractWeight(raw, extracted);
   extractDims(raw, extracted);
@@ -633,7 +633,114 @@ export function splitTwoKnownCities(value) {
   return null;
 }
 
-function extractLane(raw, extracted, awaiting) {
+function cityNameAlternation() {
+  return [...US_CITIES]
+    .sort((a, b) => b.length - a.length)
+    .map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|");
+}
+
+/**
+ * Last clear city→ZIP pairing in the utterance. Stuttered repeats
+ * overwrite the same city; a later city does not steal an earlier city’s ZIP.
+ */
+export function extractCityLabeledZips(text) {
+  const raw = String(text || "");
+  if (!raw.trim()) return new Map();
+  const cities = cityNameAlternation();
+  const last = new Map();
+  const tight = new RegExp(
+    String.raw`\b(${cities})(?:\s+zip(?:\s*code)?)?(?:\s+is)?[:\s]+(\d{5})(?:-\d{4})?\b`,
+    "gi",
+  );
+  for (const m of raw.matchAll(tight)) {
+    last.set(m[1].toLowerCase(), m[2]);
+  }
+  const windowed = new RegExp(
+    String.raw`\b(${cities})\b(?:(?!\b(?:${cities})\b).){0,48}?(\d{5})(?:-\d{4})?\b`,
+    "gi",
+  );
+  for (const m of raw.matchAll(windowed)) {
+    last.set(m[1].toLowerCase(), m[2]);
+  }
+  return last;
+}
+
+function roleForLabeledCity(city, zip, extracted, sheetCities = {}) {
+  const c = String(city || "").toLowerCase();
+  if (!c) return null;
+  if (cityOf(extracted.origin) === c || String(sheetCities.originCity || "").toLowerCase() === c) {
+    return "origin";
+  }
+  if (cityOf(extracted.destination) === c || String(sheetCities.destCity || "").toLowerCase() === c) {
+    return "dest";
+  }
+  const metro = metroForZip(zip);
+  if (metro && metro.city.toLowerCase() === c) {
+    if (cityOf(extracted.origin) === c) return "origin";
+    if (cityOf(extracted.destination) === c) return "dest";
+  }
+  if (extracted.destination.city && cityOf(extracted.destination) !== c && !extracted.origin.city) {
+    return "origin";
+  }
+  if (extracted.origin.city && cityOf(extracted.origin) !== c && !extracted.destination.city) {
+    return "dest";
+  }
+  return null;
+}
+
+function applyCityLabeledZips(extracted, cityZips, sheetCities = {}) {
+  if (!cityZips || cityZips.size === 0) return false;
+  let applied = false;
+  const unassigned = [];
+  for (const [city, zip] of cityZips) {
+    const role = roleForLabeledCity(city, zip, extracted, sheetCities);
+    if (role === "origin") {
+      extracted.origin.postal_code = zip;
+      if (!extracted.origin.city) extracted.origin.city = titleCase(city);
+      applied = true;
+    } else if (role === "dest") {
+      extracted.destination.postal_code = zip;
+      if (!extracted.destination.city) extracted.destination.city = titleCase(city);
+      applied = true;
+    } else {
+      unassigned.push([city, zip]);
+    }
+  }
+  if (unassigned.length && !extracted.origin.postal_code) {
+    const [city, zip] = unassigned.shift();
+    extracted.origin.postal_code = zip;
+    if (!extracted.origin.city) extracted.origin.city = titleCase(city);
+    applied = true;
+  }
+  if (unassigned.length && !extracted.destination.postal_code) {
+    const [city, zip] = unassigned.shift();
+    extracted.destination.postal_code = zip;
+    if (!extracted.destination.city) extracted.destination.city = titleCase(city);
+    applied = true;
+  }
+  const zips = [...new Set([...cityZips.values()])];
+  if (
+    extracted.origin.postal_code &&
+    extracted.destination.postal_code === extracted.origin.postal_code &&
+    zips.length >= 2
+  ) {
+    const other = zips.find((z) => z !== extracted.origin.postal_code);
+    if (other) extracted.destination.postal_code = other;
+  }
+  return applied;
+}
+
+function uniqueLaneZips(zipTokens) {
+  const seen = [];
+  for (const m of zipTokens) {
+    const zip = m[1] + (m[2] || "");
+    if (!seen.includes(zip)) seen.push(zip);
+  }
+  return seen;
+}
+
+function extractLane(raw, extracted, awaiting, sheetCities = {}) {
   const zipOnly = /^\s*\d{5}(?:-\d{4})?\s*$/.test(raw);
   const labeledLaneZip = isLabeledLaneZipPhrase(raw);
 
@@ -687,10 +794,15 @@ function extractLane(raw, extracted, awaiting) {
     }
   }
 
+  const cityZips = extractCityLabeledZips(raw);
+  const cityLabeled = applyCityLabeledZips(extracted, cityZips, sheetCities);
+  if (cityLabeled) extracted.flags.cityLabeledZips = true;
+
   const zipTokens = [...raw.matchAll(/\b(\d{5})(-\d{4})?\b/g)].filter((m) => !inWeightContext(raw, m.index));
+  const uniqueZips = uniqueLaneZips(zipTokens);
   const bareOnly = /^\s*\d{5}(?:-\d{4})?\s*$/.test(raw);
 
-  if (zipTokens.length === 1) {
+  if (zipTokens.length === 1 && !cityLabeled) {
     const zip = zipTokens[0][1] + (zipTokens[0][2] || "");
     extracted.flags.bareZip = zip;
     if (destZipLocked || originZipLocked) {
@@ -704,9 +816,22 @@ function extractLane(raw, extracted, awaiting) {
       if (/\borigin\b|\bpickup\b|\bfrom\b/i.test(raw)) extracted.origin.postal_code = zip;
       else if (/\bdest|\bdeliver|\bto\b/i.test(raw)) extracted.destination.postal_code = zip;
     }
-  } else if (zipTokens.length >= 2 && !extracted.origin.postal_code && !extracted.destination.postal_code) {
-    extracted.origin.postal_code = zipTokens[0][1] + (zipTokens[0][2] || "");
-    extracted.destination.postal_code = zipTokens[1][1] + (zipTokens[1][2] || "");
+  } else if (
+    uniqueZips.length >= 2 &&
+    !extracted.origin.postal_code &&
+    !extracted.destination.postal_code
+  ) {
+    extracted.origin.postal_code = uniqueZips[0];
+    extracted.destination.postal_code = uniqueZips[uniqueZips.length - 1];
+  }
+
+  if (
+    extracted.origin.postal_code &&
+    extracted.destination.postal_code === extracted.origin.postal_code &&
+    uniqueZips.length >= 2
+  ) {
+    const other = uniqueZips.find((z) => z !== extracted.origin.postal_code);
+    if (other) extracted.destination.postal_code = other;
   }
 
   const incomplete = detectIncompleteZip(raw, awaiting);
@@ -717,7 +842,8 @@ function isLabeledLaneZipPhrase(raw) {
   return (
     /\b(?:origin|destination|dest)(?:\s+zip|\s+zipcode|\s+zip\s*code)/i.test(raw) ||
     /\b(?:zip|zipcode|zip\s*code)\s+is\s+\d/i.test(raw) ||
-    /\b\d{3,5}(?:-\d{4})?\s+is\s+(?:the\s+)?(?:destination|dest|origin)\b/i.test(raw)
+    /\b\d{3,5}(?:-\d{4})?\s+is\s+(?:the\s+)?(?:destination|dest|origin)\b/i.test(raw) ||
+    /\b[a-z]+(?:\s+[a-z]+)?\s+zip(?:\s*code)?\s+is\b/i.test(raw)
   );
 }
 
