@@ -121,10 +121,11 @@ export function mountApp(root) {
 
 function layout() {
   const speechOk = speechSupported();
+  const assetBase = import.meta.env.BASE_URL || "./";
   return `
     <header class="top">
       <div class="brand">
-        <img class="brand-logo" src="./assets/logo-b.png" width="120" height="80" alt="Freight Lodge" />
+        <img class="brand-logo" src="${assetBase}assets/logo-b.png" width="120" height="80" alt="Freight Lodge" />
         <div>
           <p class="eyebrow">Freight Lodge</p>
           <h1>Voice to quote</h1>
@@ -171,7 +172,7 @@ function layout() {
     <footer class="powered-by">
       <span class="powered-label">Powered by</span>
       <a class="powered-logo" href="https://exfresso.com/" target="_blank" rel="noopener noreferrer" aria-label="Exfresso">
-        <img src="./assets/exfresso-logo.svg" alt="" height="18" />
+        <img src="${assetBase}assets/exfresso-logo.svg" alt="" height="18" />
       </a>
     </footer>
   `;
