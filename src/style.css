@@ -160,7 +160,7 @@ button, input { font: inherit; }
   padding: 6px 10px;
   font-size: 0.85rem;
 }
-.qa-copy {
+.send-transcript, .qa-copy {
   align-self: flex-start;
   border: 1px dashed #b9a57a;
   background: #fff8ea;
@@ -171,7 +171,7 @@ button, input { font: inherit; }
   font-weight: 700;
   cursor: pointer;
 }
-.qa-copy.copied {
+.send-transcript.sent, .qa-copy.copied {
   border-style: solid;
   background: #d9eddf;
   color: var(--ok);
@@ -282,4 +282,20 @@ button, input { font: inherit; }
   #app { padding: 10px 10px 20px; }
   .brand h1 { font-size: 1.15rem; }
   .hold { min-height: 72px; }
+}
+
+.voice-tip {
+  margin: 0 0 0.75rem;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.92rem;
+  line-height: 1.35;
+  color: #1b2a4a;
+  background: #f3f6fb;
+  border-radius: 10px;
+  border: 1px solid #d7e0ef;
+}
+.send-note {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: #2f6b3a;
 }
