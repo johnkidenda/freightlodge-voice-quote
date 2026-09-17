@@ -1,6 +1,13 @@
 import { emptySheet } from "./sheet.js";
 import { isReadyForQuote, nextRequiredSlot } from "./completeness.js";
-import { extractSlots, isGarbagePlace, mergeExtracted } from "./extract.js";
+import {
+  applyZipRoleCorrection,
+  detectZipRoleCorrection,
+  extractSlots,
+  firstBareZip,
+  isGarbagePlace,
+  mergeExtracted,
+} from "./extract.js";
 import { detectOutOfScope } from "./scope.js";
 
 export const GREETING =
@@ -31,6 +38,7 @@ export function createSession({ id, now } = {}) {
     messages: [],
     lastReply: null,
     lastExtractKey: null,
+    lastBareZip: null,
   };
 }
 
@@ -66,8 +74,23 @@ export function handleUtterance(session, text, { now } = {}) {
     };
   }
 
-  const extracted = extractSlots(raw, { now, awaiting: session.awaiting });
+  const awaitingNow =
+    session.awaiting === "origin_zip" || session.awaiting === "dest_zip"
+      ? session.awaiting
+      : nextRequiredSlot(sheet0, { askedAccessorials: session.askedAccessorials });
+  const extracted = extractSlots(raw, { now, awaiting: awaitingNow });
   let sheet = mergeExtracted(sheet0, extracted);
+
+  const roleFix = detectZipRoleCorrection(raw);
+  const zipForFix = firstBareZip(raw) || extracted.flags.bareZip || session.lastBareZip;
+  if (roleFix && zipForFix) {
+    sheet = applyZipRoleCorrection(sheet, roleFix, zipForFix);
+    if (roleFix === "dest") extracted.destination.postal_code = zipForFix;
+    if (roleFix === "origin") extracted.origin.postal_code = zipForFix;
+    extracted.flags.zipRole = roleFix;
+  }
+
+  const lastBareZip = firstBareZip(raw) || extracted.flags.bareZip || session.lastBareZip;
 
   let askedAccessorials = session.askedAccessorials;
   if (
@@ -93,7 +116,7 @@ export function handleUtterance(session, text, { now } = {}) {
     sheet = { ...sheet, status: "ready_for_quote", error_reason: null, out_of_scope_reason: null };
     const reply = "Sheet’s complete. Handing this to Freight Ops’ Exfresso runner for a live rate — no booking from here.";
     return {
-      session: { ...session, sheet, askedAccessorials, awaiting: null },
+      session: { ...session, sheet, askedAccessorials, awaiting: null, lastBareZip },
       reply,
       extracted,
       ready: true,
@@ -103,7 +126,7 @@ export function handleUtterance(session, text, { now } = {}) {
 
   const awaiting = nextRequiredSlot(sheet, { askedAccessorials });
   const extractKey = extractKeyOf(extracted);
-  const addedNothing = session.lastExtractKey === extractKey;
+  const addedNothing = session.lastExtractKey === extractKey && !extracted.flags.zipRole;
   let reply;
   if (extracted.flags.incompleteTo && !hasRealDest(sheet.lanes.destination)) {
     reply = addedNothing
@@ -111,7 +134,7 @@ export function handleUtterance(session, text, { now } = {}) {
       : PROMPTS.dest_incomplete;
   } else {
     const ack = acknowledge(extracted, sheet);
-    const ask = awaiting ? PROMPTS[awaiting] : PROMPTS.email;
+    const ask = promptFor(awaiting, sheet);
     reply = ack ? `${ack} ${ask}` : ask;
     if (addedNothing && reply === session.lastReply) {
       reply =
@@ -120,10 +143,20 @@ export function handleUtterance(session, text, { now } = {}) {
           : `I didn’t catch a new ${awaiting?.replaceAll("_", " ") || "detail"} in that. ${ask}`;
     }
   }
-  return finish(session, sheet, askedAccessorials, reply, extracted, awaiting, extractKey);
+  return finish(session, sheet, askedAccessorials, reply, extracted, awaiting, extractKey, lastBareZip);
 }
 
-function finish(session, sheet, askedAccessorials, reply, extracted, awaiting, extractKey) {
+function promptFor(slot, sheet) {
+  if (slot === "dest_zip") {
+    const city = sheet.lanes?.destination?.city;
+    if (city && !isGarbagePlace(sheet.lanes.destination)) {
+      return `I have dest ${city}. What’s the destination ZIP? I won’t invent one.`;
+    }
+  }
+  return slot ? PROMPTS[slot] : PROMPTS.email;
+}
+
+function finish(session, sheet, askedAccessorials, reply, extracted, awaiting, extractKey, lastBareZip) {
   const nextAwait = awaiting ?? nextRequiredSlot(sheet, { askedAccessorials });
   const nextSheet =
     isReadyForQuote(sheet) && askedAccessorials
@@ -137,6 +170,7 @@ function finish(session, sheet, askedAccessorials, reply, extracted, awaiting, e
       awaiting: nextSheet.status === "ready_for_quote" ? null : nextAwait,
       lastReply: reply,
       lastExtractKey: extractKey ?? extractKeyOf(extracted),
+      lastBareZip: lastBareZip ?? session.lastBareZip,
     },
     reply,
     extracted,

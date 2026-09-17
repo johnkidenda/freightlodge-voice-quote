@@ -231,6 +231,30 @@ const PLACE_NOISE = new Set([
   "like",
   "want",
   "need",
+  "kilogram",
+  "kilograms",
+  "kg",
+  "gram",
+  "grams",
+  "pound",
+  "pounds",
+  "lb",
+  "lbs",
+  "oranges",
+  "orange",
+  "peaches",
+  "peach",
+  "apples",
+  "apple",
+  "widgets",
+  "widget",
+  "commodity",
+  "of",
+  "from",
+  "hunter",
+  "the",
+  "a",
+  "an",
 ]);
 
 const PLACE_STOP = new Set([
@@ -299,14 +323,36 @@ const PLACE_STOP = new Set([
   "load",
   "loads",
   "like",
+  "kilogram",
+  "kilograms",
+  "kg",
+  "gram",
+  "grams",
+  "oranges",
+  "orange",
+  "peaches",
+  "peach",
+  "apples",
+  "apple",
+  "widgets",
+  "widget",
+  "of",
+  "from",
+  "hunter",
+  "the",
+  "a",
+  "an",
 ]);
 
 const LEADING_FILLER = /^(need|please|want|hi|hello|quote|ship|shipping|can|we|i|get)\b/i;
 
 function extractLane(raw, extracted, awaiting) {
-  if (!LEADING_FILLER.test(raw)) {
+  const zipOnly = /^\s*\d{5}(?:-\d{4})?\s*$/.test(raw);
+  if (!LEADING_FILLER.test(raw) && !zipOnly) {
     const leading = takePlace(raw);
-    if (leading?.postal_code) Object.assign(extracted.origin, leading);
+    if (leading?.postal_code && (leading.city || leading.state || awaiting === "origin_zip")) {
+      Object.assign(extracted.origin, leading);
+    }
   }
 
   const fromToZips = raw.match(
@@ -333,26 +379,23 @@ function extractLane(raw, extracted, awaiting) {
   assignDestinationTos(raw, extracted);
 
   const zipTokens = [...raw.matchAll(/\b(\d{5})(-\d{4})?\b/g)].filter((m) => !inWeightContext(raw, m.index));
+  const bareOnly = /^\s*\d{5}(?:-\d{4})?\s*$/.test(raw);
 
-  if (!extracted.origin.postal_code && !extracted.destination.postal_code) {
-    if (zipTokens.length >= 2) {
-      extracted.origin.postal_code = zipTokens[0][1] + (zipTokens[0][2] || "");
-      extracted.destination.postal_code = zipTokens[1][1] + (zipTokens[1][2] || "");
-    } else if (zipTokens.length === 1) {
-      const zip = zipTokens[0][1] + (zipTokens[0][2] || "");
-      if (awaiting === "origin_zip") extracted.origin.postal_code = zip;
-      else if (awaiting === "dest_zip") extracted.destination.postal_code = zip;
-      else if (/\borigin\b|\bpickup\b|\bfrom\b/i.test(raw)) extracted.origin.postal_code = zip;
+  if (zipTokens.length === 1) {
+    const zip = zipTokens[0][1] + (zipTokens[0][2] || "");
+    extracted.flags.bareZip = zip;
+    if (bareOnly || awaiting === "origin_zip" || awaiting === "dest_zip") {
+      if (awaiting === "dest_zip") extracted.destination.postal_code = zip;
+      else if (awaiting === "origin_zip") extracted.origin.postal_code = zip;
+      else if (/\bdest|\bdeliver/i.test(raw)) extracted.destination.postal_code = zip;
+      else extracted.origin.postal_code = zip;
+    } else if (!extracted.origin.postal_code && !extracted.destination.postal_code) {
+      if (/\borigin\b|\bpickup\b|\bfrom\b/i.test(raw)) extracted.origin.postal_code = zip;
       else if (/\bdest|\bdeliver|\bto\b/i.test(raw)) extracted.destination.postal_code = zip;
     }
-  } else if (zipTokens.length === 1) {
-    const zip = zipTokens[0][1] + (zipTokens[0][2] || "");
-    if (!extracted.origin.postal_code && awaiting === "origin_zip") {
-      extracted.origin.postal_code = zip;
-    }
-    if (!extracted.destination.postal_code && awaiting === "dest_zip") {
-      extracted.destination.postal_code = zip;
-    }
+  } else if (zipTokens.length >= 2 && !extracted.origin.postal_code && !extracted.destination.postal_code) {
+    extracted.origin.postal_code = zipTokens[0][1] + (zipTokens[0][2] || "");
+    extracted.destination.postal_code = zipTokens[1][1] + (zipTokens[1][2] || "");
   }
 }
 
@@ -402,14 +445,59 @@ export function isPlaceNoise(word) {
 
 export function isGarbagePlace(place) {
   if (!place) return false;
-  if (place.postal_code && /^\d{5}(-\d{4})?$/.test(place.postal_code)) return false;
-  if (place.city && isPlaceNoise(place.city.split(/\s+/)[0])) return true;
+  if (!place.city) return false;
+  const words = place.city.split(/\s+/).filter(Boolean);
+  if (!words.length) return false;
+  if (words.some((w) => isPlaceNoise(w) || PLACE_STOP.has(w.toLowerCase()))) return true;
   return false;
 }
 
 export function hasPlaceHint(place) {
   if (!place) return false;
   return Boolean(place.city || place.state || place.postal_code);
+}
+
+export function firstBareZip(text) {
+  const m = String(text || "").match(/\b(\d{5})(?:-\d{4})?\b/);
+  return m ? m[1] + (m[2] || "") : null;
+}
+
+/**
+ * “that’s the destination” / “the ZIP I just sent is the destination”
+ * → move last ZIP onto dest or origin. Does not invent ZIPs.
+ */
+export function detectZipRoleCorrection(text) {
+  const t = String(text || "")
+    .toLowerCase()
+    .replace(/['’]/g, "");
+  if (!t.trim()) return null;
+  const mentionsDest = /\b(dest|destination)\b/.test(t);
+  const mentionsOrigin = /\borigin\b/.test(t);
+  const refersToPrior =
+    /\b(that|thats|that is|the zip|zip code|i just sent|just sent|just gave)\b/.test(t);
+  if (mentionsDest && refersToPrior && !mentionsOrigin) return "dest";
+  if (mentionsDest && /\b(that zip|destination zip|thats dest|that is dest)\b/.test(t) && !mentionsOrigin) {
+    return "dest";
+  }
+  if (mentionsOrigin && refersToPrior && !mentionsDest) return "origin";
+  return null;
+}
+
+export function applyZipRoleCorrection(sheet, role, zip) {
+  if (!role || !zip || !/^\d{5}(?:-\d{4})?$/.test(zip)) return sheet;
+  const next = structuredClone(sheet);
+  if (role === "dest") {
+    next.lanes.destination.postal_code = zip;
+    if (next.lanes.origin.postal_code === zip) {
+      next.lanes.origin.postal_code = null;
+    }
+  } else if (role === "origin") {
+    next.lanes.origin.postal_code = zip;
+    if (next.lanes.destination.postal_code === zip) {
+      next.lanes.destination.postal_code = null;
+    }
+  }
+  return next;
 }
 
 /**
@@ -449,7 +537,12 @@ export function takePlace(text) {
       continue;
     }
 
-    if (PLACE_STOP.has(bare.toLowerCase()) || isPlaceNoise(bare)) break;
+    const lower = bare.toLowerCase();
+    if (lower === "to" || lower === "through") break;
+    if (PLACE_STOP.has(lower) || isPlaceNoise(bare)) {
+      if (cityWords.length) break;
+      continue;
+    }
     if (!/^[A-Za-z][A-Za-z.'-]*$/.test(bare)) break;
 
     cityWords.push(bare);
@@ -763,11 +856,19 @@ export function mergeExtracted(sheet, extracted) {
   if (extracted.flags?.incompleteTo && isGarbagePlace(extracted.destination)) {
     extracted.destination = {};
   }
+  const destCityBefore = next.lanes.destination.city;
   if (!isGarbagePlace(extracted.destination)) {
     assignPlace(next.lanes.destination, extracted.destination);
+  } else if (extracted.destination?.postal_code) {
+    next.lanes.destination.postal_code = extracted.destination.postal_code;
   }
   if (isGarbagePlace(next.lanes.destination)) {
-    next.lanes.destination.city = null;
+    next.lanes.destination.city = destCityBefore && !isGarbagePlace({ city: destCityBefore })
+      ? destCityBefore
+      : null;
+  }
+  if (isGarbagePlace(next.lanes.origin)) {
+    next.lanes.origin.city = null;
   }
   const f = extracted.freight || {};
   if (Number.isInteger(f.pieces) && f.pieces >= 1) next.freight.pieces = f.pieces;
