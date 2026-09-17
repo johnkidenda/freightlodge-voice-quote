@@ -345,11 +345,12 @@ button, input { font: inherit; }
 }
 @media (max-width: 640px) {
   .powered-by {
-    left: max(0.5rem, env(safe-area-inset-left, 0px));
-    right: max(0.5rem, env(safe-area-inset-right, 0px));
+    left: 50%;
+    right: auto;
     bottom: max(0.45rem, env(safe-area-inset-bottom, 0px));
-    width: auto;
-    max-width: none;
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: calc(100vw - 1.25rem - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
     justify-content: center;
   }
   .powered-logo img {
