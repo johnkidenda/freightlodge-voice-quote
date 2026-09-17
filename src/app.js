@@ -124,7 +124,7 @@ function layout() {
   return `
     <header class="top">
       <div class="brand">
-        <span class="mark" aria-hidden="true">${logoSvg()}</span>
+        <img class="brand-logo" src="./assets/logo-b.png" width="120" height="80" alt="Freight Lodge" />
         <div>
           <p class="eyebrow">Freight Lodge</p>
           <h1>Voice to quote</h1>
@@ -167,6 +167,13 @@ function layout() {
         </div>
       </aside>
     </main>
+
+    <footer class="powered-by">
+      <span class="powered-label">Powered by</span>
+      <a class="powered-logo" href="https://exfresso.com/" target="_blank" rel="noopener noreferrer" aria-label="Exfresso">
+        <img src="./assets/exfresso-logo.svg" alt="" height="18" />
+      </a>
+    </footer>
   `;
 }
 
