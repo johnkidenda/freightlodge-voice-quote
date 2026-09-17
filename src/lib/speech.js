@@ -7,11 +7,66 @@ export function speechSupported() {
   return Boolean(getSpeechRecognitionCtor());
 }
 
-export function createHoldToTalk({ onResult, onError, onStart, onEnd } = {}) {
+export function preferTapToTalk(
+  ua = typeof navigator !== "undefined" ? navigator.userAgent : "",
+  extras = {},
+) {
+  const isiOS =
+    extras.iOS === true ||
+    /iPad|iPhone|iPod/i.test(ua) ||
+    (typeof navigator !== "undefined" &&
+      navigator.platform === "MacIntel" &&
+      navigator.maxTouchPoints > 1);
+  const isSafari = /safari/i.test(ua) && !/chrome|chromium|android|crios|fxios/i.test(ua);
+  return Boolean(isiOS || extras.forceToggle || (isSafari && extras.touch));
+}
+
+/**
+ * Buffer STT text while the mic is held. Never commit a transcript until
+ * release() — Web Speech often marks phrases final mid-utterance.
+ */
+export function createTranscriptBuffer() {
+  let holding = false;
+  const finals = [];
+  let interim = "";
+
+  return {
+    start() {
+      holding = true;
+      finals.length = 0;
+      interim = "";
+    },
+    onSpeechResult({ interim: nextInterim = "", finalText = "" } = {}) {
+      if (!holding) return { preview: "", commit: null };
+      if (finalText && finalText.trim()) finals.push(finalText.trim());
+      interim = nextInterim || "";
+      return {
+        preview: [...finals, interim].filter(Boolean).join(" ").trim(),
+        commit: null,
+      };
+    },
+    release() {
+      const commit = [...finals, interim].filter(Boolean).join(" ").trim();
+      holding = false;
+      finals.length = 0;
+      interim = "";
+      return commit;
+    },
+    isHolding() {
+      return holding;
+    },
+  };
+}
+
+export function createHoldToTalk({ onPreview, onCommit, onError, onStart, onEnd } = {}) {
   const Ctor = getSpeechRecognitionCtor();
+  const mode = preferTapToTalk() ? "toggle" : "hold";
+  const buffer = createTranscriptBuffer();
+
   if (!Ctor) {
     return {
       supported: false,
+      mode,
       start() {
         onError?.(new Error("Speech recognition is not available in this browser."));
       },
@@ -22,10 +77,9 @@ export function createHoldToTalk({ onResult, onError, onStart, onEnd } = {}) {
 
   let rec = null;
   let active = false;
+  let wantHold = false;
 
-  function start() {
-    if (active) return;
-    rec = new Ctor();
+  function attachHandlers() {
     rec.lang = "en-US";
     rec.interimResults = true;
     rec.continuous = true;
@@ -37,7 +91,8 @@ export function createHoldToTalk({ onResult, onError, onStart, onEnd } = {}) {
         if (event.results[i].isFinal) finalText += piece;
         else interim += piece;
       }
-      onResult?.({ interim, finalText });
+      const { preview } = buffer.onSpeechResult({ interim, finalText });
+      onPreview?.(preview);
     };
     rec.onerror = (e) => {
       if (e.error === "aborted" || e.error === "no-speech") return;
@@ -45,27 +100,56 @@ export function createHoldToTalk({ onResult, onError, onStart, onEnd } = {}) {
     };
     rec.onend = () => {
       active = false;
+      if (wantHold) {
+        tryStart();
+        return;
+      }
+      const text = buffer.release();
       onEnd?.();
+      if (text) onCommit?.(text);
     };
+  }
+
+  function tryStart() {
+    rec = new Ctor();
+    attachHandlers();
     try {
       rec.start();
       active = true;
-      onStart?.();
     } catch (err) {
       onError?.(err);
     }
   }
 
+  function start() {
+    if (wantHold) return;
+    wantHold = true;
+    buffer.start();
+    onStart?.();
+    tryStart();
+  }
+
   function stop() {
-    if (!rec) return;
+    if (!wantHold) return;
+    wantHold = false;
+    if (!rec) {
+      const text = buffer.release();
+      onEnd?.();
+      if (text) onCommit?.(text);
+      return;
+    }
     try {
       rec.stop();
     } catch {
-      /* already stopped */
+      const text = buffer.release();
+      onEnd?.();
+      if (text) onCommit?.(text);
     }
   }
 
   function abort() {
+    wantHold = false;
+    buffer.release();
     if (!rec) return;
     try {
       rec.abort();
@@ -75,5 +159,5 @@ export function createHoldToTalk({ onResult, onError, onStart, onEnd } = {}) {
     active = false;
   }
 
-  return { supported: true, start, stop, abort };
+  return { supported: true, mode, start, stop, abort, isActive: () => active || wantHold };
 }

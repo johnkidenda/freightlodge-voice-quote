@@ -42,6 +42,7 @@ export function mountApp(root) {
     },
     onEnd() {
       state.listening = false;
+      state.interim = "";
       renderChrome(els, state);
     },
     onError(err) {
@@ -49,25 +50,24 @@ export function mountApp(root) {
       push(state, "assistant", speechError(err));
       render(els, state);
     },
-    onResult({ interim, finalText }) {
-      if (interim) {
-        state.interim = interim;
-        renderChrome(els, state);
-      }
-      if (finalText && finalText.trim()) {
-        state.interim = "";
-        void acceptUserText(els, state, finalText.trim());
-      }
+    onPreview(text) {
+      state.interim = text || "";
+      renderChrome(els, state);
+    },
+    onCommit(text) {
+      const trimmed = (text || "").trim();
+      if (!trimmed || state.busy) return;
+      void acceptUserText(els, state, trimmed);
     },
   });
   state.hold = talk;
 
   if (!talk.supported) {
     els.hold.disabled = true;
-    els.holdHint.textContent = "Hold-to-talk needs Chrome/Safari with mic permission. Type instead.";
+    els.holdHint.textContent = "Voice needs Chrome/Safari with mic permission. Type instead.";
   }
 
-  bindHold(els.hold, talk);
+  bindMic(els.hold, talk);
 
   els.form.addEventListener("submit", (e) => {
     e.preventDefault();
@@ -135,7 +135,7 @@ function layout() {
             <span class="hold-dot"></span>
             <span class="hold-label">Hold to talk</span>
           </button>
-          <p id="hold-hint" class="hint">${speechOk ? "Press and hold, then speak. Release to send." : ""}</p>
+          <p id="hold-hint" class="hint">${speechOk ? "Press and hold. I only send when you release." : ""}</p>
         </form>
       </section>
 
@@ -151,7 +151,28 @@ function layout() {
   `;
 }
 
-function bindHold(button, talk) {
+function bindMic(button, talk) {
+  const label = button.querySelector(".hold-label");
+  if (talk.mode === "toggle") {
+    if (label) label.textContent = "Tap to talk";
+    button.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (talk.isActive?.()) {
+        button.setAttribute("aria-pressed", "false");
+        button.classList.remove("hot");
+        if (label) label.textContent = "Tap to talk";
+        talk.stop();
+      } else {
+        button.setAttribute("aria-pressed", "true");
+        button.classList.add("hot");
+        if (label) label.textContent = "Recording… tap to send";
+        talk.start();
+      }
+    });
+    button.addEventListener("contextmenu", (e) => e.preventDefault());
+    return;
+  }
+
   const go = (e) => {
     e.preventDefault();
     button.setPointerCapture?.(e.pointerId);
@@ -168,6 +189,7 @@ function bindHold(button, talk) {
   button.addEventListener("pointerdown", go);
   button.addEventListener("pointerup", stop);
   button.addEventListener("pointercancel", stop);
+  button.addEventListener("touchend", stop, { passive: false });
   button.addEventListener("lostpointercapture", () => {
     button.classList.remove("hot");
     talk.stop();
@@ -282,7 +304,10 @@ function renderChrome(els, state) {
   if (state.listening && state.interim) {
     els.holdHint.textContent = state.interim;
   } else if (state.hold?.supported) {
-    els.holdHint.textContent = "Press and hold, then speak. Release to send.";
+    els.holdHint.textContent =
+      state.hold.mode === "toggle"
+        ? "Tap to record, tap again to send. I won’t answer while you’re still talking."
+        : "Press and hold. Release to send — I won’t answer while you’re still talking.";
   }
 }
 

@@ -181,6 +181,7 @@ export function extractSlots(text, { now, awaiting } = {}) {
       accessorialsNone: false,
       vagueMeasure: VAGUE_MEASURE.test(raw),
       vagueDate: VAGUE_DATE.test(raw) && !hasExplicitDate(raw),
+      incompleteTo: isIncompleteTo(raw),
       invented: [],
     },
   };
@@ -200,6 +201,37 @@ export function extractSlots(text, { now, awaiting } = {}) {
 
   return extracted;
 }
+
+const PLACE_NOISE = new Set([
+  "ship",
+  "shipping",
+  "shipper",
+  "pallet",
+  "pallets",
+  "crate",
+  "crates",
+  "box",
+  "boxes",
+  "drum",
+  "drums",
+  "skid",
+  "skids",
+  "freight",
+  "load",
+  "loads",
+  "send",
+  "sending",
+  "deliver",
+  "delivery",
+  "delivered",
+  "pickup",
+  "pick",
+  "quote",
+  "quoting",
+  "like",
+  "want",
+  "need",
+]);
 
 const PLACE_STOP = new Set([
   "to",
@@ -224,6 +256,8 @@ const PLACE_STOP = new Set([
   "crate",
   "cartons",
   "carton",
+  "drums",
+  "drum",
   "lb",
   "lbs",
   "pound",
@@ -255,6 +289,16 @@ const PLACE_STOP = new Set([
   "quoting",
   "please",
   "thanks",
+  "ship",
+  "shipping",
+  "shipper",
+  "send",
+  "sending",
+  "deliver",
+  "delivery",
+  "load",
+  "loads",
+  "like",
 ]);
 
 const LEADING_FILLER = /^(need|please|want|hi|hello|quote|ship|shipping|can|we|i|get)\b/i;
@@ -284,10 +328,9 @@ function extractLane(raw, extracted, awaiting) {
   if (labeledDest) extracted.destination.postal_code = labeledDest[1];
 
   const fromPlace = matchPlaceAfter(raw, /\bfrom\s+/i);
-  if (fromPlace) Object.assign(extracted.origin, fromPlace);
+  if (fromPlace && !isGarbagePlace(fromPlace)) Object.assign(extracted.origin, fromPlace);
 
-  const toPlace = matchPlaceAfter(raw, /\b(?:to|through)\s+/i);
-  if (toPlace) Object.assign(extracted.destination, toPlace);
+  assignDestinationTos(raw, extracted);
 
   const zipTokens = [...raw.matchAll(/\b(\d{5})(-\d{4})?\b/g)].filter((m) => !inWeightContext(raw, m.index));
 
@@ -317,7 +360,56 @@ function matchPlaceAfter(raw, prefixRe) {
   const start = raw.search(prefixRe);
   if (start < 0) return null;
   const after = raw.slice(start).replace(prefixRe, "");
-  return takePlace(after);
+  const place = takePlace(after);
+  return isGarbagePlace(place) ? null : place;
+}
+
+const LIKE_TO = /\b(like|want|need|have|trying|try|about)\s+$/i;
+
+function assignDestinationTos(raw, extracted) {
+  if (extracted.flags.incompleteTo && !/\bto\s+\S+/i.test(raw.replace(/\bto\s*$/i, ""))) {
+    // Only a trailing "to" with nothing after — do not lock a dest.
+    return;
+  }
+
+  const re = /\b(?:to|through)\s+/gi;
+  let m;
+  while ((m = re.exec(raw))) {
+    const after = raw.slice(m.index + m[0].length);
+    if (!after.trim()) continue;
+
+    const before = raw.slice(0, m.index);
+    const nextWord = (after.match(/^([A-Za-z']+)/) || [])[1];
+    if (LIKE_TO.test(before) && isPlaceNoise(nextWord)) continue;
+    if (isPlaceNoise(nextWord) && !/\bfrom\b/i.test(before.slice(-24))) {
+      // "to ship 500 lb from Chicago to Dallas" — skip the verb, keep the later "to Dallas".
+      continue;
+    }
+
+    const place = takePlace(after);
+    if (place && !isGarbagePlace(place)) Object.assign(extracted.destination, place);
+  }
+}
+
+export function isIncompleteTo(text) {
+  return /\bto\s*$/i.test((text || "").trim());
+}
+
+export function isPlaceNoise(word) {
+  if (!word) return false;
+  return PLACE_NOISE.has(String(word).toLowerCase().replace(/[^\w]/g, ""));
+}
+
+export function isGarbagePlace(place) {
+  if (!place) return false;
+  if (place.postal_code && /^\d{5}(-\d{4})?$/.test(place.postal_code)) return false;
+  if (place.city && isPlaceNoise(place.city.split(/\s+/)[0])) return true;
+  return false;
+}
+
+export function hasPlaceHint(place) {
+  if (!place) return false;
+  return Boolean(place.city || place.state || place.postal_code);
 }
 
 /**
@@ -357,7 +449,7 @@ export function takePlace(text) {
       continue;
     }
 
-    if (PLACE_STOP.has(bare.toLowerCase())) break;
+    if (PLACE_STOP.has(bare.toLowerCase()) || isPlaceNoise(bare)) break;
     if (!/^[A-Za-z][A-Za-z.'-]*$/.test(bare)) break;
 
     cityWords.push(bare);
@@ -388,8 +480,11 @@ function cleanCity(value) {
     .trim();
   if (cleaned.length < 2 || cleaned.length > 40) return null;
   if (/^(from|to|the|a|an|and|for|need|want)$/i.test(cleaned)) return null;
-  const words = cleaned.split(/\s+/).filter((w) => !PLACE_STOP.has(w.toLowerCase()));
+  const words = cleaned
+    .split(/\s+/)
+    .filter((w) => !PLACE_STOP.has(w.toLowerCase()) && !isPlaceNoise(w));
   if (!words.length) return null;
+  if (words.every((w) => isPlaceNoise(w))) return null;
   return titleCase(words.join(" "));
 }
 
@@ -405,7 +500,11 @@ function inWeightContext(raw, index) {
 
 export function parseWeightPounds(token) {
   if (token == null) return null;
-  const normalized = String(token).replace(/,/g, "").trim();
+  const normalized = String(token)
+    .replace(/[$\u00a3\u20ac]/g, "")
+    .replace(/\b(usd|us\$)\b/gi, "")
+    .replace(/,/g, "")
+    .trim();
   const n = Number(normalized);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
@@ -437,7 +536,7 @@ function parseCount(token) {
 }
 
 function extractWeight(raw, extracted) {
-  const m = raw.match(/\b([\d,]+(?:\.\d+)?)\s*(?:lbs?|pounds?)\b/i);
+  const m = raw.match(/(?:\$|usd\s*)?\s*([\d,]+(?:\.\d+)?)\s*(?:lbs?|pounds?)\b/i);
   if (!m) return;
   const n = parseWeightPounds(m[1]);
   if (n != null) extracted.freight.total_weight_lbs = n;
@@ -482,7 +581,7 @@ function extractCommodity(raw, extracted, awaiting) {
   if (!extracted.freight.commodity) {
     const ofGoods = raw.match(
       new RegExp(
-        String.raw`\b(?:pallets?|pieces?|skids?|boxes?|crates?|cartons?)\s+of\s+([a-z0-9][a-z0-9 \-/]{1,48}?)` +
+        String.raw`\b(?:pallets?|pieces?|skids?|boxes?|crates?|cartons?|lbs?|pounds?)\s+of\s+([a-z0-9][a-z0-9 \-/]{1,48}?)` +
           COMMODITY_STOP.source,
         "i",
       ),
@@ -661,7 +760,15 @@ function isRealIsoDate(s) {
 export function mergeExtracted(sheet, extracted) {
   const next = structuredClone(sheet);
   assignPlace(next.lanes.origin, extracted.origin);
-  assignPlace(next.lanes.destination, extracted.destination);
+  if (extracted.flags?.incompleteTo && isGarbagePlace(extracted.destination)) {
+    extracted.destination = {};
+  }
+  if (!isGarbagePlace(extracted.destination)) {
+    assignPlace(next.lanes.destination, extracted.destination);
+  }
+  if (isGarbagePlace(next.lanes.destination)) {
+    next.lanes.destination.city = null;
+  }
   const f = extracted.freight || {};
   if (Number.isInteger(f.pieces) && f.pieces >= 1) next.freight.pieces = f.pieces;
   if (typeof f.total_weight_lbs === "number" && f.total_weight_lbs > 0) {

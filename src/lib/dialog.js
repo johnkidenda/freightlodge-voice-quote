@@ -1,6 +1,6 @@
 import { emptySheet } from "./sheet.js";
 import { isReadyForQuote, nextRequiredSlot } from "./completeness.js";
-import { extractSlots, mergeExtracted } from "./extract.js";
+import { extractSlots, isGarbagePlace, mergeExtracted } from "./extract.js";
 import { detectOutOfScope } from "./scope.js";
 
 export const GREETING =
@@ -10,7 +10,9 @@ const PROMPTS = {
   origin_zip:
     "What’s the origin ZIP? City is helpful, but I need the five-digit ZIP — I won’t look one up.",
   dest_zip:
-    "And the destination ZIP? Same rule: I need the actual ZIP, I won’t invent one.",
+    "Where is this going? I need a destination city, state, or ZIP — I won’t invent one.",
+  dest_incomplete:
+    "That ended at “to” — I still need the destination city, state, or ZIP. I won’t invent a dest.",
   pieces: "How many pieces or pallets?",
   measure:
     "I need a real measure: total weight in pounds, or L×W×H in inches, or the NMFC class if you already know it. I won’t guess class or weight.",
@@ -27,6 +29,8 @@ export function createSession({ id, now } = {}) {
     askedAccessorials: false,
     awaiting: "origin_zip",
     messages: [],
+    lastReply: null,
+    lastExtractKey: null,
   };
 }
 
@@ -98,13 +102,28 @@ export function handleUtterance(session, text, { now } = {}) {
   }
 
   const awaiting = nextRequiredSlot(sheet, { askedAccessorials });
-  const ack = acknowledge(extracted, sheet);
-  const ask = awaiting ? PROMPTS[awaiting] : PROMPTS.email;
-  const reply = ack ? `${ack} ${ask}` : ask;
-  return finish(session, sheet, askedAccessorials, reply, extracted, awaiting);
+  const extractKey = extractKeyOf(extracted);
+  const addedNothing = session.lastExtractKey === extractKey;
+  let reply;
+  if (extracted.flags.incompleteTo && !hasRealDest(sheet.lanes.destination)) {
+    reply = addedNothing
+      ? "Still no destination after “to”. Say the city, state, or ZIP you’re going to — I won’t guess."
+      : PROMPTS.dest_incomplete;
+  } else {
+    const ack = acknowledge(extracted, sheet);
+    const ask = awaiting ? PROMPTS[awaiting] : PROMPTS.email;
+    reply = ack ? `${ack} ${ask}` : ask;
+    if (addedNothing && reply === session.lastReply) {
+      reply =
+        awaiting === "dest_zip"
+          ? "Still need the destination city, state, or ZIP — that last message didn’t add one."
+          : `I didn’t catch a new ${awaiting?.replaceAll("_", " ") || "detail"} in that. ${ask}`;
+    }
+  }
+  return finish(session, sheet, askedAccessorials, reply, extracted, awaiting, extractKey);
 }
 
-function finish(session, sheet, askedAccessorials, reply, extracted, awaiting) {
+function finish(session, sheet, askedAccessorials, reply, extracted, awaiting, extractKey) {
   const nextAwait = awaiting ?? nextRequiredSlot(sheet, { askedAccessorials });
   const nextSheet =
     isReadyForQuote(sheet) && askedAccessorials
@@ -116,6 +135,8 @@ function finish(session, sheet, askedAccessorials, reply, extracted, awaiting) {
       sheet: nextSheet,
       askedAccessorials,
       awaiting: nextSheet.status === "ready_for_quote" ? null : nextAwait,
+      lastReply: reply,
+      lastExtractKey: extractKey ?? extractKeyOf(extracted),
     },
     reply,
     extracted,
@@ -124,12 +145,33 @@ function finish(session, sheet, askedAccessorials, reply, extracted, awaiting) {
   };
 }
 
+function extractKeyOf(extracted) {
+  if (!extracted) return "";
+  return JSON.stringify({
+    o: extracted.origin,
+    d: extracted.destination,
+    f: extracted.freight,
+    p: extracted.pickup,
+    c: extracted.contact,
+    inc: extracted.flags?.incompleteTo || false,
+  });
+}
+
+function hasRealDest(place) {
+  if (!place || isGarbagePlace(place)) return false;
+  return Boolean(place.postal_code || place.city || place.state);
+}
+
 function acknowledge(extracted, sheet) {
   const bits = [];
   if (extracted.origin?.postal_code) bits.push(`origin ${extracted.origin.postal_code}`);
   else if (extracted.origin?.city) bits.push(`origin ${extracted.origin.city} (still need ZIP)`);
-  if (extracted.destination?.postal_code) bits.push(`dest ${extracted.destination.postal_code}`);
-  else if (extracted.destination?.city) bits.push(`dest ${extracted.destination.city} (still need ZIP)`);
+  else if (extracted.origin?.state) bits.push(`origin ${extracted.origin.state} (still need ZIP)`);
+  if (!isGarbagePlace(extracted.destination)) {
+    if (extracted.destination?.postal_code) bits.push(`dest ${extracted.destination.postal_code}`);
+    else if (extracted.destination?.city) bits.push(`dest ${extracted.destination.city} (still need ZIP)`);
+    else if (extracted.destination?.state) bits.push(`dest ${extracted.destination.state} (still need ZIP)`);
+  }
   if (extracted.freight?.pieces) bits.push(`${extracted.freight.pieces} pcs`);
   if (extracted.freight?.total_weight_lbs) bits.push(`${extracted.freight.total_weight_lbs} lb`);
   if (extracted.freight?.dims) {

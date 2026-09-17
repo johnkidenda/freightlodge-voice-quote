@@ -1,4 +1,5 @@
 import { SCHEMA_VERSION } from "./sheet.js";
+import { hasPlaceHint, isGarbagePlace } from "./extract.js";
 
 const ZIP_RE = /^[0-9]{5}(-[0-9]{4})?$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -83,8 +84,13 @@ export const SLOT_ORDER = [
 ];
 
 export function nextRequiredSlot(sheet, { askedAccessorials = false } = {}) {
-  if (!isValidZip(sheet?.lanes?.origin?.postal_code)) return "origin_zip";
-  if (!isValidZip(sheet?.lanes?.destination?.postal_code)) return "dest_zip";
+  const origin = sheet?.lanes?.origin;
+  const dest = sheet?.lanes?.destination;
+  const destMissingOrGarbage =
+    isGarbagePlace(dest) || (!isValidZip(dest?.postal_code) && !hasPlaceHint(dest) && hasPlaceHint(origin));
+  if (destMissingOrGarbage && !isValidZip(dest?.postal_code)) return "dest_zip";
+  if (!isValidZip(origin?.postal_code)) return "origin_zip";
+  if (!isValidZip(dest?.postal_code)) return "dest_zip";
   if (!Number.isInteger(sheet?.freight?.pieces) || sheet.freight.pieces < 1) return "pieces";
   if (!hasMeasure(sheet?.freight)) return "measure";
   if (typeof sheet?.freight?.commodity !== "string" || !sheet.freight.commodity.trim()) {
