@@ -125,7 +125,7 @@ function layout() {
   return `
     <header class="top">
       <div class="brand">
-        <img class="brand-logo" src="${assetBase}assets/logo-b.png" width="120" height="80" alt="Freight Lodge" />
+        <img class="brand-logo" src="${assetBase}assets/logo-b.png" width="120" height="47" alt="Freight Lodge" />
         <div>
           <p class="eyebrow">Freight Lodge</p>
           <h1>Voice to quote</h1>
