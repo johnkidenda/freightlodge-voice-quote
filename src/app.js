@@ -3,7 +3,7 @@ import { progressItems } from "./lib/completeness.js";
 import { requestQuote } from "./lib/handoff.js";
 import { emailQuote, MAIL_FROM } from "./lib/email.js";
 import { createHoldToTalk, speechSupported } from "./lib/speech.js";
-import { copyTextToClipboard, formatQaTranscript } from "./lib/transcript.js";
+import { formatSessionTranscript, sendSessionTranscript } from "./lib/transcript.js";
 
 const SAMPLE =
   "Chicago IL 60601 to Dallas TX 75201, 3 pallets, 1200 pounds, auto parts, pickup tomorrow, liftgate delivery, email shipper@example.com";
@@ -31,7 +31,8 @@ export function mountApp(root) {
     quote: root.querySelector("#quote-card"),
     status: root.querySelector("#status-pill"),
     sample: root.querySelector("#sample"),
-    qaCopy: root.querySelector("#qa-copy"),
+    sendTranscript: root.querySelector("#send-transcript"),
+    sendNote: root.querySelector("#send-note"),
     reset: root.querySelector("#reset"),
     drawer: root.querySelector("#sheet-drawer"),
     toggleSheet: root.querySelector("#toggle-sheet"),
@@ -93,9 +94,8 @@ export function mountApp(root) {
     void acceptUserText(els, state, SAMPLE);
   });
 
-  // QA-only — remove before external share
-  els.qaCopy.addEventListener("click", () => {
-    void copyQaTranscript(els, state);
+  els.sendTranscript.addEventListener("click", () => {
+    void sendTranscriptToTeam(els, state);
   });
 
   els.reset.addEventListener("click", () => {
@@ -138,6 +138,7 @@ function layout() {
 
     <main class="stage">
       <section class="chat-col">
+        <p class="voice-tip">Press and hold the button below to say what you want to ship. We’ll walk you through the details needed for a quote.</p>
         <div id="thread" class="thread" aria-live="polite"></div>
         <div id="quote-card"></div>
         <form id="composer" class="composer">
@@ -152,7 +153,8 @@ function layout() {
             <span class="hold-label">Hold to talk</span>
           </button>
           <p id="hold-hint" class="hint">${speechOk ? "Press and hold. I only send when you release." : ""}</p>
-          <button type="button" id="qa-copy" class="qa-copy">Copy full transcript (QA)</button>
+          <button type="button" id="send-transcript" class="send-transcript">Send transcript</button>
+          <p id="send-note" class="send-note" hidden></p>
         </form>
       </section>
 
@@ -271,18 +273,50 @@ async function runHandoff(els, state) {
   }
 }
 
-async function copyQaTranscript(els, state) {
-  // QA-only — remove before external share
-  const text = formatQaTranscript(state.messages, state.session);
-  const ok = await copyTextToClipboard(text);
-  const label = "Copy full transcript (QA)";
-  els.qaCopy.textContent = ok ? "Copied" : "Copy failed";
-  els.qaCopy.classList.toggle("copied", ok);
-  window.clearTimeout(els.qaCopy._copiedTimer);
-  els.qaCopy._copiedTimer = window.setTimeout(() => {
-    els.qaCopy.textContent = label;
-    els.qaCopy.classList.remove("copied");
-  }, 1600);
+async function sendTranscriptToTeam(els, state) {
+  const btn = els.sendTranscript;
+  const note = els.sendNote;
+  const label = "Send transcript";
+  btn.disabled = true;
+  btn.textContent = "Sending…";
+  note.hidden = true;
+  note.textContent = "";
+  try {
+    const result = await sendSessionTranscript(state.messages, state.session);
+    if (result.ok) {
+      btn.textContent = "Sent";
+      btn.classList.add("sent");
+      note.hidden = false;
+      note.textContent = "Thanks — the team will review.";
+      window.clearTimeout(btn._sentTimer);
+      btn._sentTimer = window.setTimeout(() => {
+        btn.textContent = label;
+        btn.classList.remove("sent");
+        btn.disabled = false;
+      }, 2200);
+      return;
+    }
+    if (result.mailto) {
+      window.location.href = result.mailto;
+      btn.textContent = "Opening mail…";
+      note.hidden = false;
+      note.textContent = "If mail didn’t open, try again or email john@freightlodge.com.";
+    } else {
+      btn.textContent = "Send failed";
+      note.hidden = false;
+      note.textContent = "Couldn’t send — try again.";
+    }
+  } catch (err) {
+    btn.textContent = "Send failed";
+    note.hidden = false;
+    note.textContent = "Couldn’t send — try again.";
+  }
+  window.clearTimeout(btn._sentTimer);
+  btn._sentTimer = window.setTimeout(() => {
+    btn.textContent = label;
+    btn.classList.remove("sent");
+    btn.disabled = false;
+  }, 2200);
 }
 
 async function sendEmail(els, state) {
