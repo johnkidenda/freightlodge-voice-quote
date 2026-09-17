@@ -262,6 +262,8 @@ const PLACE_NOISE = new Set([
   "origin",
   "zip",
   "zipcode",
+  "thousand",
+  "hundred",
 ]);
 
 const PLACE_STOP = new Set([
@@ -357,6 +359,8 @@ const PLACE_STOP = new Set([
   "is",
   "kilo",
   "kilos",
+  "thousand",
+  "hundred",
 ]);
 
 const LEADING_FILLER = /^(need|please|want|hi|hello|quote|ship|shipping|can|we|i|get)\b/i;
@@ -502,6 +506,115 @@ export function isKnownUsCity(name) {
   return US_CITIES.has(String(name).trim().toLowerCase());
 }
 
+/** First-3 ZIP prefixes for obvious metro conflicts. Never invents a ZIP. */
+const ZIP_PREFIX_METRO = {
+  300: { city: "Atlanta", state: "GA" },
+  301: { city: "Atlanta", state: "GA" },
+  302: { city: "Atlanta", state: "GA" },
+  303: { city: "Atlanta", state: "GA" },
+  787: { city: "Austin", state: "TX" },
+  786: { city: "Austin", state: "TX" },
+  606: { city: "Chicago", state: "IL" },
+  607: { city: "Chicago", state: "IL" },
+  752: { city: "Dallas", state: "TX" },
+  753: { city: "Dallas", state: "TX" },
+  750: { city: "Dallas", state: "TX" },
+  770: { city: "Houston", state: "TX" },
+  772: { city: "Houston", state: "TX" },
+  100: { city: "New York", state: "NY" },
+  101: { city: "New York", state: "NY" },
+  112: { city: "New York", state: "NY" },
+  900: { city: "Los Angeles", state: "CA" },
+  901: { city: "Los Angeles", state: "CA" },
+  941: { city: "San Francisco", state: "CA" },
+  850: { city: "Phoenix", state: "AZ" },
+  191: { city: "Philadelphia", state: "PA" },
+  981: { city: "Seattle", state: "WA" },
+  802: { city: "Denver", state: "CO" },
+  "021": { city: "Boston", state: "MA" },
+  331: { city: "Miami", state: "FL" },
+  372: { city: "Nashville", state: "TN" },
+  891: { city: "Las Vegas", state: "NV" },
+  282: { city: "Charlotte", state: "NC" },
+};
+
+export function metroForZip(zip) {
+  const prefix = String(zip || "").replace(/\D/g, "").slice(0, 3);
+  if (!prefix) return null;
+  return ZIP_PREFIX_METRO[prefix] || null;
+}
+
+function cityOf(place) {
+  return String(place?.city || "").trim().toLowerCase();
+}
+
+export function placeCityMatchesMetro(place, metro) {
+  if (!place || !metro) return false;
+  const city = cityOf(place);
+  return Boolean(city && city === metro.city.toLowerCase());
+}
+
+export function placeConflictsWithMetro(place, metro) {
+  if (!place || !metro) return false;
+  const city = cityOf(place);
+  if (city && isKnownUsCity(city) && city !== metro.city.toLowerCase()) return true;
+  const state = String(place.state || "").toUpperCase();
+  if (state && metro.state && state !== metro.state && !placeCityMatchesMetro(place, metro)) {
+    return true;
+  }
+  return false;
+}
+
+export function placeMatchesMetro(place, metro) {
+  if (!place || !metro) return false;
+  if (placeCityMatchesMetro(place, metro)) return true;
+  const state = String(place.state || "").toUpperCase();
+  if (state && state === metro.state && !cityOf(place)) return true;
+  return false;
+}
+
+/**
+ * Decide whether a ZIP can attach to the awaiting side without inverting
+ * a known city/state pair (Atlanta + 78721, dest TX/Austin).
+ */
+export function resolveZipAttachment(sheet, zip, intendedRole) {
+  const metro = metroForZip(zip);
+  if (!metro || !intendedRole) return { attach: intendedRole, clarify: null };
+  const origin = sheet?.lanes?.origin;
+  const dest = sheet?.lanes?.destination;
+  const target = intendedRole === "origin" ? origin : dest;
+  const other = intendedRole === "origin" ? dest : origin;
+  const otherRole = intendedRole === "origin" ? "dest" : "origin";
+  const targetConflict = placeConflictsWithMetro(target, metro);
+  const otherMatch = placeMatchesMetro(other, metro) || placeCityMatchesMetro(other, metro);
+  if (targetConflict && otherMatch) {
+    return {
+      attach: null,
+      clarify: { zip, attemptedRole: intendedRole, suggestedRole: otherRole, metro },
+    };
+  }
+  if (targetConflict) {
+    return {
+      attach: null,
+      clarify: {
+        zip,
+        attemptedRole: intendedRole,
+        suggestedRole: otherMatch ? otherRole : otherRole,
+        metro,
+      },
+    };
+  }
+  return { attach: intendedRole, clarify: null };
+}
+
+export function applyZipToRole(sheet, role, zip) {
+  if (!role || !zip) return sheet;
+  const next = structuredClone(sheet);
+  if (role === "dest") next.lanes.destination.postal_code = zip;
+  if (role === "origin") next.lanes.origin.postal_code = zip;
+  return next;
+}
+
 export function splitTwoKnownCities(value) {
   const words = String(value || "")
     .replace(/[,\.;:]+/g, " ")
@@ -597,7 +710,7 @@ function extractLane(raw, extracted, awaiting) {
   }
 
   const incomplete = detectIncompleteZip(raw, awaiting);
-  if (incomplete) extracted.flags.incompleteZip = incomplete;
+  if (incomplete && zipTokens.length === 0) extracted.flags.incompleteZip = incomplete;
 }
 
 function isLabeledLaneZipPhrase(raw) {
@@ -876,22 +989,50 @@ function parseCount(token) {
   return Number.isInteger(n) && n >= 1 ? n : null;
 }
 
+const WEIGHT_UNIT = String.raw`(?:kgs?|kilograms?|kilos?|lbs?|pounds?)`;
+const SPOKEN_NUM = String.raw`(?:a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)`;
+
+function spokenScaleToNumber(prefix, scale) {
+  const mult = scale === "thousand" ? 1000 : 100;
+  if (!prefix) return mult;
+  const p = String(prefix).trim().toLowerCase();
+  if (p === "a" || p === "an") return mult;
+  if (WORD_NUMBERS[p] != null) return WORD_NUMBERS[p] * mult;
+  const n = parseWeightPounds(p);
+  return n != null ? n * mult : null;
+}
+
+function applyExtractedWeight(extracted, amount, fromKg) {
+  if (amount == null || !(amount > 0)) return;
+  if (fromKg) {
+    const pounds = kgToPounds(amount);
+    if (pounds == null) return;
+    extracted.freight.total_weight_lbs = pounds;
+    extracted.flags.weightFromKg = true;
+    extracted.flags.weightKg = amount;
+    return;
+  }
+  extracted.freight.total_weight_lbs = amount;
+}
+
 function extractWeight(raw, extracted) {
+  const spoken = raw.match(
+    new RegExp(String.raw`\b(?:(${SPOKEN_NUM}|\d[\d,]*)\s+)?(thousand|hundred)\s+${WEIGHT_UNIT}\b`, "i"),
+  );
+  if (spoken && !VAGUE_MEASURE.test(raw) && !/\bfew\s+(hundred|thousand)\b/i.test(raw)) {
+    const amount = spokenScaleToNumber(spoken[1], spoken[2].toLowerCase());
+    applyExtractedWeight(extracted, amount, /kg|kilo/i.test(spoken[0]));
+    if (extracted.freight.total_weight_lbs) return;
+  }
+
   const lb = raw.match(/(?:\$|usd\s*)?\s*([\d,]+(?:\.\d+)?)\s*(?:lbs?|pounds?)\b/i);
   if (lb) {
-    const n = parseWeightPounds(lb[1]);
-    if (n != null) extracted.freight.total_weight_lbs = n;
+    applyExtractedWeight(extracted, parseWeightPounds(lb[1]), false);
     return;
   }
   const kg = raw.match(/(?:\$|usd\s*)?\s*([\d,]+(?:\.\d+)?)\s*(?:kgs?|kilograms?|kilos?)\b/i);
   if (!kg) return;
-  const n = parseWeightPounds(kg[1]);
-  const pounds = kgToPounds(n);
-  if (pounds != null) {
-    extracted.freight.total_weight_lbs = pounds;
-    extracted.flags.weightFromKg = true;
-    extracted.flags.weightKg = n;
-  }
+  applyExtractedWeight(extracted, parseWeightPounds(kg[1]), true);
 }
 
 function extractDims(raw, extracted) {
@@ -1108,26 +1249,27 @@ function isRealIsoDate(s) {
   return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
 }
 
-/** Merge extracted slots onto a sheet. Null / missing extract fields are left unchanged. */
+/** Merge extracted slots onto a sheet. ZIP-only updates never replace the place object. */
 export function mergeExtracted(sheet, extracted) {
   const next = structuredClone(sheet);
+  const originKeep = { city: next.lanes.origin.city, state: next.lanes.origin.state };
+  const destKeep = { city: next.lanes.destination.city, state: next.lanes.destination.state };
   assignPlace(next.lanes.origin, extracted.origin);
   if (extracted.flags?.incompleteTo && isGarbagePlace(extracted.destination)) {
     extracted.destination = {};
   }
-  const destCityBefore = next.lanes.destination.city;
   if (!isGarbagePlace(extracted.destination)) {
     assignPlace(next.lanes.destination, extracted.destination);
   } else if (extracted.destination?.postal_code) {
     next.lanes.destination.postal_code = extracted.destination.postal_code;
   }
-  if (isGarbagePlace(next.lanes.destination)) {
-    next.lanes.destination.city = destCityBefore && !isGarbagePlace({ city: destCityBefore })
-      ? destCityBefore
-      : null;
+  restorePlaceIdentity(next.lanes.origin, originKeep, extracted.origin);
+  restorePlaceIdentity(next.lanes.destination, destKeep, extracted.destination);
+  if (isGarbagePlace(next.lanes.origin) && originKeep.city && !isGarbagePlace({ city: originKeep.city })) {
+    next.lanes.origin.city = originKeep.city;
   }
-  if (isGarbagePlace(next.lanes.origin)) {
-    next.lanes.origin.city = null;
+  if (isGarbagePlace(next.lanes.destination) && destKeep.city && !isGarbagePlace({ city: destKeep.city })) {
+    next.lanes.destination.city = destKeep.city;
   }
   const f = extracted.freight || {};
   if (Number.isInteger(f.pieces) && f.pieces >= 1) next.freight.pieces = f.pieces;
@@ -1166,4 +1308,16 @@ function assignPlace(target, src) {
   if (src.state) target.state = src.state;
   if (src.postal_code) target.postal_code = src.postal_code;
   if (src.country) target.country = src.country;
+}
+
+/** ZIP-only turns must not replace {city,state} with a postal_code-only place. */
+function restorePlaceIdentity(target, kept, src) {
+  if (!target || !kept) return;
+  const incomingCity = src?.city && !isGarbagePlace({ city: src.city });
+  const incomingState = Boolean(src?.state);
+  if (!incomingCity && kept.city && !target.city) target.city = kept.city;
+  if (!incomingState && kept.state && !target.state) target.state = kept.state;
+  if (!incomingCity && kept.city && isGarbagePlace({ city: target.city }) && !isGarbagePlace({ city: kept.city })) {
+    target.city = kept.city;
+  }
 }

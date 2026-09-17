@@ -2,11 +2,13 @@ import { emptySheet } from "./sheet.js";
 import { isReadyForQuote, nextRequiredSlot } from "./completeness.js";
 import {
   applyZipRoleCorrection,
+  applyZipToRole,
   detectZipRoleCorrection,
   extractSlots,
   firstBareZip,
   isGarbagePlace,
   mergeExtracted,
+  resolveZipAttachment,
 } from "./extract.js";
 import { detectOutOfScope } from "./scope.js";
 
@@ -45,7 +47,43 @@ export function createSession({ id, now } = {}) {
     lastReply: null,
     lastExtractKey: null,
     lastBareZip: null,
+    zipClarify: null,
   };
+}
+
+export function isAlreadyMentioned(text) {
+  return /\b((i|we)\s+already\s+(mentioned|said|told|gave)|already mentioned( it)?|i (just )?(said|told) (you )?(that|it)|like i (already )?said)\b/i.test(
+    String(text || ""),
+  );
+}
+
+export function zipClarifyQuestion(clarify) {
+  if (!clarify?.zip || !clarify?.metro?.city) return PROMPTS.origin_zip;
+  const place = clarify.metro.city;
+  if (clarify.suggestedRole === "dest") {
+    return `${clarify.zip} looks like ${place} — is that the destination ZIP?`;
+  }
+  if (clarify.suggestedRole === "origin") {
+    return `${clarify.zip} looks like ${place} — is that the origin ZIP?`;
+  }
+  return `${clarify.zip} looks like ${place}. Origin ZIP or destination ZIP? I won’t silently invert the lane.`;
+}
+
+function decideZipClarify(raw, clarify) {
+  if (!clarify) return null;
+  const t = String(raw || "")
+    .toLowerCase()
+    .replace(/['’]/g, "");
+  if (!t.trim()) return null;
+  if (/\b(dest|destination|going|deliver)\b/.test(t)) return "dest";
+  if (/\b(origin|pickup|pick up|ship from)\b/.test(t)) return "origin";
+  if (/^\s*(yes|yeah|yep|yup|correct|thats right|that is right|it is)\b/.test(t)) {
+    return clarify.suggestedRole || "dest";
+  }
+  if (/^\s*(no|nope|nah)\b/.test(t)) {
+    return clarify.attemptedRole || "origin";
+  }
+  return null;
 }
 
 export function openingMessage() {
@@ -84,8 +122,43 @@ export function handleUtterance(session, text, { now } = {}) {
     session.awaiting === "origin_zip" || session.awaiting === "dest_zip"
       ? session.awaiting
       : nextRequiredSlot(sheet0, { askedAccessorials: session.askedAccessorials });
+
+  let sheetFromClarify = sheet0;
+  let zipClarify = session.zipClarify || null;
+  if (zipClarify) {
+    const decided = decideZipClarify(raw, zipClarify);
+    if (decided) {
+      sheetFromClarify = applyZipToRole(sheet0, decided, zipClarify.zip);
+      zipClarify = null;
+    } else if (firstBareZip(raw)) {
+      zipClarify = null;
+    }
+  }
+
   const extracted = extractSlots(raw, { now, awaiting: awaitingNow });
-  let sheet = mergeExtracted(sheet0, extracted);
+  const zipIntent =
+    awaitingNow === "origin_zip" && extracted.origin?.postal_code
+      ? "origin"
+      : awaitingNow === "dest_zip" && extracted.destination?.postal_code
+        ? "dest"
+        : extracted.origin?.postal_code
+          ? "origin"
+          : extracted.destination?.postal_code
+            ? "dest"
+            : null;
+  const zipForIntent =
+    zipIntent === "origin" ? extracted.origin.postal_code : zipIntent === "dest" ? extracted.destination.postal_code : null;
+  if (zipIntent && zipForIntent) {
+    const verdict = resolveZipAttachment(sheetFromClarify, zipForIntent, zipIntent);
+    if (verdict.clarify) {
+      if (zipIntent === "origin") delete extracted.origin.postal_code;
+      if (zipIntent === "dest") delete extracted.destination.postal_code;
+      extracted.flags.zipClarify = verdict.clarify;
+      zipClarify = verdict.clarify;
+    }
+  }
+
+  let sheet = mergeExtracted(sheetFromClarify, extracted);
 
   const roleFix = detectZipRoleCorrection(raw);
   const zipForFix = firstBareZip(raw) || extracted.flags.bareZip || session.lastBareZip;
@@ -105,6 +178,22 @@ export function handleUtterance(session, text, { now } = {}) {
     (extracted.pickup.accessorials && extracted.pickup.accessorials.length)
   ) {
     askedAccessorials = true;
+  }
+
+  if (extracted.flags.zipClarify) {
+    const reply = zipClarifyQuestion(extracted.flags.zipClarify);
+    return finish(session, sheet, askedAccessorials, reply, extracted, awaitingNow, undefined, lastBareZip, zipClarify);
+  }
+
+  if (
+    isAlreadyMentioned(raw) &&
+    awaitingNow === "pieces" &&
+    typeof sheet.freight?.total_weight_lbs === "number" &&
+    sheet.freight.total_weight_lbs > 0 &&
+    !extracted.freight?.pieces
+  ) {
+    const reply = "Got the weight; I still need piece/pallet count.";
+    return finish(session, sheet, askedAccessorials, reply, extracted, "pieces", undefined, lastBareZip, zipClarify);
   }
 
   if (extracted.flags.incompleteZip) {
@@ -135,7 +224,7 @@ export function handleUtterance(session, text, { now } = {}) {
     sheet = { ...sheet, status: "ready_for_quote", error_reason: null, out_of_scope_reason: null };
     const reply = "Sheet’s complete. Handing this to Freight Ops’ Exfresso runner for a live rate — no booking from here.";
     return {
-      session: { ...session, sheet, askedAccessorials, awaiting: null, lastBareZip },
+      session: { ...session, sheet, askedAccessorials, awaiting: null, lastBareZip, zipClarify: null },
       reply,
       extracted,
       ready: true,
@@ -162,20 +251,28 @@ export function handleUtterance(session, text, { now } = {}) {
           : `I didn’t catch a new ${awaiting?.replaceAll("_", " ") || "detail"} in that. ${ask}`;
     }
   }
-  return finish(session, sheet, askedAccessorials, reply, extracted, awaiting, extractKey, lastBareZip);
+  return finish(session, sheet, askedAccessorials, reply, extracted, awaiting, extractKey, lastBareZip, zipClarify);
+}
+
+function placeLabel(place) {
+  if (!place || isGarbagePlace(place)) return null;
+  const bits = [place.city, place.state].filter(Boolean);
+  return bits.length ? bits.join(", ") : null;
 }
 
 function promptFor(slot, sheet) {
   if (slot === "dest_zip") {
-    const city = sheet.lanes?.destination?.city;
-    if (city && !isGarbagePlace(sheet.lanes.destination)) {
-      return `I have dest ${city}. What’s the destination ZIP? I won’t invent one.`;
-    }
+    const label = placeLabel(sheet.lanes?.destination);
+    if (label) return `I have dest ${label}. What’s the destination ZIP? I won’t invent one.`;
+  }
+  if (slot === "origin_zip") {
+    const label = placeLabel(sheet.lanes?.origin);
+    if (label) return `I have origin ${label}. What’s the origin ZIP? I won’t look one up.`;
   }
   return slot ? PROMPTS[slot] : PROMPTS.email;
 }
 
-function finish(session, sheet, askedAccessorials, reply, extracted, awaiting, extractKey, lastBareZip) {
+function finish(session, sheet, askedAccessorials, reply, extracted, awaiting, extractKey, lastBareZip, zipClarify) {
   const nextAwait = awaiting ?? nextRequiredSlot(sheet, { askedAccessorials });
   const nextSheet =
     isReadyForQuote(sheet) && askedAccessorials
@@ -190,6 +287,7 @@ function finish(session, sheet, askedAccessorials, reply, extracted, awaiting, e
       lastReply: reply,
       lastExtractKey: extractKey ?? extractKeyOf(extracted),
       lastBareZip: lastBareZip ?? session.lastBareZip,
+      zipClarify: nextSheet.status === "ready_for_quote" ? null : zipClarify ?? null,
     },
     reply,
     extracted,
