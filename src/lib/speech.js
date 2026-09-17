@@ -21,36 +21,147 @@ export function preferTapToTalk(
   return Boolean(isiOS || extras.forceToggle || (isSafari && extras.touch));
 }
 
+function norm(s) {
+  return String(s || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** True when `next` is the same utterance as `prev`, grown or repeated. */
+export function isProgressiveDuplicate(prev, next) {
+  const a = norm(prev);
+  const b = norm(next);
+  if (!a || !b) return false;
+  if (b === a) return true;
+  if (b.startsWith(`${a} `)) return true;
+  if (a.endsWith(" ") && b.startsWith(a.trim())) return true;
+  return false;
+}
+
 /**
- * Buffer STT text while the mic is held. Never commit a transcript until
- * release() — Web Speech often marks phrases final mid-utterance.
+ * Join final segments. Cumulative copies of the same phrase replace;
+ * non-overlapping segments ("hello " + "world") concatenate.
+ */
+export function collapseProgressiveFinals(segments) {
+  const out = [];
+  for (const raw of segments) {
+    const text = String(raw || "").replace(/\s+/g, " ").trim();
+    if (!text) continue;
+    if (!out.length) {
+      out.push(text);
+      continue;
+    }
+    const prev = out[out.length - 1];
+    if (isProgressiveDuplicate(prev, text)) {
+      out[out.length - 1] = text;
+    } else if (isProgressiveDuplicate(text, prev)) {
+      /* shorter prefix of what we already have — keep prev */
+    } else {
+      out.push(text);
+    }
+  }
+  return out.join(" ").replace(/\s+/g, " ").trim();
+}
+
+export function normalizeRecognitionResults(results) {
+  const list = [];
+  const length = results?.length ?? 0;
+  for (let i = 0; i < length; i += 1) {
+    const row = results[i];
+    const transcript = row?.transcript ?? row?.[0]?.transcript ?? "";
+    list.push({
+      transcript: String(transcript),
+      isFinal: Boolean(row?.isFinal),
+    });
+  }
+  return list;
+}
+
+/** Rebuild one transcript from the current results list (each index once). */
+export function rebuildFromResults(results) {
+  const rows = normalizeRecognitionResults(results);
+  const finalBits = [];
+  const interimBits = [];
+  for (const row of rows) {
+    const text = row.transcript.replace(/\s+/g, " ").trim();
+    if (!text) continue;
+    if (row.isFinal) finalBits.push(text);
+    else interimBits.push(text);
+  }
+  const finals = collapseProgressiveFinals(finalBits);
+  const interim = collapseProgressiveFinals(interimBits);
+  let preview = finals;
+  if (interim) {
+    preview = isProgressiveDuplicate(finals, interim)
+      ? interim
+      : collapseProgressiveFinals([finals, interim]);
+  }
+  return { finals, interim, preview };
+}
+
+/**
+ * One running transcript for a hold session. Replace progressive
+ * duplicates; never join a history of growing finals.
  */
 export function createTranscriptBuffer() {
   let holding = false;
-  const finals = [];
-  let interim = "";
+  let slots = [];
+  let prior = "";
+
+  function snap() {
+    const rebuilt = rebuildFromResults(slots);
+    const finals = collapseProgressiveFinals([prior, rebuilt.finals]);
+    let preview = finals;
+    if (rebuilt.interim) {
+      preview = isProgressiveDuplicate(finals, rebuilt.interim)
+        ? rebuilt.interim
+        : collapseProgressiveFinals([finals, rebuilt.interim]);
+    } else if (rebuilt.preview) {
+      preview = collapseProgressiveFinals([prior, rebuilt.preview]);
+    }
+    return { preview, finals, commit: null };
+  }
 
   return {
     start() {
       holding = true;
-      finals.length = 0;
-      interim = "";
+      slots = [];
+      prior = "";
     },
-    onSpeechResult({ interim: nextInterim = "", finalText = "" } = {}) {
+    applyResults(results) {
       if (!holding) return { preview: "", commit: null };
-      if (finalText && finalText.trim()) finals.push(finalText.trim());
-      interim = nextInterim || "";
-      return {
-        preview: [...finals, interim].filter(Boolean).join(" ").trim(),
-        commit: null,
-      };
+      slots = normalizeRecognitionResults(results);
+      return snap();
+    },
+    onSpeechResult({ interim = "", finalText = "", results } = {}) {
+      if (results) return this.applyResults(results);
+      if (!holding) return { preview: "", commit: null };
+      const next = slots.filter((s) => s.isFinal);
+      if (finalText) {
+        const last = next[next.length - 1];
+        if (last && isProgressiveDuplicate(last.transcript, finalText)) {
+          next[next.length - 1] = { transcript: finalText, isFinal: true };
+        } else {
+          next.push({ transcript: finalText, isFinal: true });
+        }
+      }
+      if (interim) next.push({ transcript: interim, isFinal: false });
+      slots = next;
+      return snap();
+    },
+    /** Fold current slots into prior when the recognizer restarts mid-hold. */
+    checkpoint() {
+      const rebuilt = rebuildFromResults(slots);
+      prior = collapseProgressiveFinals([prior, rebuilt.finals, rebuilt.interim]);
+      slots = [];
     },
     release() {
-      const commit = [...finals, interim].filter(Boolean).join(" ").trim();
+      const { finals } = snap();
       holding = false;
-      finals.length = 0;
-      interim = "";
-      return commit;
+      slots = [];
+      prior = "";
+      return finals;
     },
     isHolding() {
       return holding;
@@ -84,14 +195,14 @@ export function createHoldToTalk({ onPreview, onCommit, onError, onStart, onEnd 
     rec.interimResults = true;
     rec.continuous = true;
     rec.onresult = (event) => {
-      let interim = "";
-      let finalText = "";
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
-        const piece = event.results[i][0].transcript;
-        if (event.results[i].isFinal) finalText += piece;
-        else interim += piece;
+      const rows = [];
+      for (let i = 0; i < event.results.length; i += 1) {
+        rows.push({
+          transcript: event.results[i][0].transcript,
+          isFinal: event.results[i].isFinal,
+        });
       }
-      const { preview } = buffer.onSpeechResult({ interim, finalText });
+      const { preview } = buffer.applyResults(rows);
       onPreview?.(preview);
     };
     rec.onerror = (e) => {
@@ -101,6 +212,7 @@ export function createHoldToTalk({ onPreview, onCommit, onError, onStart, onEnd 
     rec.onend = () => {
       active = false;
       if (wantHold) {
+        buffer.checkpoint();
         tryStart();
         return;
       }
