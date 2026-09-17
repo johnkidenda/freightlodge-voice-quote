@@ -2,7 +2,7 @@
 /**
  * Local Node stub for the Cartesia STT access-token proxy.
  *
- *   CARTESIA_API_KEY=sk_car_… node token-proxy/local-stub.mjs
+ *   CARTESIA_API_KEY= node token-proxy/local-stub.mjs
  *
  * Then point the Vite app at it:
  *   VITE_STT_TOKEN_URL=http://127.0.0.1:8787 npm run dev

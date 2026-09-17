@@ -34,11 +34,21 @@ The Pages SPA fetches `{ token, expires_in }` from `VITE_STT_TOKEN_URL`, then op
 - Worker + local stub: [`token-proxy/README.md`](token-proxy/README.md)
 - Local Vite (`npm run dev`) also exposes `POST /api/stt-token` when `CARTESIA_API_KEY` is in the server env — point `VITE_STT_TOKEN_URL=/api/stt-token`
 
-Anthony’s production steps:
+Anthony’s production steps (key stays on the box / Worker secret):
 
-1. Deploy `token-proxy/` (`npx wrangler deploy`) and `wrangler secret put CARTESIA_API_KEY`
-2. Set GitHub Actions secret `VITE_STT_TOKEN_URL` to the Worker URL
-3. Redeploy Pages so the URL is baked into the SPA
+```bash
+cd token-proxy
+npx wrangler secret put CARTESIA_API_KEY
+npx wrangler deploy
+```
+
+Placeholder to set as the GitHub Actions secret, then rebuild Pages:
+
+```
+VITE_STT_TOKEN_URL=https://freightlodge-stt-token.<ACCOUNT>.workers.dev
+```
+
+Use the URL `wrangler deploy` prints. Full copy-paste path: [`token-proxy/README.md`](token-proxy/README.md).
 
 ## What the app does
 

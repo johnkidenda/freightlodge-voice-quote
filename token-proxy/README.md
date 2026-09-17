@@ -9,39 +9,47 @@ The Pages client calls `VITE_STT_TOKEN_URL` (this Worker or the local stub), the
 
 with query params `access_token` + `cartesia_version=2026-08-14`.
 
-## Cloudflare Worker (preferred)
+## Anthony — production Worker (workers.dev)
 
-From this directory, with [Wrangler](https://developers.cloudflare.com/workers/wrangler/) installed and authenticated:
+Needs only this directory’s `wrangler.toml` plus the secret name **`CARTESIA_API_KEY`** (value from the box — do not commit it).
 
 ```bash
 cd token-proxy
+npx wrangler login          # once per machine, if needed
 npx wrangler secret put CARTESIA_API_KEY
 npx wrangler deploy
 ```
 
-Note the deployed URL, e.g. `https://freightlodge-stt-token.<account>.workers.dev`.
+Wrangler prints the URL. Worker name is `freightlodge-stt-token` (`workers_dev = true`).
 
-CORS allows `https://johnkidenda.github.io` (and localhost Vite ports). If you serve the app from another origin, add it in `src/mint.js` (`CORS_ORIGINS`).
+**Exact Pages build placeholder** (replace `<ACCOUNT>` with the subdomain wrangler printed):
+
+```
+VITE_STT_TOKEN_URL=https://freightlodge-stt-token.<ACCOUNT>.workers.dev
+```
+
+Then:
+
+1. GitHub → Settings → Secrets and variables → Actions → New repository secret
+   - Name: `VITE_STT_TOKEN_URL`
+   - Value: the workers.dev URL (no path suffix)
+2. After this PR is on `main`, redeploy Pages (push or Actions → **Deploy to GitHub Pages** → Run workflow). The workflow already passes the secret into `npm run build`.
+
+CORS allows `https://johnkidenda.github.io` (and localhost Vite ports). Add other origins in `src/mint.js` (`CORS_ORIGINS`).
 
 ## Local Node stub
 
 ```bash
-CARTESIA_API_KEY=sk_car_… node token-proxy/local-stub.mjs
+CARTESIA_API_KEY= node token-proxy/local-stub.mjs
 ```
 
-Listens on `http://127.0.0.1:8787` by default (`PORT` / `HOST` override).
+Set the key in the environment only. Listens on `http://127.0.0.1:8787` (`PORT` / `HOST` override).
 
-`npm run dev` can also mint at `/api/stt-token` when `CARTESIA_API_KEY` is in the environment (see repo root `.env`).
+`npm run dev` also mints at `/api/stt-token` when `CARTESIA_API_KEY` is in the server env — use `VITE_STT_TOKEN_URL=/api/stt-token`.
 
-## Wire the Pages app
+Web Speech does **not** need this proxy. Cartesia modes fail-soft with “STT token proxy not configured” until the URL is set and Pages is rebuilt.
 
-1. Put the Worker URL in the GitHub Actions secret `VITE_STT_TOKEN_URL` (no trailing path required).
-2. Redeploy Pages (`main` push or workflow dispatch) so Vite bakes the URL into the bundle.
-3. Confirm **Cartesia manual** / **Cartesia auto** no longer show “STT token proxy not configured”.
-
-Web Speech does **not** need this proxy.
-
-## Env (server only)
+## Env
 
 | Var | Where | Purpose |
 | --- | --- | --- |
