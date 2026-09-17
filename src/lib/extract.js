@@ -159,6 +159,7 @@ const ACCESSORIAL_PATTERNS = [
 
 const NONE_ACCESSORIALS =
   /\b(no(?:ne|pe)?(?:\s+extras?)?|no accessorials|that's all|thats all|nothing else|standard pickup|no lift\s*-?\s*gate)\b/i;
+const STT_NONE_ACCESSORIALS = /^\s*(num|nun|non|none|nope|no)(?:\s+extras?)?\s*[.!]?\s*$/i;
 
 const VAGUE_MEASURE =
   /\b(standard class|whatever class|any class|usual class|about a few|a few hundred|not sure|don't know|do not know|idk|guess|around there)\b/i;
@@ -170,7 +171,7 @@ const VAGUE_DATE = /\b(asap|soon|whenever|next week sometime|flexible)\b/i;
  * or vague measures. Callers must leave nulls alone when a field is absent.
  */
 export function extractSlots(text, { now, awaiting, originCity, destCity } = {}) {
-  const raw = (text || "").trim();
+  const raw = stripSpeechFillers(text || "");
   const extracted = {
     origin: {},
     destination: {},
@@ -195,14 +196,32 @@ export function extractSlots(text, { now, awaiting, originCity, destCity } = {})
   extractCommodity(raw, extracted, awaiting);
   extractDate(raw, extracted, now);
   extractTime(raw, extracted);
-  extractAccessorials(raw, extracted);
+  extractAccessorials(raw, extracted, awaiting);
   extractContact(raw, extracted, awaiting);
   extractHazmat(raw, extracted);
 
   return extracted;
 }
 
+const SPEECH_FILLERS = new Set(["um", "uh", "erm", "uhh", "umm", "hmm", "ah", "er"]);
+
+/** Drop STT filler tokens so “Uh Atlanta” is just Atlanta. */
+export function stripSpeechFillers(text) {
+  return String(text || "")
+    .replace(/\b(?:um+|uh+|erm+|uhh+|umm+|hmm+|ahh?|er)\b[,.]?/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 const PLACE_NOISE = new Set([
+  "um",
+  "uh",
+  "erm",
+  "uhh",
+  "umm",
+  "hmm",
+  "ah",
+  "er",
   "ship",
   "shipping",
   "shipper",
@@ -1018,7 +1037,7 @@ export function takePlace(text) {
 
     const lower = bare.toLowerCase();
     if (lower === "to" || lower === "through") break;
-    if (PLACE_STOP.has(lower) || isPlaceNoise(bare)) {
+    if (SPEECH_FILLERS.has(lower) || PLACE_STOP.has(lower) || isPlaceNoise(bare)) {
       if (cityWords.length) break;
       continue;
     }
@@ -1301,10 +1320,11 @@ function extractTime(raw, extracted) {
   extracted.pickup.ready_time_local = `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
 }
 
-function extractAccessorials(raw, extracted) {
+function extractAccessorials(raw, extracted, awaiting) {
   const mentionsAccessorial =
     /lift|residential|inside|limited\s+access|appointment|notify|freeze/i.test(raw);
-  if (NONE_ACCESSORIALS.test(raw) && !mentionsAccessorial) {
+  const sttNone = STT_NONE_ACCESSORIALS.test(raw) || (awaiting === "accessorials" && /^\s*num\s*$/i.test(raw));
+  if ((NONE_ACCESSORIALS.test(raw) || sttNone) && !mentionsAccessorial) {
     extracted.flags.accessorialsNone = true;
     extracted.pickup.accessorials = [];
     return;
@@ -1375,11 +1395,45 @@ function isRealIsoDate(s) {
   return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
 }
 
+function wouldSwapLabeledCity(incomingCity, keptThis, keptOther) {
+  if (!incomingCity || !keptOther) return false;
+  const incoming = cityOf({ city: incomingCity });
+  const other = cityOf({ city: keptOther });
+  if (!incoming || !other || incoming !== other) return false;
+  const self = cityOf({ city: keptThis });
+  return Boolean(self && self !== incoming);
+}
+
 /** Merge extracted slots onto a sheet. ZIP-only updates never replace the place object. */
 export function mergeExtracted(sheet, extracted) {
   const next = structuredClone(sheet);
   const originKeep = { city: next.lanes.origin.city, state: next.lanes.origin.state };
   const destKeep = { city: next.lanes.destination.city, state: next.lanes.destination.state };
+  if (wouldSwapLabeledCity(extracted.origin?.city, originKeep.city, destKeep.city)) {
+    extracted = { ...extracted, origin: { ...extracted.origin, city: undefined, state: undefined } };
+  }
+  if (wouldSwapLabeledCity(extracted.destination?.city, destKeep.city, originKeep.city)) {
+    extracted = {
+      ...extracted,
+      destination: { ...extracted.destination, city: undefined, state: undefined },
+    };
+  }
+  if (
+    extracted.origin?.state &&
+    destKeep.state &&
+    extracted.origin.state === destKeep.state &&
+    cityOf({ city: extracted.origin.city || originKeep.city }) !== cityOf({ city: destKeep.city })
+  ) {
+    extracted = { ...extracted, origin: { ...extracted.origin, state: undefined } };
+  }
+  if (
+    extracted.destination?.state &&
+    originKeep.state &&
+    extracted.destination.state === originKeep.state &&
+    cityOf({ city: extracted.destination.city || destKeep.city }) !== cityOf({ city: originKeep.city })
+  ) {
+    extracted = { ...extracted, destination: { ...extracted.destination, state: undefined } };
+  }
   assignPlace(next.lanes.origin, extracted.origin);
   if (extracted.flags?.incompleteTo && isGarbagePlace(extracted.destination)) {
     extracted.destination = {};
