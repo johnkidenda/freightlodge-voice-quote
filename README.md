@@ -56,6 +56,7 @@ Use the URL `wrangler deploy` prints. Full copy-paste path: [`token-proxy/README
 2. When the sheet is complete, `status` becomes `ready_for_quote`
 3. `POST /api/quote-handoff` (or the in-browser stub on GitHub Pages) simulates the Exfresso runner and returns `quote_result`
 4. Quote card + **Email me this quote** (mailto fallback + server stub)
+5. **Send transcript** silently POSTs via FormSubmit AJAX to `john@freightlodge.com` (or `VITE_TRANSCRIPT_WEBHOOK_URL` if set). Activate-style replies are treated as failure. Mailto is last-resort only.
 
 ## Handoff contract (Freight Ops / Exfresso)
 
