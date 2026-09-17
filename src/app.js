@@ -3,6 +3,7 @@ import { progressItems } from "./lib/completeness.js";
 import { requestQuote } from "./lib/handoff.js";
 import { emailQuote, MAIL_FROM } from "./lib/email.js";
 import { createHoldToTalk, speechSupported } from "./lib/speech.js";
+import { copyTextToClipboard, formatQaTranscript } from "./lib/transcript.js";
 
 const SAMPLE =
   "Chicago IL 60601 to Dallas TX 75201, 3 pallets, 1200 pounds, auto parts, pickup tomorrow, liftgate delivery, email shipper@example.com";
@@ -29,6 +30,7 @@ export function mountApp(root) {
     quote: root.querySelector("#quote-card"),
     status: root.querySelector("#status-pill"),
     sample: root.querySelector("#sample"),
+    qaCopy: root.querySelector("#qa-copy"),
     reset: root.querySelector("#reset"),
     drawer: root.querySelector("#sheet-drawer"),
     toggleSheet: root.querySelector("#toggle-sheet"),
@@ -80,6 +82,11 @@ export function mountApp(root) {
   els.sample.addEventListener("click", () => {
     if (state.busy) return;
     void acceptUserText(els, state, SAMPLE);
+  });
+
+  // QA-only — remove before external share
+  els.qaCopy.addEventListener("click", () => {
+    void copyQaTranscript(els, state);
   });
 
   els.reset.addEventListener("click", () => {
@@ -136,6 +143,7 @@ function layout() {
             <span class="hold-label">Hold to talk</span>
           </button>
           <p id="hold-hint" class="hint">${speechOk ? "Press and hold. I only send when you release." : ""}</p>
+          <button type="button" id="qa-copy" class="qa-copy">Copy full transcript (QA)</button>
         </form>
       </section>
 
@@ -251,6 +259,20 @@ async function runHandoff(els, state) {
     state.busy = false;
     render(els, state);
   }
+}
+
+async function copyQaTranscript(els, state) {
+  // QA-only — remove before external share
+  const text = formatQaTranscript(state.messages, state.session);
+  const ok = await copyTextToClipboard(text);
+  const label = "Copy full transcript (QA)";
+  els.qaCopy.textContent = ok ? "Copied" : "Copy failed";
+  els.qaCopy.classList.toggle("copied", ok);
+  window.clearTimeout(els.qaCopy._copiedTimer);
+  els.qaCopy._copiedTimer = window.setTimeout(() => {
+    els.qaCopy.textContent = label;
+    els.qaCopy.classList.remove("copied");
+  }, 1600);
 }
 
 async function sendEmail(els, state) {

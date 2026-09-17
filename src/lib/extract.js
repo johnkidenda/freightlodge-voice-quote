@@ -233,6 +233,8 @@ const PLACE_NOISE = new Set([
   "need",
   "kilogram",
   "kilograms",
+  "kilo",
+  "kilos",
   "kg",
   "gram",
   "grams",
@@ -255,6 +257,11 @@ const PLACE_NOISE = new Set([
   "the",
   "a",
   "an",
+  "destination",
+  "dest",
+  "origin",
+  "zip",
+  "zipcode",
 ]);
 
 const PLACE_STOP = new Set([
@@ -342,13 +349,182 @@ const PLACE_STOP = new Set([
   "the",
   "a",
   "an",
+  "destination",
+  "dest",
+  "origin",
+  "zip",
+  "zipcode",
+  "is",
+  "kilo",
+  "kilos",
 ]);
 
 const LEADING_FILLER = /^(need|please|want|hi|hello|quote|ship|shipping|can|we|i|get)\b/i;
 
+/** Common US freight cities — used only to split “from Atlanta Austin”, never to invent ZIPs. */
+const US_CITIES = new Set(
+  [
+    "akron",
+    "albuquerque",
+    "alexandria",
+    "allentown",
+    "amarillo",
+    "anaheim",
+    "anchorage",
+    "ann arbor",
+    "arlington",
+    "atlanta",
+    "augusta",
+    "aurora",
+    "austin",
+    "bakersfield",
+    "baltimore",
+    "baton rouge",
+    "boise",
+    "boston",
+    "buffalo",
+    "chandler",
+    "charleston",
+    "charlotte",
+    "chattanooga",
+    "chesapeake",
+    "chicago",
+    "chula vista",
+    "cincinnati",
+    "cleveland",
+    "colorado springs",
+    "columbus",
+    "corpus christi",
+    "dallas",
+    "dayton",
+    "denver",
+    "des moines",
+    "detroit",
+    "durham",
+    "el paso",
+    "fort lauderdale",
+    "fort wayne",
+    "fort worth",
+    "fremont",
+    "fresno",
+    "garland",
+    "gilbert",
+    "glendale",
+    "grand rapids",
+    "greensboro",
+    "henderson",
+    "hialeah",
+    "honolulu",
+    "houston",
+    "huntington beach",
+    "indianapolis",
+    "irvine",
+    "irving",
+    "jacksonville",
+    "jersey city",
+    "kansas city",
+    "knoxville",
+    "laredo",
+    "las vegas",
+    "lexington",
+    "lincoln",
+    "little rock",
+    "long beach",
+    "los angeles",
+    "louisville",
+    "lubbock",
+    "madison",
+    "memphis",
+    "mesa",
+    "miami",
+    "milwaukee",
+    "minneapolis",
+    "mobile",
+    "modesto",
+    "montgomery",
+    "nashville",
+    "new orleans",
+    "new york",
+    "newark",
+    "norfolk",
+    "north las vegas",
+    "oakland",
+    "oklahoma city",
+    "omaha",
+    "orlando",
+    "overland park",
+    "oxnard",
+    "philadelphia",
+    "phoenix",
+    "pittsburgh",
+    "plano",
+    "portland",
+    "providence",
+    "raleigh",
+    "reno",
+    "richmond",
+    "riverside",
+    "rochester",
+    "sacramento",
+    "saint louis",
+    "saint paul",
+    "salt lake city",
+    "san antonio",
+    "san bernardino",
+    "san diego",
+    "san francisco",
+    "san jose",
+    "santa ana",
+    "santa clarita",
+    "scottsdale",
+    "seattle",
+    "spokane",
+    "st louis",
+    "st paul",
+    "st petersburg",
+    "stockton",
+    "syracuse",
+    "tacoma",
+    "tampa",
+    "toledo",
+    "tucson",
+    "tulsa",
+    "virginia beach",
+    "washington",
+    "wichita",
+    "winston-salem",
+    "worcester",
+  ].map((s) => s.toLowerCase()),
+);
+
+export function isKnownUsCity(name) {
+  if (!name) return false;
+  return US_CITIES.has(String(name).trim().toLowerCase());
+}
+
+export function splitTwoKnownCities(value) {
+  const words = String(value || "")
+    .replace(/[,\.;:]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean);
+  if (words.length < 2) return null;
+  for (let i = 1; i < words.length; i += 1) {
+    const left = words.slice(0, i).join(" ");
+    const right = words.slice(i).join(" ");
+    if (isKnownUsCity(left) && isKnownUsCity(right)) {
+      return [titleCase(left), titleCase(right)];
+    }
+  }
+  return null;
+}
+
 function extractLane(raw, extracted, awaiting) {
   const zipOnly = /^\s*\d{5}(?:-\d{4})?\s*$/.test(raw);
-  if (!LEADING_FILLER.test(raw) && !zipOnly) {
+  const labeledLaneZip = isLabeledLaneZipPhrase(raw);
+
+  if (!LEADING_FILLER.test(raw) && !zipOnly && !labeledLaneZip) {
     const leading = takePlace(raw);
     if (leading?.postal_code && (leading.city || leading.state || awaiting === "origin_zip")) {
       Object.assign(extracted.origin, leading);
@@ -373,10 +549,30 @@ function extractLane(raw, extracted, awaiting) {
   );
   if (labeledDest) extracted.destination.postal_code = labeledDest[1];
 
+  const destZipAfter = raw.match(/\b(\d{5}(?:-\d{4})?)\s+is\s+(?:the\s+)?(?:destination|dest)\b/i);
+  if (destZipAfter) extracted.destination.postal_code = destZipAfter[1];
+  const originZipAfter = raw.match(/\b(\d{5}(?:-\d{4})?)\s+is\s+(?:the\s+)?origin\b/i);
+  if (originZipAfter) extracted.origin.postal_code = originZipAfter[1];
+
+  const destZipLocked = Boolean(labeledDest || destZipAfter);
+  const originZipLocked = Boolean(labeledOrigin || originZipAfter || fromToZips);
+
   const fromPlace = matchPlaceAfter(raw, /\bfrom\s+/i);
   if (fromPlace && !isGarbagePlace(fromPlace)) Object.assign(extracted.origin, fromPlace);
 
   assignDestinationTos(raw, extracted);
+  splitCompoundFromCities(extracted);
+  if (!extracted.origin.city && !extracted.destination.city) {
+    const maybeLane = raw
+      .replace(LEADING_FILLER, "")
+      .replace(/^\s*(?:from|to)\s+/i, "")
+      .trim();
+    const split = splitTwoKnownCities(maybeLane);
+    if (split && maybeLane.split(/\s+/).length <= 4) {
+      extracted.origin.city = split[0];
+      extracted.destination.city = split[1];
+    }
+  }
 
   const zipTokens = [...raw.matchAll(/\b(\d{5})(-\d{4})?\b/g)].filter((m) => !inWeightContext(raw, m.index));
   const bareOnly = /^\s*\d{5}(?:-\d{4})?\s*$/.test(raw);
@@ -384,7 +580,9 @@ function extractLane(raw, extracted, awaiting) {
   if (zipTokens.length === 1) {
     const zip = zipTokens[0][1] + (zipTokens[0][2] || "");
     extracted.flags.bareZip = zip;
-    if (bareOnly || awaiting === "origin_zip" || awaiting === "dest_zip") {
+    if (destZipLocked || originZipLocked) {
+      // Dest/origin ZIP phrases stay on that side only — never mirror one ZIP to both.
+    } else if (bareOnly || awaiting === "origin_zip" || awaiting === "dest_zip") {
       if (awaiting === "dest_zip") extracted.destination.postal_code = zip;
       else if (awaiting === "origin_zip") extracted.origin.postal_code = zip;
       else if (/\bdest|\bdeliver/i.test(raw)) extracted.destination.postal_code = zip;
@@ -397,6 +595,48 @@ function extractLane(raw, extracted, awaiting) {
     extracted.origin.postal_code = zipTokens[0][1] + (zipTokens[0][2] || "");
     extracted.destination.postal_code = zipTokens[1][1] + (zipTokens[1][2] || "");
   }
+
+  const incomplete = detectIncompleteZip(raw, awaiting);
+  if (incomplete) extracted.flags.incompleteZip = incomplete;
+}
+
+function isLabeledLaneZipPhrase(raw) {
+  return (
+    /\b(?:origin|destination|dest)(?:\s+zip|\s+zipcode|\s+zip\s*code)/i.test(raw) ||
+    /\b(?:zip|zipcode|zip\s*code)\s+is\s+\d/i.test(raw) ||
+    /\b\d{3,5}(?:-\d{4})?\s+is\s+(?:the\s+)?(?:destination|dest|origin)\b/i.test(raw)
+  );
+}
+
+function detectIncompleteZip(raw, awaiting) {
+  const destShort = raw.match(
+    /\b(?:destination|dest)(?:\s+zip|\s+zipcode|\s+zip\s*code)?(?:\s+is)?[:\s]+(\d{3,4})\b/i,
+  );
+  if (destShort) return { digits: destShort[1], role: "dest" };
+  const originShort = raw.match(
+    /\b(?:origin|pickup)(?:\s+zip|\s+zipcode|\s+zip\s*code)?(?:\s+is)?[:\s]+(\d{3,4})\b/i,
+  );
+  if (originShort) return { digits: originShort[1], role: "origin" };
+  const zipShort = raw.match(/\b(?:zip|zipcode|zip\s*code)(?:\s+is)?[:\s]+(\d{3,4})\b/i);
+  if (zipShort) {
+    const role = awaiting === "dest_zip" ? "dest" : awaiting === "origin_zip" ? "origin" : "unknown";
+    return { digits: zipShort[1], role };
+  }
+  if (awaiting === "dest_zip" || awaiting === "origin_zip") {
+    const bareShort = raw.match(/^\s*(\d{3,4})\s*$/);
+    if (bareShort) {
+      return { digits: bareShort[1], role: awaiting === "dest_zip" ? "dest" : "origin" };
+    }
+  }
+  return null;
+}
+
+function splitCompoundFromCities(extracted) {
+  if (!extracted.origin?.city) return;
+  const split = splitTwoKnownCities(extracted.origin.city);
+  if (!split) return;
+  extracted.origin.city = split[0];
+  if (!extracted.destination.city) extracted.destination.city = split[1];
 }
 
 function matchPlaceAfter(raw, prefixRe) {
@@ -587,9 +827,11 @@ function titleCase(s) {
 
 function inWeightContext(raw, index) {
   if (index == null || index < 0) return false;
-  const window = raw.slice(index, index + 24);
-  return /^[\d,]+(?:\.\d+)?(?:\s*(?:lbs?|pounds?|lb\.))/i.test(window);
+  const window = raw.slice(index, index + 28);
+  return /^[\d,]+(?:\.\d+)?(?:\s*(?:lbs?|pounds?|lb\.|kgs?|kilograms?|kilos?))/i.test(window);
 }
+
+export const KG_TO_LB = 2.20462;
 
 export function parseWeightPounds(token) {
   if (token == null) return null;
@@ -600,6 +842,12 @@ export function parseWeightPounds(token) {
     .trim();
   const n = Number(normalized);
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+export function kgToPounds(kg) {
+  const n = typeof kg === "number" ? kg : parseWeightPounds(kg);
+  if (n == null) return null;
+  return Math.round(n * KG_TO_LB);
 }
 
 function extractPieces(raw, extracted, awaiting) {
@@ -629,10 +877,21 @@ function parseCount(token) {
 }
 
 function extractWeight(raw, extracted) {
-  const m = raw.match(/(?:\$|usd\s*)?\s*([\d,]+(?:\.\d+)?)\s*(?:lbs?|pounds?)\b/i);
-  if (!m) return;
-  const n = parseWeightPounds(m[1]);
-  if (n != null) extracted.freight.total_weight_lbs = n;
+  const lb = raw.match(/(?:\$|usd\s*)?\s*([\d,]+(?:\.\d+)?)\s*(?:lbs?|pounds?)\b/i);
+  if (lb) {
+    const n = parseWeightPounds(lb[1]);
+    if (n != null) extracted.freight.total_weight_lbs = n;
+    return;
+  }
+  const kg = raw.match(/(?:\$|usd\s*)?\s*([\d,]+(?:\.\d+)?)\s*(?:kgs?|kilograms?|kilos?)\b/i);
+  if (!kg) return;
+  const n = parseWeightPounds(kg[1]);
+  const pounds = kgToPounds(n);
+  if (pounds != null) {
+    extracted.freight.total_weight_lbs = pounds;
+    extracted.flags.weightFromKg = true;
+    extracted.flags.weightKg = n;
+  }
 }
 
 function extractDims(raw, extracted) {
@@ -674,7 +933,7 @@ function extractCommodity(raw, extracted, awaiting) {
   if (!extracted.freight.commodity) {
     const ofGoods = raw.match(
       new RegExp(
-        String.raw`\b(?:pallets?|pieces?|skids?|boxes?|crates?|cartons?|lbs?|pounds?)\s+of\s+([a-z0-9][a-z0-9 \-/]{1,48}?)` +
+        String.raw`\b(?:pallets?|pieces?|skids?|boxes?|crates?|cartons?|lbs?|pounds?|kgs?|kilograms?|kilos?)\s+of\s+([a-z0-9][a-z0-9 \-/]{1,48}?)` +
           COMMODITY_STOP.source,
         "i",
       ),

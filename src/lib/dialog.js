@@ -20,6 +20,12 @@ const PROMPTS = {
     "Where is this going? I need a destination city, state, or ZIP — I won’t invent one.",
   dest_incomplete:
     "That ended at “to” — I still need the destination city, state, or ZIP. I won’t invent a dest.",
+  incomplete_zip:
+    "That ZIP is short — I need a full 5-digit ZIP. I won’t pad or guess the last digits.",
+  incomplete_dest_zip:
+    "That destination ZIP is short — I need a full 5-digit ZIP. I won’t pad or guess the last digits.",
+  incomplete_origin_zip:
+    "That origin ZIP is short — I need a full 5-digit ZIP. I won’t pad or guess the last digits.",
   pieces: "How many pieces or pallets?",
   measure:
     "I need a real measure: total weight in pounds, or L×W×H in inches, or the NMFC class if you already know it. I won’t guess class or weight.",
@@ -99,6 +105,19 @@ export function handleUtterance(session, text, { now } = {}) {
     (extracted.pickup.accessorials && extracted.pickup.accessorials.length)
   ) {
     askedAccessorials = true;
+  }
+
+  if (extracted.flags.incompleteZip) {
+    const role = extracted.flags.incompleteZip.role;
+    const reply =
+      role === "dest"
+        ? PROMPTS.incomplete_dest_zip
+        : role === "origin"
+          ? PROMPTS.incomplete_origin_zip
+          : PROMPTS.incomplete_zip;
+    const stay =
+      role === "dest" ? "dest_zip" : role === "origin" ? "origin_zip" : session.awaiting;
+    return finish(session, sheet, askedAccessorials, reply, extracted, stay);
   }
 
   if (extracted.flags.vagueMeasure && !extracted.freight.total_weight_lbs && !extracted.freight.dims && !extracted.freight.freight_class) {
@@ -207,7 +226,11 @@ function acknowledge(extracted, sheet) {
     else if (extracted.destination?.state) bits.push(`dest ${extracted.destination.state} (still need ZIP)`);
   }
   if (extracted.freight?.pieces) bits.push(`${extracted.freight.pieces} pcs`);
-  if (extracted.freight?.total_weight_lbs) bits.push(`${extracted.freight.total_weight_lbs} lb`);
+  if (extracted.flags?.weightFromKg && extracted.freight?.total_weight_lbs) {
+    bits.push(`${extracted.flags.weightKg} kg (~${extracted.freight.total_weight_lbs} lb)`);
+  } else if (extracted.freight?.total_weight_lbs) {
+    bits.push(`${extracted.freight.total_weight_lbs} lb`);
+  }
   if (extracted.freight?.dims) {
     const d = extracted.freight.dims;
     bits.push(`${d.length_in}×${d.width_in}×${d.height_in}`);

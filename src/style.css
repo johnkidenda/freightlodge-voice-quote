@@ -159,6 +159,22 @@ button, input { font: inherit; }
   padding: 6px 10px;
   font-size: 0.85rem;
 }
+.qa-copy {
+  align-self: flex-start;
+  border: 1px dashed #b9a57a;
+  background: #fff8ea;
+  color: var(--gold-deep);
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.qa-copy.copied {
+  border-style: solid;
+  background: #d9eddf;
+  color: var(--ok);
+}
 .hold {
   min-height: 64px;
   border: 0;
