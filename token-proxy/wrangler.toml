@@ -1,0 +1,10 @@
+name = "freightlodge-stt-token"
+main = "src/index.js"
+compatibility_date = "2026-08-14"
+
+# Set the long-lived key on the Worker only — never in the Vite/Pages client:
+#   wrangler secret put CARTESIA_API_KEY
+#
+# Optional TTL override (seconds, clamped 60–120):
+# [vars]
+# EXPIRES_IN = "90"

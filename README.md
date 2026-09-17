@@ -19,11 +19,26 @@ npm test
 npm run dev
 ```
 
-Open the printed localhost URL (Chrome or Safari). Hold the mic button to talk, or type. No API keys required.
+Open the printed localhost URL (Chrome or Safari). Hold the mic button to talk, or type. No API keys required for **Web Speech**.
+
+The composer has an STT A/B toggle: **Web Speech | Cartesia manual | Cartesia auto**. The choice persists in `localStorage`. Cartesia modes need a short-lived token from the proxy — they fail-soft with “STT token proxy not configured” if `VITE_STT_TOKEN_URL` is unset. **Never** put `CARTESIA_API_KEY` in `VITE_*` or the Pages bundle.
 
 `npm run preview` serves the production build plus the same local API stubs.
 
-Optional: copy `.env.example` → `.env` if you later wire `OPENAI_API_KEY` into a local enhance endpoint. The static app must keep working without it.
+Optional: copy `.env.example` → `.env` if you later wire `OPENAI_API_KEY` into a local enhance endpoint, or `CARTESIA_API_KEY` + `VITE_STT_TOKEN_URL` for Cartesia STT. The static app must keep working without them.
+
+### Cartesia STT token proxy
+
+The Pages SPA fetches `{ token, expires_in }` from `VITE_STT_TOKEN_URL`, then opens Cartesia’s STT websockets with `access_token` + `cartesia_version=2026-08-14`.
+
+- Worker + local stub: [`token-proxy/README.md`](token-proxy/README.md)
+- Local Vite (`npm run dev`) also exposes `POST /api/stt-token` when `CARTESIA_API_KEY` is in the server env — point `VITE_STT_TOKEN_URL=/api/stt-token`
+
+Anthony’s production steps:
+
+1. Deploy `token-proxy/` (`npx wrangler deploy`) and `wrangler secret put CARTESIA_API_KEY`
+2. Set GitHub Actions secret `VITE_STT_TOKEN_URL` to the Worker URL
+3. Redeploy Pages so the URL is baked into the SPA
 
 ## What the app does
 
@@ -128,6 +143,7 @@ GITHUB_ACTIONS=1 npm run preview
 npm test
 ```
 
+- STT provider persist + Cartesia finalize/tail (no API key in the client)
 - Completeness rules for `ready_for_quote`
 - Never-invent: cities do not become ZIPs; “standard class” / “a few hundred pounds” stay `null`
 - Out of scope does not produce `quote_result`
