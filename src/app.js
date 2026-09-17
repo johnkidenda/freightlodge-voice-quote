@@ -259,6 +259,7 @@ function bindMic(button, sessionRef) {
         button.classList.add("hot");
         if (label) label.textContent = "Recording… tap to send";
         primeListenCue();
+        playListenCue();
         session.start();
       }
     });
@@ -272,6 +273,7 @@ function bindMic(button, sessionRef) {
     button.setAttribute("aria-pressed", "true");
     button.classList.add("hot");
     primeListenCue();
+    playListenCue();
     talk()?.start();
   };
   const stop = (e) => {
@@ -367,7 +369,7 @@ async function sendTranscriptToTeam(els, state) {
 
   try {
     const result = await sendSessionTranscript(state.messages, state.session);
-    if (result.mode === "webhook" && result.ok) {
+    if (result.ok && (result.mode === "formsubmit" || result.mode === "webhook")) {
       btn.textContent = "Sent";
       btn.classList.add("sent");
       note.hidden = false;
@@ -387,12 +389,11 @@ async function sendTranscriptToTeam(els, state) {
       } catch {
         /* some WebViews block mailto */
       }
-      btn.textContent = "Opened mail";
-      btn.classList.add("sent");
+      btn.textContent = "Opened mail app…";
       note.hidden = false;
       note.textContent = copied
-        ? "Opened mail app with transcript. A copy is on the clipboard if mail didn’t open."
-        : "Opened mail app with transcript. If mail didn’t open, email john@freightlodge.com.";
+        ? "Could not send silently — opened mail. A copy is on the clipboard if mail didn’t open."
+        : "Could not send silently — opened mail.";
       restore(4000);
       return;
     }

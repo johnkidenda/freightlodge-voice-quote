@@ -1,6 +1,10 @@
 import { formatPlace } from "./completeness.js";
 
 export const TRANSCRIPT_TO = "john@freightlodge.com";
+export const FORMSUBMIT_AJAX_URL = `https://formsubmit.co/ajax/${TRANSCRIPT_TO}`;
+
+const ACTIVATE_RE =
+  /activat|action required|confirm (your )?e-?mail|check your (e-?mail|inbox)|please confirm|not (yet )?activated|verification (e-?mail|link)|confirm this form|confirm your form/i;
 
 /**
  * Plain-text dump of the current sheet conversation for team delivery.
@@ -56,13 +60,72 @@ export function getTranscriptWebhookUrl(env = typeof import.meta !== "undefined"
   return String(raw).trim();
 }
 
+export function looksLikeFormSubmitUrl(url) {
+  return /formsubmit\.co/i.test(String(url || ""));
+}
+
+function isTruthySuccess(value) {
+  return value === true || value === "true" || value === "True" || value === 1 || value === "1";
+}
+
+function isFalsySuccess(value) {
+  return value === false || value === "false" || value === "False" || value === 0 || value === "0";
+}
+
+/** FormSubmit first-use / reactivation replies must never look like a delivered chat. */
+export function formSubmitLooksLikeActivate(data, text = "") {
+  const parts = [];
+  if (typeof data === "string") parts.push(data);
+  if (data && typeof data === "object") {
+    for (const key of ["message", "error", "title", "next", "description", "info"]) {
+      if (data[key] != null) parts.push(String(data[key]));
+    }
+  }
+  if (text) parts.push(String(text));
+  return ACTIVATE_RE.test(parts.join(" "));
+}
+
+export function isFormSubmitDelivered(res, data, text = "") {
+  if (!res || !res.ok) return false;
+  if (formSubmitLooksLikeActivate(data, text)) return false;
+  if (isFalsySuccess(data?.success)) return false;
+  return isTruthySuccess(data?.success);
+}
+
+export async function readFetchBody(res) {
+  let text = "";
+  try {
+    if (typeof res?.text === "function") text = await res.text();
+  } catch {
+    text = "";
+  }
+  let data = {};
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { message: text };
+    }
+  }
+  return { data, text };
+}
+
+function mailtoResult(subject, transcript) {
+  return {
+    ok: false,
+    mode: "mailto",
+    subject,
+    transcript,
+    mailto: transcriptMailtoHref(subject, transcript),
+  };
+}
+
 /**
  * Deliver transcript to the team.
  * 1. Optional webhook (`VITE_TRANSCRIPT_WEBHOOK_URL`) if it returns 2xx
- * 2. Otherwise mailto: to john@freightlodge.com with the full body
- *
- * Third-party form AJAX is never the happy path — activation-gated
- * providers can return 200 while dropping the chat body.
+ *    (FormSubmit-shaped URLs still go through activate detection)
+ * 2. FormSubmit AJAX to john@freightlodge.com (silent POST)
+ * 3. mailto last-resort only — never report this as a silent send success
  */
 export async function sendSessionTranscript(
   messages,
@@ -71,7 +134,6 @@ export async function sendSessionTranscript(
 ) {
   const transcript = formatSessionTranscript(messages, session);
   const subject = transcriptSubject(session);
-  const mailto = transcriptMailtoHref(subject, transcript);
   const webhook = webhookUrl == null ? getTranscriptWebhookUrl() : String(webhookUrl).trim();
 
   if (webhook) {
@@ -81,19 +143,39 @@ export async function sendSessionTranscript(
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ subject, transcript, message: transcript }),
       });
-      if (res.ok) return { ok: true, mode: "webhook", subject, transcript, mailto };
+      if (looksLikeFormSubmitUrl(webhook)) {
+        const { data, text } = await readFetchBody(res);
+        if (isFormSubmitDelivered(res, data, text)) {
+          return { ok: true, mode: "webhook", subject, transcript };
+        }
+      } else if (res.ok) {
+        return { ok: true, mode: "webhook", subject, transcript };
+      }
     } catch {
-      /* mailto is the reliable path */
+      /* try FormSubmit next */
     }
   }
 
-  return {
-    ok: true,
-    mode: "mailto",
-    subject,
-    transcript,
-    mailto,
-  };
+  try {
+    const res = await fetchFn(FORMSUBMIT_AJAX_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        _subject: subject,
+        message: transcript,
+        _template: "box",
+        _captcha: "false",
+      }),
+    });
+    const { data, text } = await readFetchBody(res);
+    if (isFormSubmitDelivered(res, data, text)) {
+      return { ok: true, mode: "formsubmit", subject, transcript };
+    }
+  } catch {
+    /* mailto is last resort */
+  }
+
+  return mailtoResult(subject, transcript);
 }
 
 /** Clipboard write on a user gesture. writeText first; execCommand fallback for older Safari. */
