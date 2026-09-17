@@ -17,6 +17,7 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; }
+html { overflow-x: clip; }
 body {
   background:
     radial-gradient(1200px 500px at 10% -10%, #fff8ea, transparent 50%),
@@ -305,12 +306,13 @@ button, input { font: inherit; }
   width: 3.4rem;
   height: auto;
   flex-shrink: 0;
+  background: transparent;
 }
 .mark { display: none; }
 .powered-by {
   position: fixed;
-  right: 0.75rem;
-  bottom: 0.65rem;
+  right: max(0.75rem, env(safe-area-inset-right, 0px));
+  bottom: max(0.65rem, env(safe-area-inset-bottom, 0px));
   z-index: 20;
   display: flex;
   align-items: center;
@@ -320,23 +322,39 @@ button, input { font: inherit; }
   border-radius: 8px;
   box-shadow: 0 1px 4px rgba(27,42,74,0.08);
   pointer-events: auto;
+  max-width: calc(100vw - 1.5rem - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+  box-sizing: border-box;
 }
 .powered-label {
   font-size: 0.68rem;
   letter-spacing: 0.02em;
   color: #6b778c;
   white-space: nowrap;
+  flex: 0 0 auto;
+}
+.powered-logo {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
 }
 .powered-logo img {
   display: block;
   height: 1.05rem;
   width: auto;
-  max-width: 6.5rem;
+  max-width: min(6.5rem, 42vw);
 }
 @media (max-width: 640px) {
   .powered-by {
-    right: 0.5rem;
-    bottom: 0.45rem;
+    left: 50%;
+    right: auto;
+    bottom: max(0.45rem, env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    width: max-content;
+    max-width: calc(100vw - 1.25rem - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+    justify-content: center;
+  }
+  .powered-logo img {
+    max-width: min(6.5rem, calc(100vw - 9.5rem));
   }
   .brand-logo {
     width: 2.75rem;

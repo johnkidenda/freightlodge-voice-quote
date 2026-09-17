@@ -1,4 +1,6 @@
-const CACHE = "freightlodge-quote-v3";
+// v4: drop the cache-first opaque logo-b.png from v3 so Pages clients
+// pick up the transparent lockup (same URL) plus the new CSS hash.
+const CACHE = "freightlodge-quote-v4";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
