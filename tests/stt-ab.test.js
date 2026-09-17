@@ -5,7 +5,11 @@ import {
   createHoldToTalk,
 } from "../src/lib/speech.js";
 import { createSpeechSession } from "../src/lib/speech-session.js";
-import { createCartesiaHoldToTalk } from "../src/lib/cartesia-stt.js";
+import {
+  createCartesiaHoldToTalk,
+  EMPTY_TRANSCRIPT_ERROR,
+  NO_AUDIO_ERROR,
+} from "../src/lib/cartesia-stt.js";
 import {
   STT_PROVIDER_IDS,
   STT_PROVIDERS,
@@ -21,9 +25,16 @@ import {
   concatManualFinals,
   createAutoTurnAssembler,
   createManualAssembler,
+  parseCartesiaMessage,
   previewManualTranscript,
 } from "../src/lib/cartesia-transcript.js";
-import { createPcmChunker, floatToPcm16le, PCM_CHUNK_SAMPLES } from "../src/lib/cartesia-pcm.js";
+import {
+  createPcmChunker,
+  floatToPcm16le,
+  PCM_CHUNK_SAMPLES,
+  toPcmBinaryFrame,
+  WORKLET_SRC,
+} from "../src/lib/cartesia-pcm.js";
 import { mintCartesiaToken, corsHeaders, PAGES_ORIGIN } from "../token-proxy/src/mint.js";
 
 function memoryStorage(initial = {}) {
@@ -127,7 +138,7 @@ describe("Cartesia transcript assembly", () => {
     expect(previewManualTranscript(events)).toBe("60601 to Dallas");
     const buf = createManualAssembler();
     buf.push({ type: "transcript", is_final: true, text: "1200 " });
-    buf.push({ type: "transcript", is_final: true, text: "pounds" });
+    buf.push({ type: "transcript", is_final: "true", text: "pounds" });
     expect(buf.finals()).toBe("1200 pounds");
   });
 
@@ -141,6 +152,9 @@ describe("Cartesia transcript assembly", () => {
     auto.apply({ type: "turn.start" });
     const second = auto.apply({ type: "turn.end", transcript: "twelve hundred pounds" });
     expect(second.commit).toBe("twelve hundred pounds");
+    const emptyEnd = createAutoTurnAssembler();
+    expect(emptyEnd.apply({ type: "turn.end", transcript: "" }).commit).toBeNull();
+    expect(emptyEnd.leftover()).toBe("");
   });
 
   it("builds WS URLs with access_token, version, model, and keyterms — not an API key", () => {
@@ -151,19 +165,34 @@ describe("Cartesia transcript assembly", () => {
     expect(url).toContain("sample_rate=16000");
     expect(url).toContain("cartesia_version=2026-08-14");
     expect(url).toContain("access_token=short-lived");
+    expect(url).toContain("language=en");
     expect(url).toContain("keyterm=");
     expect(url).not.toMatch(/CARTESIA_API_KEY|sk_car_/);
     const auto = buildCartesiaWsUrl({ variant: "auto", accessToken: "t2" });
     expect(auto).toContain("/stt/turns/websocket");
+    expect(auto).toContain("language=en");
+  });
+
+  it("parses JSON text and does not treat a Blob as a transcript event", () => {
+    expect(parseCartesiaMessage('{"type":"transcript","is_final":true,"text":"hi"}')).toEqual({
+      type: "transcript",
+      is_final: true,
+      text: "hi",
+    });
+    const blob = new Blob([JSON.stringify({ type: "transcript", is_final: true, text: "hi" })]);
+    const parsed = parseCartesiaMessage(blob);
+    expect(parsed.type).toBe("blob");
+    expect(typeof parsed.blob?.text).toBe("function");
   });
 });
 
-function fakeSocketFactory() {
+function fakeSocketFactory({ startClosed = false } = {}) {
   const sockets = [];
   function openSocket() {
     const listeners = { open: [], error: [], close: [] };
     const ws = {
-      readyState: 1,
+      readyState: startClosed ? 0 : 1,
+      binaryType: "blob",
       sent: [],
       addEventListener(type, fn) {
         listeners[type]?.push(fn);
@@ -176,6 +205,7 @@ function fakeSocketFactory() {
       },
       close() {
         this.readyState = 3;
+        listeners.close.forEach((fn) => fn());
         this.onclose?.();
       },
       onmessage: null,
@@ -186,6 +216,10 @@ function fakeSocketFactory() {
         listeners.open.forEach((fn) => fn());
       },
       emit(payload) {
+        if (payload instanceof Blob || payload instanceof ArrayBuffer) {
+          this.onmessage?.({ data: payload });
+          return;
+        }
         const data = typeof payload === "string" ? payload : JSON.stringify(payload);
         this.onmessage?.({ data });
       },
@@ -207,6 +241,9 @@ function fakeCaptureFactory() {
         this.chunks.push(buf);
         onChunk?.(buf);
       },
+      flush() {
+        this.flushed = true;
+      },
       stop() {
         this.stopped = true;
       },
@@ -215,6 +252,10 @@ function fakeCaptureFactory() {
     return cap;
   }
   return { openCapture, captures };
+}
+
+async function settle(n = 12) {
+  for (let i = 0; i < n; i += 1) await Promise.resolve();
 }
 
 async function waitFor(fn, tries = 12) {
@@ -254,6 +295,7 @@ describe("Cartesia manual finalize + release tail", () => {
     const commits = [];
     const tails = [];
     const previews = [];
+    const starts = [];
     const talk = createCartesiaHoldToTalk({
       variant: "manual",
       fetchToken: async () => ({ token: "tok", expires_in: 90 }),
@@ -261,6 +303,7 @@ describe("Cartesia manual finalize + release tail", () => {
       openCapture,
       schedule: clock.schedule,
       unschedule: clock.unschedule,
+      onStart: () => starts.push("start"),
       onCommit: (t) => commits.push(t),
       onPreview: (t) => previews.push(t),
       onTailStart: () => tails.push("tail"),
@@ -268,7 +311,10 @@ describe("Cartesia manual finalize + release tail", () => {
 
     talk.start();
     expect(talk.isActive()).toBe(true);
+    expect(starts).toEqual([]);
     await waitFor(() => sockets[0] && captures[0]);
+    await settle();
+    expect(starts).toEqual(["start"]);
 
     captures[0].push(new ArrayBuffer(8));
     sockets[0].emit({ type: "transcript", is_final: true, text: "60601 " });
@@ -286,6 +332,7 @@ describe("Cartesia manual finalize + release tail", () => {
     clock.flush();
 
     expect(sockets[0].sent).toContain("finalize");
+    expect(sockets[0].sent.some((m) => m instanceof ArrayBuffer && m.byteLength === 8)).toBe(true);
     expect(commits).toEqual([]);
     sockets[0].emit({ type: "flush_done" });
     expect(commits).toEqual(["60601 to Dallas 1200 lb"]);
@@ -311,6 +358,7 @@ describe("Cartesia auto turn-end commits", () => {
 
     talk.start();
     await waitFor(() => sockets[0]);
+    await settle();
     sockets[0].emit({ type: "turn.update", transcript: "three pallets" });
     sockets[0].emit({ type: "turn.end", transcript: "three pallets" });
     expect(commits).toEqual(["three pallets"]);
@@ -325,8 +373,216 @@ describe("Cartesia auto turn-end commits", () => {
   });
 });
 
+describe("Cartesia failure surfaces", () => {
+  it("empty finalize emits onError and never onCommit", async () => {
+    const { openSocket, sockets } = fakeSocketFactory();
+    const { openCapture, captures } = fakeCaptureFactory();
+    const clock = fakeTimers();
+    const commits = [];
+    const errors = [];
+    const talk = createCartesiaHoldToTalk({
+      variant: "manual",
+      fetchToken: async () => ({ token: "tok", expires_in: 90 }),
+      openSocket,
+      openCapture,
+      schedule: clock.schedule,
+      unschedule: clock.unschedule,
+      onCommit: (t) => commits.push(t),
+      onError: (e) => errors.push(e.message),
+    });
+
+    talk.start();
+    await waitFor(() => sockets[0] && captures[0]);
+    await settle();
+    captures[0].push(new ArrayBuffer(8));
+    talk.stop();
+    clock.flush();
+    expect(sockets[0].sent).toContain("finalize");
+    sockets[0].emit({ type: "flush_done" });
+    expect(commits).toEqual([]);
+    expect(errors).toEqual([EMPTY_TRANSCRIPT_ERROR]);
+  });
+
+  it("finalize wait with no transcript also errors instead of going silent", async () => {
+    const { openSocket, sockets } = fakeSocketFactory();
+    const { openCapture, captures } = fakeCaptureFactory();
+    const clock = fakeTimers();
+    const commits = [];
+    const errors = [];
+    const talk = createCartesiaHoldToTalk({
+      variant: "manual",
+      fetchToken: async () => ({ token: "tok", expires_in: 90 }),
+      openSocket,
+      openCapture,
+      schedule: clock.schedule,
+      unschedule: clock.unschedule,
+      onCommit: (t) => commits.push(t),
+      onError: (e) => errors.push(e.message),
+    });
+
+    talk.start();
+    await waitFor(() => sockets[0] && captures[0]);
+    await settle();
+    captures[0].push(new ArrayBuffer(16));
+    talk.stop();
+    clock.flush();
+    expect(clock.timers[0].ms).toBe(2500);
+    clock.flush();
+    expect(commits).toEqual([]);
+    expect(errors).toEqual([EMPTY_TRANSCRIPT_ERROR]);
+  });
+
+  it("release before the socket is open waits, then errors if no audio arrived", async () => {
+    const { openSocket, sockets } = fakeSocketFactory({ startClosed: true });
+    const { openCapture } = fakeCaptureFactory();
+    const clock = fakeTimers();
+    const commits = [];
+    const errors = [];
+    const starts = [];
+    const talk = createCartesiaHoldToTalk({
+      variant: "manual",
+      fetchToken: async () => ({ token: "tok", expires_in: 90 }),
+      openSocket,
+      openCapture,
+      schedule: clock.schedule,
+      unschedule: clock.unschedule,
+      onStart: () => starts.push("start"),
+      onCommit: (t) => commits.push(t),
+      onError: (e) => errors.push(e.message),
+    });
+
+    talk.start();
+    await waitFor(() => sockets[0]);
+    expect(starts).toEqual([]);
+    talk.stop();
+    expect(talk.isTailing()).toBe(true);
+    expect(errors).toEqual([]);
+    sockets[0].open();
+    await settle();
+    expect(starts).toEqual(["start"]);
+    clock.flush();
+    expect(commits).toEqual([]);
+    expect(errors).toEqual([NO_AUDIO_ERROR]);
+  });
+
+  it("token mint failure surfaces onError", async () => {
+    const { openSocket } = fakeSocketFactory();
+    const { openCapture } = fakeCaptureFactory();
+    const errors = [];
+    const starts = [];
+    const talk = createCartesiaHoldToTalk({
+      variant: "manual",
+      fetchToken: async () => {
+        throw new Error("STT token proxy failed (502)");
+      },
+      openSocket,
+      openCapture,
+      onStart: () => starts.push("start"),
+      onError: (e) => errors.push(e.message),
+    });
+    talk.start();
+    await settle(20);
+    expect(starts).toEqual([]);
+    expect(errors[0]).toMatch(/token proxy failed/);
+  });
+
+  it("socket open failure surfaces onError", async () => {
+    const { openSocket, sockets } = fakeSocketFactory({ startClosed: true });
+    const { openCapture } = fakeCaptureFactory();
+    const errors = [];
+    const talk = createCartesiaHoldToTalk({
+      variant: "auto",
+      fetchToken: async () => ({ token: "tok", expires_in: 90 }),
+      openSocket,
+      openCapture,
+      onError: (e) => errors.push(e.message),
+    });
+    talk.start();
+    await waitFor(() => sockets[0]);
+    sockets[0].close();
+    await settle(20);
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors[0]).toMatch(/failed to open|closed unexpectedly|socket error/i);
+  });
+
+  it("Cartesia WS error event surfaces the server message", async () => {
+    const { openSocket, sockets } = fakeSocketFactory();
+    const { openCapture } = fakeCaptureFactory();
+    const errors = [];
+    const talk = createCartesiaHoldToTalk({
+      variant: "manual",
+      fetchToken: async () => ({ token: "tok", expires_in: 90 }),
+      openSocket,
+      openCapture,
+      onError: (e) => errors.push(e.message),
+    });
+    talk.start();
+    await waitFor(() => sockets[0]);
+    await settle();
+    sockets[0].emit({ type: "error", message: "invalid encoding" });
+    expect(errors).toEqual(["invalid encoding"]);
+  });
+
+  it("auto session with no turn.end errors instead of silent leftover", async () => {
+    const { openSocket, sockets } = fakeSocketFactory();
+    const { openCapture, captures } = fakeCaptureFactory();
+    const clock = fakeTimers();
+    const commits = [];
+    const errors = [];
+    const talk = createCartesiaHoldToTalk({
+      variant: "auto",
+      fetchToken: async () => ({ token: "tok", expires_in: 90 }),
+      openSocket,
+      openCapture,
+      schedule: clock.schedule,
+      unschedule: clock.unschedule,
+      onCommit: (t) => commits.push(t),
+      onError: (e) => errors.push(e.message),
+    });
+    talk.start();
+    await waitFor(() => sockets[0] && captures[0]);
+    await settle();
+    captures[0].push(new ArrayBuffer(8));
+    talk.stop();
+    clock.flush();
+    clock.flush();
+    expect(commits).toEqual([]);
+    expect(errors).toEqual([EMPTY_TRANSCRIPT_ERROR]);
+  });
+
+  it("decodes Blob transcript frames into the assembler", async () => {
+    const { openSocket, sockets } = fakeSocketFactory();
+    const { openCapture, captures } = fakeCaptureFactory();
+    const clock = fakeTimers();
+    const commits = [];
+    const previews = [];
+    const talk = createCartesiaHoldToTalk({
+      variant: "manual",
+      fetchToken: async () => ({ token: "tok", expires_in: 90 }),
+      openSocket,
+      openCapture,
+      schedule: clock.schedule,
+      unschedule: clock.unschedule,
+      onPreview: (t) => previews.push(t),
+      onCommit: (t) => commits.push(t),
+    });
+    talk.start();
+    await waitFor(() => sockets[0] && captures[0]);
+    await settle();
+    captures[0].push(new ArrayBuffer(8));
+    sockets[0].emit(
+      new Blob([JSON.stringify({ type: "transcript", is_final: true, text: "liftgate " })]),
+    );
+    await waitFor(() => previews.at(-1) === "liftgate ", 40);
+    talk.stop();
+    clock.flush();
+    sockets[0].emit({ type: "flush_done" });
+    expect(commits).toEqual(["liftgate "]);
+  });
+});
+
 describe("PCM chunking", () => {
-  it("downsamples to s16le and emits ~100ms frames", () => {
+  it("downsamples to s16le and emits ~100ms standalone ArrayBuffers", () => {
     const ones = new Float32Array(1600).fill(0.5);
     const pcm = floatToPcm16le(ones, 16000, 16000);
     expect(pcm.length).toBe(1600);
@@ -339,7 +595,11 @@ describe("PCM chunking", () => {
     });
     chunker.pushFloat(new Float32Array(PCM_CHUNK_SAMPLES), 16000);
     expect(frames).toHaveLength(1);
+    expect(frames[0]).toBeInstanceOf(ArrayBuffer);
     expect(frames[0].byteLength).toBe(PCM_CHUNK_SAMPLES * 2);
+    expect(toPcmBinaryFrame(new Int16Array([1, 2])).byteLength).toBe(4);
+    expect(WORKLET_SRC).toContain("copy.set(ch)");
+    expect(WORKLET_SRC).toContain("postMessage(copy, [copy.buffer])");
   });
 });
 
@@ -377,6 +637,7 @@ describe("client bundle never embeds the Cartesia API key", () => {
     expect(app).toContain("stt-toggle");
     expect(app).toContain("data-stt-provider");
     expect(app).toContain("STT_TOKEN_UNCONFIGURED");
+    expect(app).toMatch(/empty transcript/i);
     expect(providers).toContain("Web Speech");
     expect(providers).toContain("Cartesia manual");
     expect(providers).toContain("Cartesia auto");

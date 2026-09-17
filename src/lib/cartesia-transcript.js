@@ -46,11 +46,17 @@ export function buildCartesiaWsUrl({
   url.searchParams.set("sample_rate", String(sampleRate));
   url.searchParams.set("cartesia_version", version);
   url.searchParams.set("access_token", accessToken);
-  if (variant !== "auto") url.searchParams.set("language", "en");
+  // ink-2 is English-only; `language` is a first-class query param (default en),
+  // not ink-whisper-only. Whisper-only knobs are min_volume / max_silence_duration_secs.
+  url.searchParams.set("language", "en");
   for (const term of keyterms || []) {
     if (term) url.searchParams.append("keyterm", term);
   }
   return url.toString();
+}
+
+export function isTranscriptFinal(ev) {
+  return ev?.is_final === true || ev?.is_final === "true" || ev?.isFinal === true;
 }
 
 /**
@@ -60,7 +66,7 @@ export function buildCartesiaWsUrl({
 export function concatManualFinals(events) {
   let out = "";
   for (const ev of events || []) {
-    if (ev?.type === "transcript" && ev.is_final === true && typeof ev.text === "string") {
+    if (ev?.type === "transcript" && isTranscriptFinal(ev) && typeof ev.text === "string") {
       out += ev.text;
     }
   }
@@ -72,7 +78,7 @@ export function latestManualInterim(events) {
   for (let i = list.length - 1; i >= 0; i -= 1) {
     const ev = list[i];
     if (ev?.type !== "transcript") continue;
-    if (ev.is_final === true) return "";
+    if (isTranscriptFinal(ev)) return "";
     if (typeof ev.text === "string") return ev.text;
   }
   return "";
@@ -135,8 +141,11 @@ export function createAutoTurnAssembler() {
       if (type === "turn.end") {
         if (typeof ev.transcript === "string") current = ev.transcript;
         const text = current;
+        if (!text) {
+          return { preview: "", commit: null };
+        }
         const key = text;
-        if (!text || committed || seen.has(key)) {
+        if (committed || seen.has(key)) {
           committed = true;
           return { preview: text, commit: null };
         }
@@ -161,8 +170,39 @@ export function createAutoTurnAssembler() {
   };
 }
 
+function decodeBytes(buf) {
+  try {
+    return new TextDecoder().decode(buf);
+  } catch {
+    return "";
+  }
+}
+
+function isBlobLike(raw) {
+  return Boolean(
+    raw &&
+      typeof raw === "object" &&
+      typeof raw.text === "function" &&
+      typeof raw.arrayBuffer === "function" &&
+      typeof raw.size === "number",
+  );
+}
+
+/**
+ * Cartesia events are JSON text frames. Some mobile stacks deliver those as
+ * Blob / ArrayBuffer — never treat a Blob as an already-parsed event.
+ */
 export function parseCartesiaMessage(raw) {
   if (raw == null) return null;
+  if (isBlobLike(raw)) return { type: "blob", blob: raw };
+  if (raw instanceof ArrayBuffer) {
+    const text = decodeBytes(raw);
+    return text ? parseCartesiaMessage(text) : null;
+  }
+  if (ArrayBuffer.isView(raw)) {
+    const text = decodeBytes(raw);
+    return text ? parseCartesiaMessage(text) : null;
+  }
   if (typeof raw === "object") return raw;
   const text = String(raw);
   if (text === "finalize" || text === "close") return { type: text };
