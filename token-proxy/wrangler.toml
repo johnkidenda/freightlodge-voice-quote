@@ -1,0 +1,11 @@
+name = "freightlodge-stt-token"
+main = "src/index.js"
+compatibility_date = "2026-08-14"
+workers_dev = true
+
+# Production path (no account_id required if `wrangler` is logged in):
+#   npx wrangler secret put CARTESIA_API_KEY
+#   npx wrangler deploy
+# → https://freightlodge-stt-token.<ACCOUNT>.workers.dev
+#
+# Do not put CARTESIA_API_KEY in this file or in VITE_*.

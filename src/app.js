@@ -2,7 +2,17 @@ import { createSession, handleUtterance, openingMessage } from "./lib/dialog.js"
 import { progressItems } from "./lib/completeness.js";
 import { requestQuote } from "./lib/handoff.js";
 import { emailQuote, MAIL_FROM } from "./lib/email.js";
-import { createHoldToTalk, speechSupported } from "./lib/speech.js";
+import { speechSupported } from "./lib/speech.js";
+import { createSpeechSession, providerSupported } from "./lib/speech-session.js";
+import {
+  STT_PROVIDERS,
+  STT_TOKEN_UNCONFIGURED,
+  getSttProvider,
+  getSttTokenUrl,
+  isCartesiaProvider,
+  loadSttProvider,
+  saveSttProvider,
+} from "./lib/stt-providers.js";
 import { formatSessionTranscript, sendSessionTranscript } from "./lib/transcript.js";
 
 const SAMPLE =
@@ -18,9 +28,10 @@ export function mountApp(root) {
     busy: false,
     emailNote: null,
     hold: null,
+    sttProvider: loadSttProvider(typeof localStorage !== "undefined" ? localStorage : null),
   };
 
-  root.innerHTML = layout();
+  root.innerHTML = layout(state.sttProvider);
   const els = {
     thread: root.querySelector("#thread"),
     sheet: root.querySelector("#sheet-list"),
@@ -28,6 +39,8 @@ export function mountApp(root) {
     input: root.querySelector("#typed"),
     hold: root.querySelector("#hold"),
     holdHint: root.querySelector("#hold-hint"),
+    sttBadge: root.querySelector("#stt-badge"),
+    sttToggle: root.querySelector("#stt-toggle"),
     quote: root.querySelector("#quote-card"),
     status: root.querySelector("#status-pill"),
     sample: root.querySelector("#sample"),
@@ -38,48 +51,84 @@ export function mountApp(root) {
     toggleSheet: root.querySelector("#toggle-sheet"),
   };
 
-  const talk = createHoldToTalk({
-    onStart() {
-      state.listening = true;
-      state.finishing = false;
-      state.interim = "";
-      renderChrome(els, state);
-    },
-    onTailStart() {
-      state.listening = true;
-      state.finishing = true;
-      renderChrome(els, state);
-    },
-    onEnd() {
-      state.listening = false;
-      state.finishing = false;
-      state.interim = "";
-      renderChrome(els, state);
-    },
-    onError(err) {
-      state.listening = false;
-      state.finishing = false;
-      push(state, "assistant", speechError(err));
-      render(els, state);
-    },
-    onPreview(text) {
-      state.interim = text || "";
-      renderChrome(els, state);
-    },
-    onCommit(text) {
-      const trimmed = (text || "").trim();
-      if (!trimmed || state.busy) return;
-      void acceptUserText(els, state, trimmed);
-    },
-  });
-  state.hold = talk;
+  const sessionRef = { current: null };
 
-  if (!talk.supported) {
-    els.hold.disabled = true;
-    els.holdHint.textContent = "Voice needs Chrome/Safari with mic permission. Type instead.";
+  function talkCallbacks() {
+    return {
+      onStart() {
+        state.listening = true;
+        state.finishing = false;
+        state.interim = "";
+        renderChrome(els, state);
+      },
+      onTailStart() {
+        state.listening = true;
+        state.finishing = true;
+        renderChrome(els, state);
+      },
+      onEnd() {
+        state.listening = false;
+        state.finishing = false;
+        state.interim = "";
+        renderChrome(els, state);
+      },
+      onError(err) {
+        state.listening = false;
+        state.finishing = false;
+        push(state, "assistant", speechError(err, state.sttProvider));
+        render(els, state);
+      },
+      onPreview(text) {
+        state.interim = text || "";
+        renderChrome(els, state);
+      },
+      onCommit(text) {
+        const trimmed = (text || "").trim();
+        if (!trimmed || state.busy) return;
+        void acceptUserText(els, state, trimmed);
+      },
+    };
   }
 
-  bindMic(els.hold, talk);
+  function applyHoldAvailability() {
+    const talk = state.hold;
+    const ok = Boolean(talk?.supported);
+    els.hold.disabled = !ok;
+    els.hold.classList.toggle("is-disabled", !ok);
+    els.hold.setAttribute("aria-disabled", ok ? "false" : "true");
+  }
+
+  function attachSpeechSession(providerId) {
+    state.hold?.abort?.();
+    state.listening = false;
+    state.finishing = false;
+    state.interim = "";
+    const talk = createSpeechSession({
+      provider: providerId,
+      ...talkCallbacks(),
+    });
+    state.hold = talk;
+    sessionRef.current = talk;
+    applyHoldAvailability();
+    renderChrome(els, state);
+    return talk;
+  }
+
+  attachSpeechSession(state.sttProvider);
+  bindMic(els.hold, sessionRef);
+
+  els.sttToggle?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-stt-provider]");
+    if (!btn) return;
+    const next = btn.getAttribute("data-stt-provider");
+    if (!next || next === state.sttProvider) return;
+    state.sttProvider = saveSttProvider(
+      next,
+      typeof localStorage !== "undefined" ? localStorage : null,
+    );
+    attachSpeechSession(state.sttProvider);
+    syncSttToggle(els, state.sttProvider);
+  });
 
   els.form.addEventListener("submit", (e) => {
     e.preventDefault();
@@ -119,8 +168,9 @@ export function mountApp(root) {
   render(els, state);
 }
 
-function layout() {
-  const speechOk = speechSupported();
+function layout(providerId) {
+  const provider = getSttProvider(providerId);
+  const speechOk = providerSupported(provider.id);
   const assetBase = import.meta.env.BASE_URL || "./";
   return `
     <header class="top">
@@ -149,11 +199,20 @@ function layout() {
             <input id="typed" type="text" autocomplete="off" enterkeyhint="send" placeholder="Type origin ZIP, dest ZIP, pieces…" />
             <button type="submit" class="send">Send</button>
           </div>
+          <div id="stt-toggle" class="stt-toggle" role="group" aria-label="STT provider">
+            ${STT_PROVIDERS.map(
+              (p) =>
+                `<button type="button" class="stt-opt${p.id === provider.id ? " is-active" : ""}" data-stt-provider="${p.id}" aria-pressed="${p.id === provider.id ? "true" : "false"}">${p.label}</button>`,
+            ).join("")}
+          </div>
+          <p class="stt-badge-row">
+            <span id="stt-badge" class="stt-badge">Active: ${provider.label}</span>
+          </p>
           <button type="button" id="hold" class="hold ${speechOk ? "" : "is-disabled"}" aria-pressed="false">
             <span class="hold-dot"></span>
             <span class="hold-label">Hold to talk</span>
           </button>
-          <p id="hold-hint" class="hint">${speechOk ? "Press and hold. I only send when you release." : ""}</p>
+          <p id="hold-hint" class="hint">${defaultHoldHint(provider.id, speechOk)}</p>
           <button type="button" id="send-transcript" class="send-transcript">Send transcript</button>
           <p id="send-note" class="send-note" hidden></p>
         </form>
@@ -178,23 +237,26 @@ function layout() {
   `;
 }
 
-function bindMic(button, talk) {
+function bindMic(button, sessionRef) {
+  const talk = () => sessionRef.current;
   const label = button.querySelector(".hold-label");
-  if (talk.mode === "toggle") {
+  if (talk()?.mode === "toggle") {
     if (label) label.textContent = "Tap to talk";
     button.addEventListener("click", (e) => {
       e.preventDefault();
-      if (talk.isTailing?.()) return;
-      if (talk.isActive?.()) {
+      const session = talk();
+      if (!session) return;
+      if (session.isTailing?.()) return;
+      if (session.isActive?.()) {
         button.setAttribute("aria-pressed", "false");
         button.classList.remove("hot");
         if (label) label.textContent = "Finishing…";
-        talk.stop();
+        session.stop();
       } else {
         button.setAttribute("aria-pressed", "true");
         button.classList.add("hot");
         if (label) label.textContent = "Recording… tap to send";
-        talk.start();
+        session.start();
       }
     });
     button.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -206,13 +268,13 @@ function bindMic(button, talk) {
     button.setPointerCapture?.(e.pointerId);
     button.setAttribute("aria-pressed", "true");
     button.classList.add("hot");
-    talk.start();
+    talk()?.start();
   };
   const stop = (e) => {
     e.preventDefault();
     button.setAttribute("aria-pressed", "false");
     button.classList.remove("hot");
-    talk.stop();
+    talk()?.stop();
   };
   button.addEventListener("pointerdown", go);
   button.addEventListener("pointerup", stop);
@@ -220,7 +282,7 @@ function bindMic(button, talk) {
   button.addEventListener("touchend", stop, { passive: false });
   button.addEventListener("lostpointercapture", () => {
     button.classList.remove("hot");
-    talk.stop();
+    talk()?.stop();
   });
   button.addEventListener("contextmenu", (e) => e.preventDefault());
 }
@@ -384,16 +446,46 @@ function renderChrome(els, state) {
       label.textContent = state.hold?.mode === "toggle" ? "Tap to talk" : "Hold to talk";
     }
   }
-  if (state.finishing) {
-    els.holdHint.textContent = state.interim ? state.interim : "Finishing…";
-  } else if (state.listening && state.interim) {
-    els.holdHint.textContent = state.interim;
-  } else if (state.hold?.supported) {
-    els.holdHint.textContent =
-      state.hold.mode === "toggle"
-        ? "Tap to record, tap again to send. I wait a beat after Stop so the last words aren’t cut off."
-        : "Press and hold. Release — I wait a beat so the last words aren’t cut off.";
+  if (els.sttBadge) {
+    els.sttBadge.textContent = `Active: ${getSttProvider(state.sttProvider).label}`;
   }
+  if (state.finishing) {
+    els.holdHint.textContent = state.interim ? `${providerHintPrefix(state.sttProvider)} ${state.interim}` : `${providerHintPrefix(state.sttProvider)} Finishing…`;
+  } else if (state.listening && state.interim) {
+    els.holdHint.textContent = `${providerHintPrefix(state.sttProvider)} ${state.interim}`;
+  } else if (state.hold?.supported) {
+    els.holdHint.textContent = defaultHoldHint(state.sttProvider, true, state.hold.mode);
+  } else {
+    els.holdHint.textContent = defaultHoldHint(state.sttProvider, false, state.hold?.mode);
+  }
+}
+
+function syncSttToggle(els, providerId) {
+  els.sttToggle?.querySelectorAll("[data-stt-provider]").forEach((btn) => {
+    const active = btn.getAttribute("data-stt-provider") === providerId;
+    btn.classList.toggle("is-active", active);
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+}
+
+function providerHintPrefix(providerId) {
+  return `[${getSttProvider(providerId).label}]`;
+}
+
+function defaultHoldHint(providerId, supported, mode) {
+  const prefix = providerHintPrefix(providerId);
+  if (isCartesiaProvider(providerId) && !getSttTokenUrl()) {
+    return `${prefix} ${STT_TOKEN_UNCONFIGURED}`;
+  }
+  if (!supported) {
+    return isCartesiaProvider(providerId)
+      ? `${prefix} Mic capture isn’t available. Type instead.`
+      : "Voice needs Chrome/Safari with mic permission. Type instead.";
+  }
+  if (mode === "toggle") {
+    return `${prefix} Tap to record, tap again to send. I wait a beat after Stop so the last words aren’t cut off.`;
+  }
+  return `${prefix} Press and hold. Release — I wait a beat so the last words aren’t cut off.`;
 }
 
 function quoteCard(sheet, emailNote) {
@@ -432,12 +524,17 @@ function quoteCard(sheet, emailNote) {
   </section>`;
 }
 
-function speechError(err) {
+function speechError(err, providerId) {
   const code = err?.error || err?.message || "mic error";
-  if (String(code).includes("not-allowed") || String(code).includes("permission")) {
+  const text = String(code);
+  if (text.includes("not-allowed") || text.includes("permission")) {
     return "Mic permission was denied. Type the lane instead.";
   }
-  return `Voice isn’t available (${code}). Type instead — I won’t invent ZIPs or weights.`;
+  if (err?.code === "STT_TOKEN_UNCONFIGURED" || text.includes(STT_TOKEN_UNCONFIGURED)) {
+    return STT_TOKEN_UNCONFIGURED;
+  }
+  const label = getSttProvider(providerId).label;
+  return `${label} isn’t available (${text}). Type instead — I won’t invent ZIPs or weights.`;
 }
 
 function escapeHtml(s) {

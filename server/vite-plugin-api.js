@@ -1,5 +1,6 @@
 import { simulateExfressoRunner } from "../src/lib/handoff.js";
 import { MAIL_FROM, formatQuoteEmail } from "../src/lib/email.js";
+import { mintCartesiaToken } from "../token-proxy/src/mint.js";
 
 function readJson(req) {
   return new Promise((resolve, reject) => {
@@ -31,9 +32,27 @@ function routePath(url) {
 
 async function handler(req, res, next) {
   const path = routePath(req.url);
-  if (req.method === "OPTIONS" && (path === "/api/quote-handoff" || path === "/api/email-quote")) {
+  if (
+    req.method === "OPTIONS" &&
+    (path === "/api/quote-handoff" || path === "/api/email-quote" || path === "/api/stt-token")
+  ) {
     res.statusCode = 204;
     res.end();
+    return;
+  }
+
+  if ((req.method === "POST" || req.method === "GET") && path === "/api/stt-token") {
+    const apiKey = process.env.CARTESIA_API_KEY;
+    if (!apiKey) {
+      send(res, 503, { error: "STT token proxy not configured" });
+      return;
+    }
+    try {
+      const minted = await mintCartesiaToken({ apiKey });
+      send(res, 200, minted);
+    } catch (err) {
+      send(res, 502, { error: String(err.message || err) });
+    }
     return;
   }
 

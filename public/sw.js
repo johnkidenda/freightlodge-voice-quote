@@ -1,6 +1,5 @@
-// v4: drop the cache-first opaque logo-b.png from v3 so Pages clients
-// pick up the transparent lockup (same URL) plus the new CSS hash.
-const CACHE = "freightlodge-quote-v4";
+// v5: STT A/B toggle (Web Speech | Cartesia manual | Cartesia auto).
+const CACHE = "freightlodge-quote-v5";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
