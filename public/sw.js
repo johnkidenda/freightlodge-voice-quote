@@ -1,5 +1,5 @@
-// v5: STT A/B toggle (Web Speech | Cartesia manual | Cartesia auto).
-const CACHE = "freightlodge-quote-v5";
+// v6: Cartesia empty-finalize + capture errors surface in chat.
+const CACHE = "freightlodge-quote-v6";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();

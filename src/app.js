@@ -534,6 +534,15 @@ function speechError(err, providerId) {
     return STT_TOKEN_UNCONFIGURED;
   }
   const label = getSttProvider(providerId).label;
+  if (/empty transcript/i.test(text)) {
+    return `${label} heard nothing. Hold, speak clearly, then release — or type instead.`;
+  }
+  if (/produced no audio|mic capture|microphone is locked/i.test(text)) {
+    return `${label} didn’t get microphone audio. Check permission and try again, or type instead.`;
+  }
+  if (/failed to open|closed unexpectedly|closed before|socket error/i.test(text)) {
+    return `${label} couldn’t keep the STT connection (${text}). Type instead — I won’t invent ZIPs or weights.`;
+  }
   return `${label} isn’t available (${text}). Type instead — I won’t invent ZIPs or weights.`;
 }
 

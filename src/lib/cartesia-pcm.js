@@ -30,6 +30,15 @@ export function floatToPcm16le(float32, inputRate, outputRate = CARTESIA_SAMPLE_
   return out;
 }
 
+/** Copy a pcm_s16le view into a standalone ArrayBuffer for ws.send (binary). */
+export function toPcmBinaryFrame(data) {
+  if (data instanceof ArrayBuffer) return data.slice(0);
+  if (ArrayBuffer.isView(data)) {
+    return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+  }
+  return null;
+}
+
 export function createPcmChunker({
   inputRate,
   outputRate = CARTESIA_SAMPLE_RATE,
@@ -47,7 +56,7 @@ export function createPcmChunker({
     while (pending.length >= chunkSamples) {
       const slice = pending.subarray(0, chunkSamples);
       pending = pending.subarray(chunkSamples);
-      onChunk?.(slice.buffer.slice(slice.byteOffset, slice.byteOffset + slice.byteLength));
+      onChunk?.(toPcmBinaryFrame(slice));
     }
   }
 
@@ -59,7 +68,7 @@ export function createPcmChunker({
       if (!pending.length) return;
       const leftover = pending;
       pending = new Int16Array(0);
-      onChunk?.(leftover.buffer.slice(leftover.byteOffset, leftover.byteOffset + leftover.byteLength));
+      onChunk?.(toPcmBinaryFrame(leftover));
     },
     pendingSamples() {
       return pending.length;
@@ -67,12 +76,18 @@ export function createPcmChunker({
   };
 }
 
-const WORKLET_SRC = `
+/**
+ * Copy the process() input — that buffer is reused. Transfer the copy so the
+ * main thread always sees real samples, not a later silent overwrite.
+ */
+export const WORKLET_SRC = `
 class FreightPcmCapture extends AudioWorkletProcessor {
   process(inputs) {
     const ch = inputs[0] && inputs[0][0];
     if (ch && ch.length) {
-      this.port.postMessage(ch);
+      const copy = new Float32Array(ch.length);
+      copy.set(ch);
+      this.port.postMessage(copy, [copy.buffer]);
     }
     return true;
   }
@@ -95,6 +110,7 @@ export function cartesiaCaptureSupported() {
 
 /**
  * getUserMedia → AudioWorklet (or ScriptProcessor) → ~100ms pcm_s16le 16 kHz frames.
+ * AudioContext is created/resumed first so the hold gesture can unlock Web Audio on iOS.
  */
 export async function openPcmCapture({
   onChunk,
@@ -107,6 +123,15 @@ export async function openPcmCapture({
   const Ctor = AudioContextCtor || (typeof AudioContext !== "undefined" ? AudioContext : window.webkitAudioContext);
   if (!Ctor) throw new Error("Web Audio is not available in this browser.");
 
+  const ctx = new Ctor();
+  if (ctx.state === "suspended") {
+    try {
+      await ctx.resume();
+    } catch {
+      /* try again after the stream is live */
+    }
+  }
+
   const stream = await gum.call(navigator.mediaDevices || {}, {
     audio: {
       channelCount: 1,
@@ -115,14 +140,15 @@ export async function openPcmCapture({
       autoGainControl: true,
     },
   });
-  const ctx = new Ctor();
   if (ctx.state === "suspended") {
     try {
       await ctx.resume();
-    } catch {
-      /* user gesture may already have resumed it */
+    } catch (err) {
+      stream.getTracks().forEach((t) => t.stop());
+      throw new Error("Microphone is locked. Tap hold-to-talk again to unlock audio.");
     }
   }
+
   const source = ctx.createMediaStreamSource(stream);
   const chunker = createPcmChunker({
     inputRate: ctx.sampleRate,
@@ -132,6 +158,20 @@ export async function openPcmCapture({
   let node = null;
   let workletUrl = null;
   let usingWorklet = false;
+  let sink = null;
+  let keepAlive = null;
+
+  function attachGraph(processor) {
+    // MediaStreamDestination + a near-silent tap keep the node in the render
+    // graph. gain=0 → destination is optimized away on some mobile browsers.
+    sink = ctx.createMediaStreamDestination();
+    keepAlive = ctx.createGain();
+    keepAlive.gain.value = 0.0001;
+    source.connect(processor);
+    processor.connect(sink);
+    processor.connect(keepAlive);
+    keepAlive.connect(ctx.destination);
+  }
 
   async function tryWorklet() {
     if (!ctx.audioWorklet) return false;
@@ -143,11 +183,7 @@ export async function openPcmCapture({
       const floats = data instanceof Float32Array ? data : new Float32Array(data);
       chunker.pushFloat(floats, ctx.sampleRate);
     };
-    const mute = ctx.createGain();
-    mute.gain.value = 0;
-    source.connect(node);
-    node.connect(mute);
-    mute.connect(ctx.destination);
+    attachGraph(node);
     usingWorklet = true;
     return true;
   }
@@ -159,11 +195,7 @@ export async function openPcmCapture({
       const floats = ev.inputBuffer.getChannelData(0);
       chunker.pushFloat(floats, ctx.sampleRate);
     };
-    const mute = ctx.createGain();
-    mute.gain.value = 0;
-    source.connect(node);
-    node.connect(mute);
-    mute.connect(ctx.destination);
+    attachGraph(node);
   }
 
   try {
@@ -173,23 +205,39 @@ export async function openPcmCapture({
     try {
       useScriptProcessor();
     } catch (fallbackErr) {
+      stream.getTracks().forEach((t) => t.stop());
       onError?.(fallbackErr);
       throw fallbackErr;
     }
     if (!node) {
+      stream.getTracks().forEach((t) => t.stop());
       onError?.(err);
       throw err;
     }
   }
 
-  function stop() {
+  function flush() {
     try {
       chunker.flush();
     } catch {
       /* ignore */
     }
+  }
+
+  function stop() {
+    flush();
     try {
       node?.disconnect();
+    } catch {
+      /* ignore */
+    }
+    try {
+      keepAlive?.disconnect();
+    } catch {
+      /* ignore */
+    }
+    try {
+      sink?.disconnect();
     } catch {
       /* ignore */
     }
@@ -211,6 +259,7 @@ export async function openPcmCapture({
 
   return {
     stop,
+    flush,
     sampleRate: ctx.sampleRate,
     usingWorklet,
     context: ctx,
