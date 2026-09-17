@@ -1,5 +1,7 @@
 import { formatPlace } from "./completeness.js";
 
+export const TRANSCRIPT_TO = "john@freightlodge.com";
+
 /**
  * Plain-text dump of the current sheet conversation for team delivery.
  */
@@ -42,17 +44,35 @@ export function transcriptSubject(session) {
   return `[Freight Lodge transcript] ${short} ${stamp}`;
 }
 
+export function transcriptMailtoHref(subject, transcript, to = TRANSCRIPT_TO) {
+  const qs = new URLSearchParams({ subject, body: transcript });
+  return `mailto:${encodeURIComponent(to)}?${qs.toString()}`;
+}
+
+export function getTranscriptWebhookUrl(env = typeof import.meta !== "undefined" ? import.meta.env : undefined) {
+  const fromEnv = env?.VITE_TRANSCRIPT_WEBHOOK_URL;
+  const fromGlobal = globalThis.FREIGHT_TRANSCRIPT_WEBHOOK_URL;
+  const raw = fromEnv || fromGlobal || "";
+  return String(raw).trim();
+}
+
 /**
- * Deliver transcript to the team. Tries webhook env, then FormSubmit to
- * john@freightlodge.com, then mailto fallback.
+ * Deliver transcript to the team.
+ * 1. Optional webhook (`VITE_TRANSCRIPT_WEBHOOK_URL`) if it returns 2xx
+ * 2. Otherwise mailto: to john@freightlodge.com with the full body
+ *
+ * Third-party form AJAX is never the happy path — activation-gated
+ * providers can return 200 while dropping the chat body.
  */
-export async function sendSessionTranscript(messages, session, { fetchFn = fetch } = {}) {
+export async function sendSessionTranscript(
+  messages,
+  session,
+  { fetchFn = fetch, webhookUrl } = {},
+) {
   const transcript = formatSessionTranscript(messages, session);
   const subject = transcriptSubject(session);
-  const webhook =
-    (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_TRANSCRIPT_WEBHOOK_URL) ||
-    globalThis.FREIGHT_TRANSCRIPT_WEBHOOK_URL ||
-    "";
+  const mailto = transcriptMailtoHref(subject, transcript);
+  const webhook = webhookUrl == null ? getTranscriptWebhookUrl() : String(webhookUrl).trim();
 
   if (webhook) {
     try {
@@ -61,38 +81,18 @@ export async function sendSessionTranscript(messages, session, { fetchFn = fetch
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ subject, transcript, message: transcript }),
       });
-      if (res.ok) return { ok: true, mode: "webhook", subject, transcript };
+      if (res.ok) return { ok: true, mode: "webhook", subject, transcript, mailto };
     } catch {
-      // fall through
+      /* mailto is the reliable path */
     }
   }
 
-  try {
-    const res = await fetchFn("https://formsubmit.co/ajax/john@freightlodge.com", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({
-        _subject: subject,
-        message: transcript,
-        _template: "box",
-        _captcha: "false",
-      }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (res.ok && data.success !== false) {
-      return { ok: true, mode: "formsubmit", subject, transcript };
-    }
-  } catch {
-    // fall through to mailto
-  }
-
-  const qs = new URLSearchParams({ subject, body: transcript });
   return {
-    ok: false,
+    ok: true,
     mode: "mailto",
     subject,
     transcript,
-    mailto: `mailto:${encodeURIComponent("john@freightlodge.com")}?${qs.toString()}`,
+    mailto,
   };
 }
 

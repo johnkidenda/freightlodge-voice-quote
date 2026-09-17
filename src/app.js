@@ -13,7 +13,8 @@ import {
   loadSttProvider,
   saveSttProvider,
 } from "./lib/stt-providers.js";
-import { formatSessionTranscript, sendSessionTranscript } from "./lib/transcript.js";
+import { copyTextToClipboard, sendSessionTranscript } from "./lib/transcript.js";
+import { playListenCue, primeListenCue } from "./lib/listen-cue.js";
 
 const SAMPLE =
   "Chicago IL 60601 to Dallas TX 75201, 3 pallets, 1200 pounds, auto parts, pickup tomorrow, liftgate delivery, email shipper@example.com";
@@ -59,6 +60,7 @@ export function mountApp(root) {
         state.listening = true;
         state.finishing = false;
         state.interim = "";
+        playListenCue();
         renderChrome(els, state);
       },
       onTailStart() {
@@ -256,6 +258,7 @@ function bindMic(button, sessionRef) {
         button.setAttribute("aria-pressed", "true");
         button.classList.add("hot");
         if (label) label.textContent = "Recording… tap to send";
+        primeListenCue();
         session.start();
       }
     });
@@ -268,6 +271,7 @@ function bindMic(button, sessionRef) {
     button.setPointerCapture?.(e.pointerId);
     button.setAttribute("aria-pressed", "true");
     button.classList.add("hot");
+    primeListenCue();
     talk()?.start();
   };
   const stop = (e) => {
@@ -351,42 +355,56 @@ async function sendTranscriptToTeam(els, state) {
   btn.textContent = "Sending…";
   note.hidden = true;
   note.textContent = "";
+
+  function restore(delayMs = 2800) {
+    window.clearTimeout(btn._sentTimer);
+    btn._sentTimer = window.setTimeout(() => {
+      btn.textContent = label;
+      btn.classList.remove("sent");
+      btn.disabled = false;
+    }, delayMs);
+  }
+
   try {
     const result = await sendSessionTranscript(state.messages, state.session);
-    if (result.ok) {
+    if (result.mode === "webhook" && result.ok) {
       btn.textContent = "Sent";
       btn.classList.add("sent");
       note.hidden = false;
       note.textContent = "Thanks — the team will review.";
-      window.clearTimeout(btn._sentTimer);
-      btn._sentTimer = window.setTimeout(() => {
-        btn.textContent = label;
-        btn.classList.remove("sent");
-        btn.disabled = false;
-      }, 2200);
+      restore();
       return;
     }
     if (result.mailto) {
-      window.location.href = result.mailto;
-      btn.textContent = "Opening mail…";
+      let copied = false;
+      try {
+        copied = await copyTextToClipboard(result.transcript);
+      } catch {
+        copied = false;
+      }
+      try {
+        window.location.href = result.mailto;
+      } catch {
+        /* some WebViews block mailto */
+      }
+      btn.textContent = "Opened mail";
+      btn.classList.add("sent");
       note.hidden = false;
-      note.textContent = "If mail didn’t open, try again or email john@freightlodge.com.";
-    } else {
-      btn.textContent = "Send failed";
-      note.hidden = false;
-      note.textContent = "Couldn’t send — try again.";
+      note.textContent = copied
+        ? "Opened mail app with transcript. A copy is on the clipboard if mail didn’t open."
+        : "Opened mail app with transcript. If mail didn’t open, email john@freightlodge.com.";
+      restore(4000);
+      return;
     }
+    btn.textContent = "Send failed";
+    note.hidden = false;
+    note.textContent = "Could not send — copy instead.";
   } catch (err) {
     btn.textContent = "Send failed";
     note.hidden = false;
-    note.textContent = "Couldn’t send — try again.";
+    note.textContent = "Could not send — copy instead.";
   }
-  window.clearTimeout(btn._sentTimer);
-  btn._sentTimer = window.setTimeout(() => {
-    btn.textContent = label;
-    btn.classList.remove("sent");
-    btn.disabled = false;
-  }, 2200);
+  restore();
 }
 
 async function sendEmail(els, state) {
