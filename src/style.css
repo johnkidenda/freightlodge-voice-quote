@@ -71,7 +71,8 @@ button, input { font: inherit; }
 }
 .pill[data-status="quoted"] { background: #d9eddf; color: var(--ok); }
 .pill[data-status="quoting"],
-.pill[data-status="listening"] { background: #f6e6bf; color: var(--gold-deep); }
+.pill[data-status="listening"],
+.pill[data-status="finishing"] { background: #f6e6bf; color: var(--gold-deep); }
 .pill[data-status="out_of_scope"],
 .pill[data-status="error"] { background: #f3d6d0; color: var(--warn); }
 .textish {
@@ -192,6 +193,7 @@ button, input { font: inherit; }
   -webkit-user-select: none;
 }
 .hold.hot { background: linear-gradient(180deg, #8a3b2a, #5e2418); }
+.hold.finishing { background: linear-gradient(180deg, #6b5a2e, #3d3420); }
 .hold.is-disabled { opacity: 0.45; }
 .hold-dot {
   width: 12px;

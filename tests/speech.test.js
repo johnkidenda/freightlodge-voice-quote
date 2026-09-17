@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  RELEASE_TAIL_MS,
   collapseProgressiveFinals,
+  createHoldToTalk,
   createTranscriptBuffer,
   preferTapToTalk,
 } from "../src/lib/speech.js";
@@ -100,3 +102,114 @@ describe("STT stutter — replace progressive finals, do not concatenate", () =>
     expect(buf.release()).toBe(JOHN[JOHN.length - 1]);
   });
 });
+
+function fakeRecognition() {
+  const instances = [];
+  function Recognition() {
+    this.onresult = null;
+    this.onend = null;
+    this.onerror = null;
+    this.lang = "";
+    this.interimResults = false;
+    this.continuous = false;
+    this.started = false;
+    this.stopped = false;
+    instances.push(this);
+  }
+  Recognition.prototype.start = function start() {
+    this.started = true;
+  };
+  Recognition.prototype.stop = function stop() {
+    this.stopped = true;
+    this.onend?.();
+  };
+  Recognition.prototype.abort = function abort() {
+    this.stopped = true;
+  };
+  Recognition.prototype.emit = function emit(rows) {
+    this.onresult?.({
+      results: rows.map((row) => {
+        const item = [{ transcript: row.transcript }];
+        item.transcript = row.transcript;
+        item.isFinal = row.isFinal;
+        return item;
+      }),
+    });
+  };
+  return { Recognition, instances };
+}
+
+describe("release tail keeps listening before commit", () => {
+  it("exports a 1000ms tail constant", () => {
+    expect(RELEASE_TAIL_MS).toBe(1000);
+  });
+
+  it("does not commit on stop; includes tail speech after RELEASE_TAIL_MS", () => {
+    const { Recognition, instances } = fakeRecognition();
+    const timers = [];
+    const commits = [];
+    const tails = [];
+    const talk = createHoldToTalk({
+      Recognition,
+      onCommit: (text) => commits.push(text),
+      onTailStart: () => tails.push("tail"),
+      schedule: (fn, ms) => {
+        const id = timers.length + 1;
+        timers.push({ id, fn, ms });
+        return id;
+      },
+      unschedule: (id) => {
+        const i = timers.findIndex((t) => t.id === id);
+        if (i >= 0) timers.splice(i, 1);
+      },
+    });
+
+    talk.start();
+    expect(talk.isTailing()).toBe(false);
+    instances[0].emit([{ transcript: "I'd like to ship a thousand pounds from", isFinal: false }]);
+    talk.stop();
+    expect(talk.isTailing()).toBe(true);
+    expect(tails).toEqual(["tail"]);
+    expect(commits).toEqual([]);
+    expect(instances[0].stopped).toBe(false);
+
+    instances[0].emit([
+      { transcript: "I'd like to ship a thousand pounds from Atlanta Austin", isFinal: true },
+    ]);
+    expect(commits).toEqual([]);
+
+    expect(timers).toHaveLength(1);
+    expect(timers[0].ms).toBe(RELEASE_TAIL_MS);
+    timers[0].fn();
+
+    expect(instances[0].stopped).toBe(true);
+    expect(talk.isTailing()).toBe(false);
+    expect(commits).toEqual(["I'd like to ship a thousand pounds from Atlanta Austin"]);
+  });
+
+  it("does not send to the agent mid-tail even if STT marks a phrase final", () => {
+    const { Recognition, instances } = fakeRecognition();
+    const timers = [];
+    const commits = [];
+    const talk = createHoldToTalk({
+      Recognition,
+      onCommit: (text) => commits.push(text),
+      schedule: (fn) => {
+        const id = timers.length + 1;
+        timers.push({ id, fn });
+        return id;
+      },
+      unschedule: (id) => {
+        const i = timers.findIndex((t) => t.id === id);
+        if (i >= 0) timers.splice(i, 1);
+      },
+    });
+    talk.start();
+    talk.stop();
+    instances[0].emit([{ transcript: "three pieces", isFinal: true }]);
+    expect(commits).toEqual([]);
+    timers[0].fn();
+    expect(commits).toEqual(["three pieces"]);
+  });
+});
+

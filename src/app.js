@@ -13,6 +13,7 @@ export function mountApp(root) {
     session: createSession(),
     messages: [{ role: "assistant", text: openingMessage() }],
     listening: false,
+    finishing: false,
     interim: "",
     busy: false,
     emailNote: null,
@@ -39,16 +40,24 @@ export function mountApp(root) {
   const talk = createHoldToTalk({
     onStart() {
       state.listening = true;
+      state.finishing = false;
       state.interim = "";
+      renderChrome(els, state);
+    },
+    onTailStart() {
+      state.listening = true;
+      state.finishing = true;
       renderChrome(els, state);
     },
     onEnd() {
       state.listening = false;
+      state.finishing = false;
       state.interim = "";
       renderChrome(els, state);
     },
     onError(err) {
       state.listening = false;
+      state.finishing = false;
       push(state, "assistant", speechError(err));
       render(els, state);
     },
@@ -165,10 +174,11 @@ function bindMic(button, talk) {
     if (label) label.textContent = "Tap to talk";
     button.addEventListener("click", (e) => {
       e.preventDefault();
+      if (talk.isTailing?.()) return;
       if (talk.isActive?.()) {
         button.setAttribute("aria-pressed", "false");
         button.classList.remove("hot");
-        if (label) label.textContent = "Tap to talk";
+        if (label) label.textContent = "Finishing…";
         talk.stop();
       } else {
         button.setAttribute("aria-pressed", "true");
@@ -319,17 +329,28 @@ function render(els, state) {
 }
 
 function renderChrome(els, state) {
-  const status = state.listening ? "listening" : state.session.sheet.status;
+  const status = state.finishing ? "finishing" : state.listening ? "listening" : state.session.sheet.status;
   els.status.textContent = status.replaceAll("_", " ");
   els.status.dataset.status = status;
-  els.hold.classList.toggle("hot", state.listening);
-  if (state.listening && state.interim) {
+  els.hold.classList.toggle("hot", state.listening && !state.finishing);
+  els.hold.classList.toggle("finishing", state.finishing);
+  const label = els.hold.querySelector(".hold-label");
+  if (label) {
+    if (state.finishing) label.textContent = "Finishing…";
+    else if (state.listening && state.hold?.mode === "toggle") label.textContent = "Recording… tap to send";
+    else if (!state.listening) {
+      label.textContent = state.hold?.mode === "toggle" ? "Tap to talk" : "Hold to talk";
+    }
+  }
+  if (state.finishing) {
+    els.holdHint.textContent = state.interim ? state.interim : "Finishing…";
+  } else if (state.listening && state.interim) {
     els.holdHint.textContent = state.interim;
   } else if (state.hold?.supported) {
     els.holdHint.textContent =
       state.hold.mode === "toggle"
-        ? "Tap to record, tap again to send. I won’t answer while you’re still talking."
-        : "Press and hold. Release to send — I won’t answer while you’re still talking.";
+        ? "Tap to record, tap again to send. I wait a beat after Stop so the last words aren’t cut off."
+        : "Press and hold. Release — I wait a beat so the last words aren’t cut off.";
   }
 }
 

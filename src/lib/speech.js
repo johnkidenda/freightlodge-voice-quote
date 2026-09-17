@@ -1,3 +1,6 @@
+/** Extra listen time after release / tap-to-stop so the last words are not clipped. */
+export const RELEASE_TAIL_MS = 1000;
+
 export function getSpeechRecognitionCtor() {
   if (typeof window === "undefined") return null;
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
@@ -169,8 +172,19 @@ export function createTranscriptBuffer() {
   };
 }
 
-export function createHoldToTalk({ onPreview, onCommit, onError, onStart, onEnd } = {}) {
-  const Ctor = getSpeechRecognitionCtor();
+export function createHoldToTalk({
+  onPreview,
+  onCommit,
+  onError,
+  onStart,
+  onEnd,
+  onTailStart,
+  Recognition,
+  tailMs = RELEASE_TAIL_MS,
+  schedule = (fn, ms) => setTimeout(fn, ms),
+  unschedule = (id) => clearTimeout(id),
+} = {}) {
+  const Ctor = Recognition || getSpeechRecognitionCtor();
   const mode = preferTapToTalk() ? "toggle" : "hold";
   const buffer = createTranscriptBuffer();
 
@@ -183,12 +197,15 @@ export function createHoldToTalk({ onPreview, onCommit, onError, onStart, onEnd 
       },
       stop() {},
       abort() {},
+      isActive: () => false,
+      isTailing: () => false,
     };
   }
 
   let rec = null;
   let active = false;
-  let wantHold = false;
+  let phase = "idle";
+  let tailTimer = null;
 
   function attachHandlers() {
     rec.lang = "en-US";
@@ -211,14 +228,12 @@ export function createHoldToTalk({ onPreview, onCommit, onError, onStart, onEnd 
     };
     rec.onend = () => {
       active = false;
-      if (wantHold) {
+      if (phase === "holding" || phase === "tailing") {
         buffer.checkpoint();
         tryStart();
         return;
       }
-      const text = buffer.release();
-      onEnd?.();
-      if (text) onCommit?.(text);
+      commitNow();
     };
   }
 
@@ -233,34 +248,64 @@ export function createHoldToTalk({ onPreview, onCommit, onError, onStart, onEnd 
     }
   }
 
+  function clearTail() {
+    if (tailTimer != null) {
+      unschedule(tailTimer);
+      tailTimer = null;
+    }
+  }
+
+  function commitNow() {
+    const text = buffer.release();
+    phase = "idle";
+    rec = null;
+    active = false;
+    onEnd?.();
+    if (text) onCommit?.(text);
+  }
+
+  function finalizeStop() {
+    clearTail();
+    if (phase !== "holding" && phase !== "tailing") return;
+    phase = "idle";
+    if (!rec) {
+      commitNow();
+      return;
+    }
+    try {
+      rec.stop();
+    } catch {
+      commitNow();
+    }
+  }
+
   function start() {
-    if (wantHold) return;
-    wantHold = true;
+    if (phase === "holding") return;
+    if (phase === "tailing") {
+      clearTail();
+      phase = "holding";
+      onStart?.();
+      return;
+    }
+    phase = "holding";
     buffer.start();
     onStart?.();
     tryStart();
   }
 
   function stop() {
-    if (!wantHold) return;
-    wantHold = false;
-    if (!rec) {
-      const text = buffer.release();
-      onEnd?.();
-      if (text) onCommit?.(text);
-      return;
-    }
-    try {
-      rec.stop();
-    } catch {
-      const text = buffer.release();
-      onEnd?.();
-      if (text) onCommit?.(text);
-    }
+    if (phase !== "holding") return;
+    phase = "tailing";
+    onTailStart?.();
+    tailTimer = schedule(() => {
+      tailTimer = null;
+      finalizeStop();
+    }, tailMs);
   }
 
   function abort() {
-    wantHold = false;
+    clearTail();
+    phase = "idle";
     buffer.release();
     if (!rec) return;
     try {
@@ -268,8 +313,17 @@ export function createHoldToTalk({ onPreview, onCommit, onError, onStart, onEnd 
     } catch {
       /* ignore */
     }
+    rec = null;
     active = false;
   }
 
-  return { supported: true, mode, start, stop, abort, isActive: () => active || wantHold };
+  return {
+    supported: true,
+    mode,
+    start,
+    stop,
+    abort,
+    isActive: () => phase === "holding" || phase === "tailing" || active,
+    isTailing: () => phase === "tailing",
+  };
 }
