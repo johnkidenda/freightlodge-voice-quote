@@ -199,7 +199,6 @@ export function handleUtterance(session, text, { now } = {}) {
 
   let askedAccessorials = session.askedAccessorials;
   if (
-    session.awaiting === "accessorials" ||
     extracted.flags.accessorialsNone ||
     (extracted.pickup.accessorials && extracted.pickup.accessorials.length)
   ) {

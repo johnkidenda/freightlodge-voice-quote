@@ -90,6 +90,57 @@ describe("hold-and-dump — multi-slot from one utterance", () => {
     expect(transcript).toMatch(/1000/);
   });
 
+  it("thousand oranges without a unit parks commodity, not weight", () => {
+    const text = "I'd like to ship a thousand oranges from Atlanta Georgia to Austin Texas";
+    const extracted = extractSlots(text, { awaiting: "origin_zip" });
+    expect(extracted.freight.commodity).toMatch(/orange/i);
+    expect(extracted.freight.total_weight_lbs).toBeUndefined();
+    expect(extracted.origin.city).toBe("Atlanta");
+    expect(extracted.destination.city).toBe("Austin");
+
+    const result = handleUtterance(createSession({ id: "dump-thousand-oranges" }), text);
+    expect(result.session.sheet.freight.commodity).toMatch(/orange/i);
+    expect(result.session.sheet.freight.total_weight_lbs).toBeNull();
+    expect(result.session.sheet.lanes.origin.city).toBe("Atlanta");
+    expect(result.session.sheet.lanes.destination.city).toBe("Austin");
+    expect(result.reply).toMatch(/orange/i);
+    expect(result.reply).toMatch(/Atlanta/);
+    expect(result.reply).toMatch(/Austin/);
+    expect(result.reply).not.toMatch(/^Got origin Atlanta.*dest Austin\.\s/i);
+
+    const warm = presentAgentReply(result, true);
+    expect(warm).toMatch(/orange/i);
+    expect(warm).toMatch(/Atlanta/);
+    expect(warm).toMatch(/Austin/);
+    expect(warm).toMatch(/weight|pounds/i);
+    expect(warm).toMatch(/ZIP/i);
+    expect(warm).not.toMatch(/\bdest\b/);
+    expect(warm).not.toMatch(/\bpcs\b/);
+    expect(warm).not.toMatch(/\blb\b/);
+  });
+
+  it("STT $100 oranges parks oranges and treats $100 as thousand pounds", () => {
+    // Documented choice: John's Web Speech mangles “thousand” → “$100” / “100”
+    // next to the commodity. Park weight 1000 + oranges rather than drop oranges.
+    const text = "I'd like to ship $100 oranges from Atlanta Georgia to Austin Texas";
+    const extracted = extractSlots(text, { awaiting: "origin_zip" });
+    expect(extracted.freight.commodity).toMatch(/orange/i);
+    expect(extracted.freight.total_weight_lbs).toBe(1000);
+    expect(extracted.flags.weightFromSttThousand).toBe(true);
+    expect(extracted.origin.city).toBe("Atlanta");
+    expect(extracted.destination.city).toBe("Austin");
+
+    const result = handleUtterance(createSession({ id: "dump-dollar-oranges" }), text);
+    expect(result.session.sheet.freight.commodity).toMatch(/orange/i);
+    expect(result.session.sheet.freight.total_weight_lbs).toBe(1000);
+    expect(result.reply).toMatch(/orange/i);
+    expect(result.reply).toMatch(/1000/);
+
+    expect(extractSlots("I'd like to ship 100 oranges from Atlanta to Austin").freight.total_weight_lbs).toBe(
+      1000,
+    );
+  });
+
   it("conversational rewrite acknowledges the dump and asks only for ZIPs", () => {
     const result = handleUtterance(createSession({ id: "dump-convo" }), DUMP);
     const warm = presentAgentReply(result, true);

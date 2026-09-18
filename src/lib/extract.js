@@ -150,7 +150,7 @@ const ACCESSORIAL_PATTERNS = [
   { re: /limited\s+access\s+deliv/i, ids: ["limited_access_delivery"] },
   { re: /appointment/i, ids: ["appointment_delivery"] },
   { re: /notify/i, ids: ["notify_before_delivery"] },
-  { re: /protect\s+from\s+freeze|freeze\s+protect|freeze\b[\s\w]{0,24}\bprotect|\bprotect\b[\s\w]{0,24}\bfreeze/i, ids: ["protect_from_freeze"] },
+  { re: /protect\s+from\s+freeze|freeze\s+protect|freeze\b[\s\w]{0,24}\bprotect|\bprotect\b[\s\w]{0,24}\bfreeze|\bplease\s+protect\b/i, ids: ["protect_from_freeze"] },
   { re: /lift\s*-?\s*gates?/i, ids: ["liftgate_pickup", "liftgate_delivery"] },
   { re: /residential/i, ids: ["residential_pickup", "residential_delivery"] },
   { re: /limited\s+access/i, ids: ["limited_access_pickup", "limited_access_delivery"] },
@@ -1176,8 +1176,38 @@ function extractWeight(raw, extracted) {
     return;
   }
   const kg = raw.match(/(?:\$|usd\s*)?\s*([\d,]+(?:\.\d+)?)\s*(?:kgs?|kilograms?|kilos?)\b/i);
-  if (!kg) return;
-  applyExtractedWeight(extracted, parseWeightPounds(kg[1]), true);
+  if (kg) {
+    applyExtractedWeight(extracted, parseWeightPounds(kg[1]), true);
+    return;
+  }
+  extractSttMangledThousandWeight(raw, extracted);
+}
+
+/**
+ * John's Web Speech often mangles “thousand” → “$100” / “100” next to the
+ * commodity. Choice: in a ship dump with no weight unit, `$100 oranges` or
+ * `100 oranges` parks weight 1000 (thousand pounds of oranges).
+ * “a thousand oranges” (no unit) is NOT weight — commodity only, ask pounds.
+ */
+function extractSttMangledThousandWeight(raw, extracted) {
+  if (extracted.freight.total_weight_lbs) return;
+  if (VAGUE_MEASURE.test(raw)) return;
+  if (/\b(?:a|an|one)?\s*thousand\s+(?!pounds?|lbs?|kgs?|kilograms?|kilos?)/i.test(raw)) {
+    return;
+  }
+  if (/\b(?:pounds?|lbs?|kgs?|kilograms?|kilos?)\b/i.test(raw)) return;
+  const mangled = raw.match(/(?:\$\s*100\b|\b100\b)\s+([A-Za-z][A-Za-z\-']{2,24})\b/);
+  if (!mangled) return;
+  if (
+    /^(pounds?|lbs?|kgs?|kilograms?|kilos?|pallets?|pieces?|pcs|skids?|boxes?|crates?|cartons?)$/i.test(
+      mangled[1],
+    )
+  ) {
+    return;
+  }
+  if (!looksLikeCommodity(mangled[1])) return;
+  applyExtractedWeight(extracted, 1000, false);
+  extracted.flags.weightFromSttThousand = true;
 }
 
 function extractDims(raw, extracted) {
@@ -1239,6 +1269,83 @@ function extractCommodity(raw, extracted, awaiting) {
     const commodity = listed && sanitizeCommodity(listed[1]);
     if (commodity) extracted.freight.commodity = commodity;
   }
+  extractDumpCommodity(raw, extracted);
+}
+
+/**
+ * Hold-and-dump: park “oranges” / “thousand oranges” / “pounds of oranges”
+ * even without “commodity is”. Does not invent weight.
+ */
+function extractDumpCommodity(raw, extracted) {
+  if (extracted.freight.commodity) return;
+
+  const shipFrom = raw.match(/\b(?:ship(?:ping)?)\s+(.+?)\s+from\b/i);
+  if (shipFrom) {
+    const commodity = commodityFromDumpMid(shipFrom[1]);
+    if (commodity) {
+      extracted.freight.commodity = commodity;
+      return;
+    }
+  }
+
+  const qtyGoods = raw.match(
+    new RegExp(
+      String.raw`\b(?:(?:a|an|one)\s+)?(?:thousand|hundred|\$?\s*\d[\d,]*)\s+(?!${WEIGHT_UNIT}\b)([A-Za-z][A-Za-z \-/]{1,40}?)` +
+        COMMODITY_STOP.source,
+      "i",
+    ),
+  );
+  const fromQty = qtyGoods && looksLikeCommodity(qtyGoods[1]);
+  if (fromQty) {
+    extracted.freight.commodity = fromQty;
+    return;
+  }
+
+  if (/\b(?:ship(?:ping)?|send)\b/i.test(raw)) {
+    const produce = raw.match(/\b(oranges?|peaches?|apples?|widgets?)\b/i);
+    const commodity = produce && looksLikeCommodity(produce[1]);
+    if (commodity) extracted.freight.commodity = commodity;
+  }
+}
+
+const DUMP_QTY_LEAD =
+  /^(?:(?:a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d[\d,]*|\$\s*\d[\d,]*)\s+)+(?:thousand\s+|hundred\s+)?/i;
+
+function commodityFromDumpMid(mid) {
+  let s = String(mid || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  s = s.replace(DUMP_QTY_LEAD, "");
+  s = s.replace(/^(?:thousand|hundred)\s+/i, "");
+  s = s.replace(/^(?:\$\s*\d[\d,]*)\s+/i, "");
+  s = s.replace(
+    /^(?:pounds?|lbs?|kgs?|kilograms?|kilos?|pallets?|pieces?|pcs|skids?|boxes?|crates?|cartons?)\s+(?:of\s+)?/i,
+    "",
+  );
+  s = s.replace(/^of\s+/i, "");
+  return looksLikeCommodity(s);
+}
+
+const GOODS_WORDS = new Set(["orange", "oranges", "peach", "peaches", "apple", "apples", "widget", "widgets"]);
+
+function looksLikeCommodity(value) {
+  const commodity = sanitizeCommodity(value);
+  if (!commodity) return null;
+  if (isKnownUsCity(commodity)) return null;
+  const words = commodity.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.some((w) => GOODS_WORDS.has(w))) return commodity;
+  if (
+    words.every(
+      (w) =>
+        PLACE_STOP.has(w) ||
+        PLACE_NOISE.has(w) ||
+        isKnownUsCity(w) ||
+        /^(pounds?|lbs?|kgs?|kilograms?|kilos?)$/.test(w),
+    )
+  ) {
+    return null;
+  }
+  return commodity;
 }
 
 function sanitizeCommodity(value) {
@@ -1336,6 +1443,13 @@ function extractAccessorials(raw, extracted, awaiting) {
         if (ACCESSORIALS.includes(id) && !found.includes(id)) found.push(id);
       }
     }
+  }
+  const nearEnd =
+    awaiting === "accessorials" || awaiting === "email" || awaiting === "pickup_date";
+  const softProtect = /\bplease\s+protect\b/i.test(raw) || (nearEnd && /\bprotect\b/i.test(raw));
+  if (softProtect && !found.includes("protect_from_freeze") && !extracted.flags.accessorialsNone) {
+    found.push("protect_from_freeze");
+    extracted.flags.softProtect = true;
   }
   if (found.length) extracted.pickup.accessorials = found;
 }

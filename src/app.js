@@ -10,7 +10,7 @@ import {
   presentAgentReply,
   saveConversationalMode,
 } from "./lib/conversational.js";
-import { speakAgentReply, stopAgentSpeech } from "./lib/cartesia-tts.js";
+import { onAgentSpeaking, speakAgentReply, stopAgentSpeech } from "./lib/cartesia-tts.js";
 import { copyTextToClipboard, sendSessionTranscript } from "./lib/transcript.js";
 import { playListenCue, primeListenCue } from "./lib/listen-cue.js";
 
@@ -35,6 +35,7 @@ export function mountApp(root) {
     emailNote: null,
     hold: null,
     conversational: loadConversationalMode(typeof localStorage !== "undefined" ? localStorage : null),
+    ttsSpeaking: false,
   };
 
   root.innerHTML = layout(state.conversational);
@@ -47,6 +48,7 @@ export function mountApp(root) {
     holdHint: root.querySelector("#hold-hint"),
     sttBadge: root.querySelector("#stt-badge"),
     conversational: root.querySelector("#conversational"),
+    ttsWave: root.querySelector("#tts-wave"),
     quote: root.querySelector("#quote-card"),
     status: root.querySelector("#status-pill"),
     sample: root.querySelector("#sample"),
@@ -120,6 +122,10 @@ export function mountApp(root) {
 
   attachSpeechSession();
   bindMic(els.hold, sessionRef);
+  onAgentSpeaking((speaking) => {
+    state.ttsSpeaking = Boolean(speaking);
+    renderTtsWave(els, state);
+  });
 
   els.conversational?.addEventListener("click", () => {
     state.conversational = saveConversationalMode(
@@ -204,9 +210,14 @@ function layout(conversational) {
             <input id="typed" type="text" autocomplete="off" enterkeyhint="send" placeholder="Type origin ZIP, dest ZIP, pieces…" />
             <button type="submit" class="send">Send</button>
           </div>
-          <button type="button" id="conversational" class="mode-toggle${conversational ? " is-active" : ""}" aria-pressed="${conversational ? "true" : "false"}">
-            Conversational mode
-          </button>
+          <div class="mode-row">
+            <button type="button" id="conversational" class="mode-toggle${conversational ? " is-active" : ""}" aria-pressed="${conversational ? "true" : "false"}">
+              Conversational mode
+            </button>
+            <span id="tts-wave" class="tts-wave" hidden aria-hidden="true" title="Speaking">
+              <span></span><span></span><span></span><span></span>
+            </span>
+          </div>
           <p class="stt-badge-row">
             <span id="stt-badge" class="stt-badge">${sttBadgeText(conversational)}</span>
           </p>
@@ -480,6 +491,7 @@ function renderChrome(els, state) {
     els.conversational.classList.toggle("is-active", state.conversational);
     els.conversational.setAttribute("aria-pressed", state.conversational ? "true" : "false");
   }
+  renderTtsWave(els, state);
   if (state.finishing) {
     els.holdHint.textContent = state.interim ? state.interim : "Finishing…";
   } else if (state.listening && state.interim) {
@@ -489,6 +501,13 @@ function renderChrome(els, state) {
   } else {
     els.holdHint.textContent = defaultHoldHint(false, state.hold?.mode);
   }
+}
+
+function renderTtsWave(els, state) {
+  if (!els.ttsWave) return;
+  const show = Boolean(state.conversational && state.ttsSpeaking);
+  els.ttsWave.hidden = !show;
+  els.ttsWave.setAttribute("aria-hidden", show ? "false" : "true");
 }
 
 function sttBadgeText(conversational) {
