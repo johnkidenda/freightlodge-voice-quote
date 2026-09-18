@@ -492,14 +492,6 @@ function renderChrome(els, state) {
     els.conversational.setAttribute("aria-pressed", state.conversational ? "true" : "false");
   }
   renderTtsWave(els, state);
-}
-
-function renderTtsWave(els, state) {
-  if (!els.ttsWave) return;
-  const show = Boolean(state.conversational && state.ttsSpeaking);
-  els.ttsWave.hidden = !show;
-  els.ttsWave.setAttribute("aria-hidden", show ? "false" : "true");
-}
   if (state.finishing) {
     els.holdHint.textContent = state.interim ? state.interim : "Finishing…";
   } else if (state.listening && state.interim) {
@@ -509,6 +501,13 @@ function renderTtsWave(els, state) {
   } else {
     els.holdHint.textContent = defaultHoldHint(false, state.hold?.mode);
   }
+}
+
+function renderTtsWave(els, state) {
+  if (!els.ttsWave) return;
+  const show = Boolean(state.conversational && state.ttsSpeaking);
+  els.ttsWave.hidden = !show;
+  els.ttsWave.setAttribute("aria-hidden", show ? "false" : "true");
 }
 
 function sttBadgeText(conversational) {

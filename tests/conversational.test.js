@@ -120,4 +120,9 @@ describe("conversational TTS wiring", () => {
     expect(app).not.toContain("stt-toggle");
     expect(app).not.toMatch(/CARTESIA_API_KEY\s*=/);
   });
+
+  it("app module parses so Conversational mode can mount", async () => {
+    const mod = await import("../src/app.js");
+    expect(typeof mod.mountApp).toBe("function");
+  });
 });
