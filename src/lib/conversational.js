@@ -30,6 +30,13 @@ function cityOf(place) {
   return city || null;
 }
 
+function joinSpoken(parts) {
+  if (!parts.length) return "";
+  if (parts.length === 1) return parts[0];
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`;
+}
+
 function conversationalHave(sheet, extracted) {
   const originCity = cityOf(sheet?.lanes?.origin);
   const destCity = cityOf(sheet?.lanes?.destination);
@@ -42,23 +49,35 @@ function conversationalHave(sheet, extracted) {
     extracted?.destination?.city;
 
   if (dumped && originCity && destCity && weight && commodity) {
-    return `I have ${originCity} and ${destCity} and ${weight} lb of ${commodity}.`;
+    return `I have ${originCity} and ${destCity} and ${weight} pounds of ${commodity}.`;
+  }
+  if (dumped && originCity && destCity && commodity && !weight) {
+    return `I have ${originCity}, ${destCity}, and ${commodity}.`;
   }
 
   const bits = [];
-  if (extracted?.origin?.postal_code) bits.push(`origin ${extracted.origin.postal_code}`);
+  if (extracted?.origin?.postal_code) bits.push(`the origin ZIP — ${extracted.origin.postal_code}`);
   else if (extracted?.origin?.city) bits.push(extracted.origin.city);
-  if (extracted?.destination?.postal_code) bits.push(`dest ${extracted.destination.postal_code}`);
+  if (extracted?.destination?.postal_code) bits.push(`the destination ZIP — ${extracted.destination.postal_code}`);
   else if (extracted?.destination?.city && !isGarbagePlace(extracted.destination)) {
     bits.push(extracted.destination.city);
   }
-  if (extracted?.freight?.pieces) bits.push(`${extracted.freight.pieces} pcs`);
-  if (extracted?.freight?.total_weight_lbs) bits.push(`${extracted.freight.total_weight_lbs} lb`);
+  if (extracted?.freight?.pieces) bits.push(`${extracted.freight.pieces} pieces`);
+  if (extracted?.freight?.total_weight_lbs) bits.push(`${extracted.freight.total_weight_lbs} pounds`);
   if (extracted?.freight?.commodity) bits.push(extracted.freight.commodity);
   if (extracted?.pickup?.date) bits.push(`pickup ${extracted.pickup.date}`);
+  if (extracted?.pickup?.accessorials?.length) {
+    bits.push(extracted.pickup.accessorials.join(", ").replaceAll("_", " "));
+  }
   if (extracted?.contact?.email) bits.push(extracted.contact.email);
   if (!bits.length) return "";
-  return `Got ${bits.join(", ")}.`;
+  if (bits.length === 1 && extracted?.destination?.postal_code && !extracted?.origin?.postal_code) {
+    return `Got the destination ZIP — ${extracted.destination.postal_code}.`;
+  }
+  if (bits.length === 1 && extracted?.origin?.postal_code && !extracted?.destination?.postal_code) {
+    return `Got the origin ZIP — ${extracted.origin.postal_code}.`;
+  }
+  return `Got ${joinSpoken(bits)}.`;
 }
 
 function conversationalAsk(sheet, awaiting) {
@@ -66,8 +85,17 @@ function conversationalAsk(sheet, awaiting) {
   const destZip = isValidZip(sheet?.lanes?.destination?.postal_code);
   const originCity = cityOf(sheet?.lanes?.origin);
   const destCity = cityOf(sheet?.lanes?.destination);
+  const hasWeight =
+    typeof sheet?.freight?.total_weight_lbs === "number" && sheet.freight.total_weight_lbs > 0;
+  const hasMeasure =
+    hasWeight ||
+    Boolean(sheet?.freight?.dims) ||
+    (typeof sheet?.freight?.freight_class === "string" && sheet.freight.freight_class.trim());
 
   if (!originZip && !destZip && originCity && destCity) {
+    if (!hasMeasure) {
+      return "I still need the origin and destination ZIPs, and the total weight in pounds.";
+    }
     return "I still need the origin and destination ZIPs.";
   }
   if (awaiting === "origin_zip") {
@@ -85,7 +113,7 @@ function conversationalAsk(sheet, awaiting) {
   if (awaiting === "commodity") return "What’s the commodity?";
   if (awaiting === "pickup_date") return "What pickup date works?";
   if (awaiting === "accessorials") {
-    return "Any extras — liftgate, residential, inside — or should I put none?";
+    return "Any extras — liftgate, residential, inside, protect from freeze — or should I put none?";
   }
   if (awaiting === "email") return "What email should I put on the sheet?";
   return "";
@@ -112,7 +140,7 @@ export function composeConversationalReply({
     return "That ZIP is short — I need a full 5-digit ZIP. I won’t pad or guess the last digits.";
   }
   if (extracted?.flags?.incompleteTo) {
-    return "That ended at “to” — I still need the destination city, state, or ZIP. I won’t invent a dest.";
+    return "That ended at “to” — I still need the destination city, state, or ZIP. I won’t invent a destination.";
   }
   if (
     extracted?.flags?.vagueMeasure &&

@@ -37,6 +37,24 @@ describe("conversational reply copy", () => {
     expect(warm.length).toBeLessThan(result.reply.length);
   });
 
+  it("says destination / pieces / pounds instead of dest / pcs / lb", () => {
+    const dest = handleUtterance(createSession({ id: "warm-dest" }), "destination zip is 78721");
+    const destWarm = presentAgentReply(dest, true);
+    expect(destWarm).toMatch(/destination ZIP — 78721/);
+    expect(destWarm).not.toMatch(/\bdest\b/);
+    expect(destWarm).not.toMatch(/Got dest 78721/i);
+
+    const pieces = handleUtterance(createSession({ id: "warm-pcs" }), "3 pallets");
+    const piecesWarm = presentAgentReply(pieces, true);
+    expect(piecesWarm).toMatch(/3 pieces/);
+    expect(piecesWarm).not.toMatch(/\bpcs\b/);
+
+    const weight = handleUtterance(createSession({ id: "warm-lb" }), "1200 pounds");
+    const weightWarm = presentAgentReply(weight, true);
+    expect(weightWarm).toMatch(/1200 pounds/);
+    expect(weightWarm).not.toMatch(/\blb\b/);
+  });
+
   it("dump copy names parked facts and asks for both missing ZIPs", () => {
     const result = handleUtterance(
       createSession({ id: "warm-dump" }),
@@ -48,7 +66,10 @@ describe("conversational reply copy", () => {
       sheet: result.session.sheet,
       awaiting: result.session.awaiting,
     });
-    expect(warm).toBe("I have Austin and Atlanta and 1000 lb of oranges. I still need the origin and destination ZIPs.");
+    expect(warm).toBe("I have Austin and Atlanta and 1000 pounds of oranges. I still need the origin and destination ZIPs.");
+    expect(warm).not.toMatch(/\bdest\b/);
+    expect(warm).not.toMatch(/\bpcs\b/);
+    expect(warm).not.toMatch(/\blb\b/);
     expect(warm).not.toMatch(/\d{5}/);
   });
 
@@ -90,6 +111,11 @@ describe("conversational TTS wiring", () => {
     expect(app).toContain("Conversational mode");
     expect(app).toContain("presentAgentReply");
     expect(app).toContain("speakAgentReply");
+    expect(app).toContain("tts-wave");
+    expect(app).toContain("onAgentSpeaking");
+    const css = readFileSync("src/style.css", "utf8");
+    expect(css).toMatch(/@keyframes tts-wave/);
+    expect(css).toMatch(/\.tts-wave\[hidden\]/);
     expect(app).not.toContain("data-stt-provider");
     expect(app).not.toContain("stt-toggle");
     expect(app).not.toMatch(/CARTESIA_API_KEY\s*=/);

@@ -110,4 +110,38 @@ describe("freeze protect accessorials", () => {
     );
     expect(snap).toMatch(/Accessorials:.*protect_from_freeze/);
   });
+
+  it("please protect / protect while awaiting accessorials sets freeze protect", () => {
+    function readyForAccessorials(id) {
+      const session = sessionAtlantaAustin();
+      session.sheet.lanes.origin.postal_code = "30301";
+      session.sheet.lanes.destination.postal_code = "78721";
+      session.sheet.freight.pieces = 3;
+      session.sheet.freight.total_weight_lbs = 1000;
+      session.sheet.freight.commodity = "oranges";
+      session.sheet.pickup.date = "2026-09-18";
+      session.sheet.pickup.accessorials = [];
+      session.awaiting = "accessorials";
+      session.id = id;
+      return session;
+    }
+
+    const please = handleUtterance(readyForAccessorials("protect-please"), "please protect");
+    expect(please.session.sheet.pickup.accessorials).toContain("protect_from_freeze");
+    expect(please.session.askedAccessorials).toBe(true);
+    expect(please.ready).toBe(false);
+    expect(please.session.awaiting).toBe("email");
+    expect(please.reply.toLowerCase()).toMatch(/protect from freeze|freeze/);
+
+    const bare = handleUtterance(readyForAccessorials("protect-bare"), "protect");
+    expect(bare.session.sheet.pickup.accessorials).toContain("protect_from_freeze");
+    expect(bare.session.awaiting).not.toBeNull();
+    expect(bare.ready).toBe(false);
+
+    const miss = handleUtterance(readyForAccessorials("protect-miss"), "hmm what now");
+    expect(miss.session.sheet.pickup.accessorials).toEqual([]);
+    expect(miss.session.askedAccessorials).toBe(false);
+    expect(miss.session.awaiting).toBe("accessorials");
+    expect(miss.ready).toBe(false);
+  });
 });

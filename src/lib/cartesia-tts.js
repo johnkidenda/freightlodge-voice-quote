@@ -54,8 +54,23 @@ export async function fetchTtsAudio(transcript, { url, fetchImpl } = {}) {
 }
 
 let currentAudio = null;
+let speakingGeneration = 0;
+let speakingListener = null;
 
-export function stopAgentSpeech() {
+/** UI hook for the Conversational-mode speaking wave. */
+export function onAgentSpeaking(listener) {
+  speakingListener = typeof listener === "function" ? listener : null;
+}
+
+function emitSpeaking(on) {
+  try {
+    speakingListener?.(Boolean(on));
+  } catch {
+    /* UI hook */
+  }
+}
+
+function haltAudio() {
   try {
     currentAudio?.pause?.();
   } catch {
@@ -64,28 +79,47 @@ export function stopAgentSpeech() {
   currentAudio = null;
 }
 
+export function stopAgentSpeech() {
+  haltAudio();
+  speakingGeneration += 1;
+  emitSpeaking(false);
+}
+
 export async function speakAgentReply(transcript, { url, fetchImpl, playAudio } = {}) {
-  const data = await fetchTtsAudio(transcript, { url, fetchImpl });
-  if (!data) return false;
-  if (typeof playAudio === "function") {
-    await playAudio(data);
-    return true;
-  }
-  if (typeof Audio === "undefined" || typeof URL === "undefined") return false;
-  const blob = data instanceof Blob ? data : new Blob([data], { type: "audio/mpeg" });
-  const objectUrl = URL.createObjectURL(blob);
-  stopAgentSpeech();
-  const audio = new Audio(objectUrl);
-  currentAudio = audio;
-  audio.onended = () => {
-    if (currentAudio === audio) currentAudio = null;
-    URL.revokeObjectURL(objectUrl);
+  haltAudio();
+  const gen = (speakingGeneration += 1);
+  emitSpeaking(true);
+  const done = (ok) => {
+    if (gen === speakingGeneration) emitSpeaking(false);
+    return ok;
   };
   try {
-    await audio.play();
-    return true;
+    const data = await fetchTtsAudio(transcript, { url, fetchImpl });
+    if (gen !== speakingGeneration) return false;
+    if (!data) return done(false);
+    if (typeof playAudio === "function") {
+      await playAudio(data);
+      return done(true);
+    }
+    if (typeof Audio === "undefined" || typeof URL === "undefined") return done(false);
+    const blob = data instanceof Blob ? data : new Blob([data], { type: "audio/mpeg" });
+    const objectUrl = URL.createObjectURL(blob);
+    haltAudio();
+    const audio = new Audio(objectUrl);
+    currentAudio = audio;
+    audio.onended = () => {
+      if (currentAudio === audio) currentAudio = null;
+      URL.revokeObjectURL(objectUrl);
+      if (gen === speakingGeneration) emitSpeaking(false);
+    };
+    try {
+      await audio.play();
+      return true;
+    } catch {
+      URL.revokeObjectURL(objectUrl);
+      return done(false);
+    }
   } catch {
-    URL.revokeObjectURL(objectUrl);
-    return false;
+    return done(false);
   }
 }

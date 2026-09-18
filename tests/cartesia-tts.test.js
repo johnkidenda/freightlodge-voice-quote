@@ -7,6 +7,9 @@ import {
   CARTESIA_TTS_VOICE_NAME,
   fetchTtsAudio,
   getTtsProxyUrl,
+  onAgentSpeaking,
+  speakAgentReply,
+  stopAgentSpeech,
 } from "../src/lib/cartesia-tts.js";
 import { fetchSttAccessToken, resetSttTokenCache, tokenUnconfiguredError } from "../src/lib/stt-token.js";
 import { STT_TOKEN_UNCONFIGURED, getSttTokenUrl, loadSttProvider, STT_PROVIDERS } from "../src/lib/stt-providers.js";
@@ -134,5 +137,21 @@ describe("client TTS helper", () => {
     expect(tts).not.toMatch(/sk_car_/);
     expect(app).not.toContain("wss://api.cartesia.ai/stt");
     expect(corsHeaders(PAGES_ORIGIN)["Access-Control-Allow-Origin"]).toBe(PAGES_ORIGIN);
+  });
+
+  it("speaking hook turns on while generating and off when idle", async () => {
+    const flags = [];
+    onAgentSpeaking((on) => flags.push(on));
+    await speakAgentReply("Got the destination ZIP — 78721.", {
+      url: "https://proxy.example/tts",
+      fetchImpl: async () => ({ ok: true, arrayBuffer: async () => new Uint8Array([1]).buffer }),
+      playAudio: async () => {},
+    });
+    expect(flags[0]).toBe(true);
+    expect(flags.at(-1)).toBe(false);
+    flags.length = 0;
+    stopAgentSpeech();
+    expect(flags.at(-1)).toBe(false);
+    onAgentSpeaking(null);
   });
 });
