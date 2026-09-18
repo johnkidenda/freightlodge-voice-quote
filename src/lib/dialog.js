@@ -1,13 +1,13 @@
 import { emptySheet } from "./sheet.js";
 import { isReadyForQuote, nextRequiredSlot } from "./completeness.js";
 import {
+  applyExtractedSlots,
   applyZipRoleCorrection,
   applyZipToRole,
   detectZipRoleCorrection,
   extractSlots,
   firstBareZip,
   isGarbagePlace,
-  mergeExtracted,
   resolveZipAttachment,
 } from "./extract.js";
 import { detectOutOfScope } from "./scope.js";
@@ -181,7 +181,10 @@ export function handleUtterance(session, text, { now } = {}) {
     }
   }
 
-  let sheet = mergeExtracted(sheetFromClarify, extracted);
+  // Hold-and-dump: merge every extracted slot. `awaiting` only disambiguates
+  // bare ZIPs / lone counts in extract — it must never drop weight, commodity,
+  // or cities from the same utterance.
+  let sheet = applyExtractedSlots(sheetFromClarify, extracted);
 
   const roleFix = detectZipRoleCorrection(raw);
   const zipForFix = firstBareZip(raw) || extracted.flags.bareZip || session.lastBareZip;

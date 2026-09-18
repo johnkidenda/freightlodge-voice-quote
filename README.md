@@ -19,20 +19,24 @@ npm test
 npm run dev
 ```
 
-Open the printed localhost URL (Chrome or Safari). Hold the mic button to talk, or type. No API keys required for **Web Speech**.
+Open the printed localhost URL (Chrome or Safari). Hold the mic button to talk, or type. Mic → text is **Web Speech only** (no Cartesia STT). No API keys required for dictation.
 
-The composer has an STT A/B toggle: **Web Speech | Cartesia manual | Cartesia auto**. The choice persists in `localStorage`. Cartesia modes need a short-lived token from the proxy — they fail-soft with “STT token proxy not configured” if `VITE_STT_TOKEN_URL` is unset. **Never** put `CARTESIA_API_KEY` in `VITE_*` or the Pages bundle.
+**Conversational mode** (separate toggle) rewrites agent bubbles into short customer-service copy and, when the token proxy is configured, speaks them with Cartesia TTS. Mode off = formal prompts + silent. **Never** put `CARTESIA_API_KEY` in `VITE_*` or the Pages bundle.
 
 `npm run preview` serves the production build plus the same local API stubs.
 
-Optional: copy `.env.example` → `.env` if you later wire `OPENAI_API_KEY` into a local enhance endpoint, or `CARTESIA_API_KEY` + `VITE_STT_TOKEN_URL` for Cartesia STT. The static app must keep working without them.
+Optional: copy `.env.example` → `.env` if you later wire `OPENAI_API_KEY` into a local enhance endpoint, or `CARTESIA_API_KEY` + `VITE_STT_TOKEN_URL` for spoken replies. The static app must keep working without them (toggle still warms the copy; TTS no-ops).
 
-### Cartesia STT token proxy
+### Cartesia TTS token / audio proxy
 
-The Pages SPA fetches `{ token, expires_in }` from `VITE_STT_TOKEN_URL`, then opens Cartesia’s STT websockets with `access_token` + `cartesia_version=2026-08-14`.
+The Pages SPA never talks to Cartesia with the long-lived key. `VITE_STT_TOKEN_URL` is the public mint URL; conversational TTS POSTs the reply to a sibling `/tts` path on that same origin. The proxy holds `CARTESIA_API_KEY` and returns mp3.
+
+Default voice: **Skylar** (`db6b0ed5-d5d3-463d-ae85-518a07d3c2b4`, “Friendly Guide” — customer care / sales-leaning). Model: `sonic-3`.
+
+The mint endpoint still returns `{ token, expires_in }` with `{ grants: { tts: true, stt: true } }` so a short-lived token is available; the browser does not embed the API key.
 
 - Worker + local stub: [`token-proxy/README.md`](token-proxy/README.md)
-- Local Vite (`npm run dev`) also exposes `POST /api/stt-token` when `CARTESIA_API_KEY` is in the server env — point `VITE_STT_TOKEN_URL=/api/stt-token`
+- Local Vite (`npm run dev`) exposes `POST /api/stt-token` and `POST /api/tts` when `CARTESIA_API_KEY` is in the server env — point `VITE_STT_TOKEN_URL=/api/stt-token`
 
 Anthony’s production steps (key stays on the box / Worker secret):
 
@@ -154,7 +158,8 @@ GITHUB_ACTIONS=1 npm run preview
 npm test
 ```
 
-- STT provider persist + Cartesia finalize/tail (no API key in the client)
+- Hold-and-dump: one utterance parks weight + commodity + cities while awaiting origin ZIP
+- Conversational copy + Cartesia TTS proxy (Skylar); Web Speech only for STT
 - Completeness rules for `ready_for_quote`
 - Never-invent: cities do not become ZIPs; “standard class” / “a few hundred pounds” stay `null`
 - Out of scope does not produce `quote_result`

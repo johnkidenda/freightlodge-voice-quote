@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { createSession, handleUtterance, openingMessage } from "../src/lib/dialog.js";
-import { STT_PROVIDER_IDS, STT_PROVIDERS, getSttProvider } from "../src/lib/stt-providers.js";
+import { STT_PROVIDER_IDS, getSttProvider } from "../src/lib/stt-providers.js";
 import {
   copyTextToClipboard,
   FORMSUBMIT_AJAX_URL,
@@ -44,17 +44,14 @@ describe("QA transcript copy", () => {
     expect(text).toContain("STT: Web Speech");
   });
 
-  it("stamps Active-badge STT labels into the sheet snapshot", () => {
+  it("stamps Web Speech on the sheet snapshot", () => {
     const session = createSession({ id: "stt-snap" });
     const messages = [{ role: "user", text: "hello" }];
-    for (const provider of STT_PROVIDERS) {
-      expect(getSttProvider(provider.id).label).toBe(provider.label);
-      const text = formatQaTranscript(messages, { ...session, sttProvider: provider.id });
-      expect(text).toContain(`STT: ${provider.label}`);
-    }
-    expect(formatQaTranscript(messages, { ...session, sttProvider: STT_PROVIDER_IDS.CARTESIA_AUTO })).toContain(
-      "STT: Cartesia auto",
+    expect(getSttProvider(STT_PROVIDER_IDS.WEB_SPEECH).label).toBe("Web Speech");
+    expect(formatQaTranscript(messages, { ...session, sttProvider: STT_PROVIDER_IDS.WEB_SPEECH })).toContain(
+      "STT: Web Speech",
     );
+    expect(formatQaTranscript(messages, session)).toContain("STT: Web Speech");
   });
 
   it("uses clipboard.writeText when the API is present", async () => {
@@ -98,14 +95,14 @@ describe("sendSessionTranscript delivery", () => {
     const result = await sendSessionTranscript(
       [{ role: "user", text: "Chicago 60601 to Dallas 75201" }],
       session,
-      { fetchFn, webhookUrl: "", sttProvider: STT_PROVIDER_IDS.CARTESIA_MANUAL },
+      { fetchFn, webhookUrl: "", sttProvider: STT_PROVIDER_IDS.WEB_SPEECH },
     );
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toBe(FORMSUBMIT_AJAX_URL);
     expect(calls[0].url).toContain("formsubmit.co/ajax/john@freightlodge.com");
     const body = JSON.parse(calls[0].init.body);
     expect(body.message).toContain("User: Chicago 60601 to Dallas 75201");
-    expect(body.message).toContain("STT: Cartesia manual");
+    expect(body.message).toContain("STT: Web Speech");
     expect(body._subject).toContain("[Freight Lodge transcript]");
     expect(result.ok).toBe(true);
     expect(result.mode).toBe("formsubmit");
@@ -116,7 +113,7 @@ describe("sendSessionTranscript delivery", () => {
     expect(app).toContain("Opened mail app…");
     expect(app).toContain("Could not send silently — opened mail");
     expect(app).toContain('result.mode === "formsubmit"');
-    expect(app).toContain("sttProvider: state.sttProvider");
+    expect(app).toContain("sttProvider: STT_PROVIDER_IDS.WEB_SPEECH");
     expect(app).not.toContain("Opened mail app with transcript");
   });
 

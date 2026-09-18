@@ -2,17 +2,15 @@ import { createSession, handleUtterance, openingMessage } from "./lib/dialog.js"
 import { progressItems } from "./lib/completeness.js";
 import { requestQuote } from "./lib/handoff.js";
 import { emailQuote, MAIL_FROM } from "./lib/email.js";
-import { speechSupported } from "./lib/speech.js";
 import { createSpeechSession, providerSupported } from "./lib/speech-session.js";
+import { STT_PROVIDER_IDS, getSttProvider } from "./lib/stt-providers.js";
 import {
-  STT_PROVIDERS,
-  STT_TOKEN_UNCONFIGURED,
-  getSttProvider,
-  getSttTokenUrl,
-  isCartesiaProvider,
-  loadSttProvider,
-  saveSttProvider,
-} from "./lib/stt-providers.js";
+  CONVERSATIONAL_GREETING,
+  loadConversationalMode,
+  presentAgentReply,
+  saveConversationalMode,
+} from "./lib/conversational.js";
+import { speakAgentReply, stopAgentSpeech } from "./lib/cartesia-tts.js";
 import { copyTextToClipboard, sendSessionTranscript } from "./lib/transcript.js";
 import { playListenCue, primeListenCue } from "./lib/listen-cue.js";
 
@@ -22,17 +20,24 @@ const SAMPLE =
 export function mountApp(root) {
   const state = {
     session: createSession(),
-    messages: [{ role: "assistant", text: openingMessage() }],
+    messages: [
+      {
+        role: "assistant",
+        text: loadConversationalMode(typeof localStorage !== "undefined" ? localStorage : null)
+          ? CONVERSATIONAL_GREETING
+          : openingMessage(),
+      },
+    ],
     listening: false,
     finishing: false,
     interim: "",
     busy: false,
     emailNote: null,
     hold: null,
-    sttProvider: loadSttProvider(typeof localStorage !== "undefined" ? localStorage : null),
+    conversational: loadConversationalMode(typeof localStorage !== "undefined" ? localStorage : null),
   };
 
-  root.innerHTML = layout(state.sttProvider);
+  root.innerHTML = layout(state.conversational);
   const els = {
     thread: root.querySelector("#thread"),
     sheet: root.querySelector("#sheet-list"),
@@ -41,7 +46,7 @@ export function mountApp(root) {
     hold: root.querySelector("#hold"),
     holdHint: root.querySelector("#hold-hint"),
     sttBadge: root.querySelector("#stt-badge"),
-    sttToggle: root.querySelector("#stt-toggle"),
+    conversational: root.querySelector("#conversational"),
     quote: root.querySelector("#quote-card"),
     status: root.querySelector("#status-pill"),
     sample: root.querySelector("#sample"),
@@ -77,7 +82,7 @@ export function mountApp(root) {
       onError(err) {
         state.listening = false;
         state.finishing = false;
-        push(state, "assistant", speechError(err, state.sttProvider));
+        push(state, "assistant", speechError(err));
         render(els, state);
       },
       onPreview(text) {
@@ -100,15 +105,12 @@ export function mountApp(root) {
     els.hold.setAttribute("aria-disabled", ok ? "false" : "true");
   }
 
-  function attachSpeechSession(providerId) {
+  function attachSpeechSession() {
     state.hold?.abort?.();
     state.listening = false;
     state.finishing = false;
     state.interim = "";
-    const talk = createSpeechSession({
-      provider: providerId,
-      ...talkCallbacks(),
-    });
+    const talk = createSpeechSession(talkCallbacks());
     state.hold = talk;
     sessionRef.current = talk;
     applyHoldAvailability();
@@ -116,20 +118,19 @@ export function mountApp(root) {
     return talk;
   }
 
-  attachSpeechSession(state.sttProvider);
+  attachSpeechSession();
   bindMic(els.hold, sessionRef);
 
-  els.sttToggle?.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-stt-provider]");
-    if (!btn) return;
-    const next = btn.getAttribute("data-stt-provider");
-    if (!next || next === state.sttProvider) return;
-    state.sttProvider = saveSttProvider(
-      next,
+  els.conversational?.addEventListener("click", () => {
+    state.conversational = saveConversationalMode(
+      !state.conversational,
       typeof localStorage !== "undefined" ? localStorage : null,
     );
-    attachSpeechSession(state.sttProvider);
-    syncSttToggle(els, state.sttProvider);
+    if (!state.conversational) stopAgentSpeech();
+    if (state.messages.length === 1 && state.messages[0]?.role === "assistant") {
+      state.messages[0].text = state.conversational ? CONVERSATIONAL_GREETING : openingMessage();
+    }
+    render(els, state);
   });
 
   els.form.addEventListener("submit", (e) => {
@@ -151,7 +152,10 @@ export function mountApp(root) {
 
   els.reset.addEventListener("click", () => {
     state.session = createSession();
-    state.messages = [{ role: "assistant", text: openingMessage() }];
+    state.messages = [
+      { role: "assistant", text: state.conversational ? CONVERSATIONAL_GREETING : openingMessage() },
+    ];
+    stopAgentSpeech();
     state.emailNote = null;
     state.interim = "";
     render(els, state);
@@ -170,9 +174,8 @@ export function mountApp(root) {
   render(els, state);
 }
 
-function layout(providerId) {
-  const provider = getSttProvider(providerId);
-  const speechOk = providerSupported(provider.id);
+function layout(conversational) {
+  const speechOk = providerSupported();
   const assetBase = import.meta.env.BASE_URL || "./";
   return `
     <header class="top">
@@ -201,20 +204,17 @@ function layout(providerId) {
             <input id="typed" type="text" autocomplete="off" enterkeyhint="send" placeholder="Type origin ZIP, dest ZIP, pieces…" />
             <button type="submit" class="send">Send</button>
           </div>
-          <div id="stt-toggle" class="stt-toggle" role="group" aria-label="STT provider">
-            ${STT_PROVIDERS.map(
-              (p) =>
-                `<button type="button" class="stt-opt${p.id === provider.id ? " is-active" : ""}" data-stt-provider="${p.id}" aria-pressed="${p.id === provider.id ? "true" : "false"}">${p.label}</button>`,
-            ).join("")}
-          </div>
+          <button type="button" id="conversational" class="mode-toggle${conversational ? " is-active" : ""}" aria-pressed="${conversational ? "true" : "false"}">
+            Conversational mode
+          </button>
           <p class="stt-badge-row">
-            <span id="stt-badge" class="stt-badge">Active: ${provider.label}</span>
+            <span id="stt-badge" class="stt-badge">${sttBadgeText(conversational)}</span>
           </p>
           <button type="button" id="hold" class="hold ${speechOk ? "" : "is-disabled"}" aria-pressed="false">
             <span class="hold-dot"></span>
             <span class="hold-label">Hold to talk</span>
           </button>
-          <p id="hold-hint" class="hint">${defaultHoldHint(provider.id, speechOk)}</p>
+          <p id="hold-hint" class="hint">${defaultHoldHint(speechOk)}</p>
           <button type="button" id="send-transcript" class="send-transcript">Send transcript</button>
           <p id="send-note" class="send-note" hidden></p>
         </form>
@@ -299,8 +299,14 @@ async function acceptUserText(els, state, text) {
   render(els, state);
   const result = handleUtterance(state.session, text);
   state.session = result.session;
-  push(state, "assistant", result.reply);
+  const reply = presentAgentReply(result, state.conversational);
+  push(state, "assistant", reply);
   render(els, state);
+  if (state.conversational) {
+    void speakAgentReply(reply);
+  } else {
+    stopAgentSpeech();
+  }
 
   if (result.outOfScope) {
     render(els, state);
@@ -369,7 +375,7 @@ async function sendTranscriptToTeam(els, state) {
 
   try {
     const result = await sendSessionTranscript(state.messages, state.session, {
-      sttProvider: state.sttProvider,
+      sttProvider: STT_PROVIDER_IDS.WEB_SPEECH,
     });
     if (result.ok && (result.mode === "formsubmit" || result.mode === "webhook")) {
       btn.textContent = "Sent";
@@ -468,45 +474,35 @@ function renderChrome(els, state) {
     }
   }
   if (els.sttBadge) {
-    els.sttBadge.textContent = `Active: ${getSttProvider(state.sttProvider).label}`;
+    els.sttBadge.textContent = sttBadgeText(state.conversational);
+  }
+  if (els.conversational) {
+    els.conversational.classList.toggle("is-active", state.conversational);
+    els.conversational.setAttribute("aria-pressed", state.conversational ? "true" : "false");
   }
   if (state.finishing) {
-    els.holdHint.textContent = state.interim ? `${providerHintPrefix(state.sttProvider)} ${state.interim}` : `${providerHintPrefix(state.sttProvider)} Finishing…`;
+    els.holdHint.textContent = state.interim ? state.interim : "Finishing…";
   } else if (state.listening && state.interim) {
-    els.holdHint.textContent = `${providerHintPrefix(state.sttProvider)} ${state.interim}`;
+    els.holdHint.textContent = state.interim;
   } else if (state.hold?.supported) {
-    els.holdHint.textContent = defaultHoldHint(state.sttProvider, true, state.hold.mode);
+    els.holdHint.textContent = defaultHoldHint(true, state.hold.mode);
   } else {
-    els.holdHint.textContent = defaultHoldHint(state.sttProvider, false, state.hold?.mode);
+    els.holdHint.textContent = defaultHoldHint(false, state.hold?.mode);
   }
 }
 
-function syncSttToggle(els, providerId) {
-  els.sttToggle?.querySelectorAll("[data-stt-provider]").forEach((btn) => {
-    const active = btn.getAttribute("data-stt-provider") === providerId;
-    btn.classList.toggle("is-active", active);
-    btn.setAttribute("aria-pressed", active ? "true" : "false");
-  });
+function sttBadgeText(conversational) {
+  return conversational ? "STT: Web Speech · Conversational" : "STT: Web Speech";
 }
 
-function providerHintPrefix(providerId) {
-  return `[${getSttProvider(providerId).label}]`;
-}
-
-function defaultHoldHint(providerId, supported, mode) {
-  const prefix = providerHintPrefix(providerId);
-  if (isCartesiaProvider(providerId) && !getSttTokenUrl()) {
-    return `${prefix} ${STT_TOKEN_UNCONFIGURED}`;
-  }
+function defaultHoldHint(supported, mode) {
   if (!supported) {
-    return isCartesiaProvider(providerId)
-      ? `${prefix} Mic capture isn’t available. Type instead.`
-      : "Voice needs Chrome/Safari with mic permission. Type instead.";
+    return "Voice needs Chrome/Safari with mic permission. Type instead.";
   }
   if (mode === "toggle") {
-    return `${prefix} Tap to record, tap again to send. I wait a beat after Stop so the last words aren’t cut off.`;
+    return "Tap to record, tap again to send. I wait a beat after Stop so the last words aren’t cut off.";
   }
-  return `${prefix} Press and hold. Release — I wait a beat so the last words aren’t cut off.`;
+  return "Press and hold. Release — I wait a beat so the last words aren’t cut off.";
 }
 
 function quoteCard(sheet, emailNote) {
@@ -545,24 +541,15 @@ function quoteCard(sheet, emailNote) {
   </section>`;
 }
 
-function speechError(err, providerId) {
+function speechError(err) {
   const code = err?.error || err?.message || "mic error";
   const text = String(code);
   if (text.includes("not-allowed") || text.includes("permission")) {
     return "Mic permission was denied. Type the lane instead.";
   }
-  if (err?.code === "STT_TOKEN_UNCONFIGURED" || text.includes(STT_TOKEN_UNCONFIGURED)) {
-    return STT_TOKEN_UNCONFIGURED;
-  }
-  const label = getSttProvider(providerId).label;
+  const label = getSttProvider(STT_PROVIDER_IDS.WEB_SPEECH).label;
   if (/empty transcript/i.test(text)) {
     return `${label} heard nothing. Hold, speak clearly, then release — or type instead.`;
-  }
-  if (/produced no audio|mic capture|microphone is locked/i.test(text)) {
-    return `${label} didn’t get microphone audio. Check permission and try again, or type instead.`;
-  }
-  if (/failed to open|closed unexpectedly|closed before|socket error/i.test(text)) {
-    return `${label} couldn’t keep the STT connection (${text}). Type instead — I won’t invent ZIPs or weights.`;
   }
   return `${label} isn’t available (${text}). Type instead — I won’t invent ZIPs or weights.`;
 }

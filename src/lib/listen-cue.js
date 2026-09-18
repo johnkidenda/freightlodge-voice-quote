@@ -6,9 +6,11 @@ export const LISTEN_CUE_TICK_MS = 70;
 export const LISTEN_CUE_GAP_MS = 35;
 export const LISTEN_CUE_MS = LISTEN_CUE_TICK_MS * 2 + LISTEN_CUE_GAP_MS;
 export const LISTEN_CUE_GAIN = 0.16;
-export const LISTEN_HAPTIC_PATTERN = [16, 28, 22];
+/** Single tap on mic-on. Not a multi-pulse [on, off, on] pattern. */
+export const LISTEN_HAPTIC_MS = 20;
+export const LISTEN_HAPTIC_PATTERN = LISTEN_HAPTIC_MS;
 export const LISTEN_CUE_DEBOUNCE_MS = 800;
-export const LISTEN_HAPTIC_DEBOUNCE_MS = 120;
+export const LISTEN_HAPTIC_DEBOUNCE_MS = 800;
 
 let primed = null;
 let lastPlayAt = 0;
@@ -54,10 +56,8 @@ export function primeListenCue({ AudioContextCtor } = {}) {
       primed.resume?.().catch?.(() => {});
     }
     startSilentUnlock(primed);
-    pulseListenHaptic();
     return primed;
   } catch {
-    pulseListenHaptic();
     return null;
   }
 }
