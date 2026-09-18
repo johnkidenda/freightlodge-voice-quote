@@ -10,22 +10,10 @@ import {
   presentAgentReply,
   saveConversationalMode,
 } from "./lib/conversational.js";
-import {
-  DEFAULT_TTS_ENGINE,
-  TTS_ENGINES,
-  loadTtsEngine,
-  onAgentSpeaking,
-  saveTtsEngine,
-  speakAgentReply,
-  stopAgentSpeech,
-} from "./lib/agent-speech.js";
+import { onAgentSpeaking, speakAgentReply, stopAgentSpeech } from "./lib/agent-speech.js";
 import { copyTextToClipboard, sendSessionTranscript } from "./lib/transcript.js";
 import { playListenCue, primeListenCue } from "./lib/listen-cue.js";
-import {
-  clearLastTtsUtterance,
-  formatTtsLatencyReadout,
-  getLastTtsUtterance,
-} from "./lib/tts-timing.js";
+import { formatAppVersionLabel, formatAppVersionTitle, getAppCommit, getAppVersion } from "./lib/app-version.js";
 
 const SAMPLE =
   "Chicago IL 60601 to Dallas TX 75201, 3 pallets, 1200 pounds, auto parts, pickup tomorrow, liftgate delivery, email shipper@example.com";
@@ -48,9 +36,7 @@ export function mountApp(root) {
     emailNote: null,
     hold: null,
     conversational: loadConversationalMode(typeof localStorage !== "undefined" ? localStorage : null),
-    ttsEngine: loadTtsEngine(typeof localStorage !== "undefined" ? localStorage : null),
     ttsSpeaking: false,
-    ttsStats: getLastTtsUtterance(),
   };
 
   root.innerHTML = layout(state.conversational);
@@ -64,9 +50,7 @@ export function mountApp(root) {
     sttBadge: root.querySelector("#stt-badge"),
     conversational: root.querySelector("#conversational"),
     convoAudio: root.querySelector("#convo-audio"),
-    voiceEngine: root.querySelector("#voice-engine"),
     ttsWave: root.querySelector("#tts-wave"),
-    ttsLatency: root.querySelector("#tts-latency"),
     quote: root.querySelector("#quote-card"),
     status: root.querySelector("#status-pill"),
     sample: root.querySelector("#sample"),
@@ -143,7 +127,6 @@ export function mountApp(root) {
   onAgentSpeaking((speaking) => {
     state.ttsSpeaking = Boolean(speaking);
     renderTtsWave(els, state);
-    renderTtsLatency(els, state);
   });
 
   function toggleConversational() {
@@ -160,18 +143,6 @@ export function mountApp(root) {
 
   els.conversational?.addEventListener("click", toggleConversational);
   els.convoAudio?.addEventListener("click", toggleConversational);
-  els.voiceEngine?.addEventListener("click", (e) => {
-    const btn = e.target.closest("[data-tts-engine]");
-    if (!btn) return;
-    const next = btn.getAttribute("data-tts-engine");
-    if (next !== TTS_ENGINES.BROWSER && next !== TTS_ENGINES.CARTESIA) return;
-    stopAgentSpeech();
-    state.ttsEngine = saveTtsEngine(
-      next,
-      typeof localStorage !== "undefined" ? localStorage : null,
-    );
-    render(els, state);
-  });
 
   els.form.addEventListener("submit", (e) => {
     e.preventDefault();
@@ -196,8 +167,6 @@ export function mountApp(root) {
       { role: "assistant", text: state.conversational ? CONVERSATIONAL_GREETING : openingMessage() },
     ];
     stopAgentSpeech();
-    clearLastTtsUtterance();
-    state.ttsStats = getLastTtsUtterance();
     state.emailNote = null;
     state.interim = "";
     render(els, state);
@@ -229,6 +198,7 @@ function layout(conversational) {
         </div>
       </div>
       <div class="top-actions">
+        <span id="app-version" class="version-chip" title="${escapeHtml(formatAppVersionTitle(getAppVersion(), getAppCommit()))}">${escapeHtml(formatAppVersionLabel(getAppVersion()))}</span>
         <span id="status-pill" class="pill">collecting</span>
         <button type="button" id="reset" class="textish">New sheet</button>
       </div>
@@ -253,15 +223,9 @@ function layout(conversational) {
             <button type="button" id="convo-audio" class="convo-audio" data-on="${conversational ? "true" : "false"}" aria-pressed="${conversational ? "true" : "false"}" title="${conversational ? "Turn conversational mode off" : "Turn conversational mode on"}" aria-label="${conversational ? "Turn conversational mode off" : "Turn conversational mode on"}">
               ${speakerIcon(conversational)}
             </button>
-            <span id="voice-engine" class="voice-engine" ${conversational ? "" : "hidden"}>
-              <span class="voice-engine-label">Voice:</span>
-              <button type="button" data-tts-engine="${TTS_ENGINES.BROWSER}" class="voice-engine-btn${DEFAULT_TTS_ENGINE === TTS_ENGINES.BROWSER ? " is-active" : ""}">Browser</button>
-              <button type="button" data-tts-engine="${TTS_ENGINES.CARTESIA}" class="voice-engine-btn">Cartesia</button>
-            </span>
             <span id="tts-wave" class="tts-wave" hidden aria-hidden="true" title="Speaking">
               <span></span><span></span><span></span><span></span>
             </span>
-            <span id="tts-latency" class="tts-latency" hidden aria-live="polite">—</span>
           </div>
           <p class="stt-badge-row">
             <span id="stt-badge" class="stt-badge">${sttBadgeText(conversational)}</span>
@@ -287,6 +251,7 @@ function layout(conversational) {
     </main>
 
     <footer class="powered-by">
+      <span class="app-version-foot" title="${escapeHtml(formatAppVersionTitle(getAppVersion(), getAppCommit()))}">${escapeHtml(formatAppVersionLabel(getAppVersion()))}</span>
       <span class="powered-label">Powered by</span>
       <a class="powered-logo" href="https://exfresso.com/" target="_blank" rel="noopener noreferrer" aria-label="Exfresso">
         <img src="${assetBase}assets/exfresso-logo.svg" alt="" height="18" />
@@ -359,14 +324,7 @@ async function acceptUserText(els, state, text) {
   push(state, "assistant", reply);
   render(els, state);
   if (state.conversational) {
-    void speakAgentReply(reply, {
-      engine: state.ttsEngine,
-      storage: typeof localStorage !== "undefined" ? localStorage : null,
-      onTtsStats(stats) {
-        state.ttsStats = stats;
-        renderTtsLatency(els, state);
-      },
-    });
+    void speakAgentReply(reply);
   } else {
     stopAgentSpeech();
   }
@@ -437,12 +395,8 @@ async function sendTranscriptToTeam(els, state) {
   }
 
   try {
-    const tts = getLastTtsUtterance();
     const result = await sendSessionTranscript(state.messages, state.session, {
       sttProvider: STT_PROVIDER_IDS.WEB_SPEECH,
-      ttsEngine: state.ttsEngine,
-      ttsFirstAudioMs: tts.firstAudioMs,
-      ttsDurationMs: tts.durationMs,
     });
     if (result.ok && (result.mode === "formsubmit" || result.mode === "webhook")) {
       btn.textContent = "Sent";
@@ -557,9 +511,7 @@ function renderChrome(els, state) {
     els.input.setAttribute("autocomplete", awaitingEmail ? "email" : "off");
   }
   renderConvoAudio(els, state);
-  renderVoiceEngine(els, state);
   renderTtsWave(els, state);
-  renderTtsLatency(els, state);
   if (state.finishing) {
     els.holdHint.textContent = state.interim ? state.interim : "Finishing…";
   } else if (state.listening && state.interim) {
@@ -593,32 +545,11 @@ function renderConvoAudio(els, state) {
   els.convoAudio.innerHTML = speakerIcon(on);
 }
 
-function renderVoiceEngine(els, state) {
-  if (!els.voiceEngine) return;
-  const show = Boolean(state.conversational);
-  els.voiceEngine.hidden = !show;
-  const engine = state.ttsEngine === TTS_ENGINES.CARTESIA ? TTS_ENGINES.CARTESIA : TTS_ENGINES.BROWSER;
-  for (const btn of els.voiceEngine.querySelectorAll("[data-tts-engine]")) {
-    btn.classList.toggle("is-active", btn.getAttribute("data-tts-engine") === engine);
-  }
-}
-
 function renderTtsWave(els, state) {
   if (!els.ttsWave) return;
   const show = Boolean(state.conversational && state.ttsSpeaking);
   els.ttsWave.hidden = !show;
   els.ttsWave.setAttribute("aria-hidden", show ? "false" : "true");
-}
-
-function renderTtsLatency(els, state) {
-  if (!els.ttsLatency) return;
-  const show = Boolean(state.conversational);
-  els.ttsLatency.hidden = !show;
-  els.ttsLatency.textContent = formatTtsLatencyReadout({
-    engine: state.ttsStats?.engine || state.ttsEngine,
-    firstAudioMs: state.ttsStats?.firstAudioMs,
-    silent: !show,
-  });
 }
 
 function sttBadgeText(conversational) {

@@ -1,0 +1,37 @@
+import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { nextVersion } from "../scripts/bump-version.mjs";
+import { formatAppVersionLabel, formatAppVersionTitle } from "../src/lib/app-version.js";
+
+describe("app version 0.XX", () => {
+  it("VERSION is 0.20 for this ship (19 merged + this PR)", () => {
+    const raw = readFileSync("VERSION", "utf8").trim();
+    expect(raw).toBe("0.20");
+    expect(formatAppVersionLabel(raw)).toBe("v0.20");
+    expect(formatAppVersionTitle("0.20", "abc1234")).toBe("v0.20 (abc1234)");
+    expect(formatAppVersionTitle("0.20", "dev")).toBe("v0.20");
+  });
+
+  it("bump script increments 0.XX by one", () => {
+    expect(nextVersion("0.20")).toBe("0.21");
+    expect(nextVersion("v0.09")).toBe("0.10");
+  });
+
+  it("header and footer show the version chip", () => {
+    const app = readFileSync("src/app.js", "utf8");
+    expect(app).toContain('id="app-version"');
+    expect(app).toContain("formatAppVersionLabel");
+    expect(app).toContain("app-version-foot");
+    const css = readFileSync("src/style.css", "utf8");
+    expect(css).toMatch(/\.version-chip/);
+    expect(css).toMatch(/\.app-version-foot/);
+  });
+
+  it("CI auto-bumps VERSION on future PRs that do not already increment it", () => {
+    const wf = readFileSync(".github/workflows/version-on-pr.yml", "utf8");
+    expect(wf).toContain("bump-version.mjs");
+    expect(wf).toContain("MAIN_VER");
+    const deploy = readFileSync(".github/workflows/deploy-pages.yml", "utf8");
+    expect(deploy).toContain("VITE_APP_COMMIT");
+  });
+});
