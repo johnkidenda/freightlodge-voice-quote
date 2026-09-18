@@ -1404,6 +1404,15 @@ function wouldSwapLabeledCity(incomingCity, keptThis, keptOther) {
   return Boolean(self && self !== incoming);
 }
 
+/**
+ * Apply every extracted slot onto the sheet. Callers must not gate this by
+ * `awaiting` — a hold-and-dump utterance can fill weight, commodity, and
+ * cities while the session is still asking for origin_zip.
+ */
+export function applyExtractedSlots(sheet, extracted) {
+  return mergeExtracted(sheet, extracted);
+}
+
 /** Merge extracted slots onto a sheet. ZIP-only updates never replace the place object. */
 export function mergeExtracted(sheet, extracted) {
   const next = structuredClone(sheet);

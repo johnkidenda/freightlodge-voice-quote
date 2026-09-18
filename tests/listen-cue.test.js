@@ -102,7 +102,7 @@ describe("listen-start cue", () => {
     resetListenCue();
   });
 
-  it("vibrates a short pattern and is imported from the app gesture + onStart paths", () => {
+  it("vibrates a single tap on mic-on and is imported from the app gesture + onStart paths", () => {
     resetListenCue();
     const pulses = [];
     const vibrateFn = (p) => {
@@ -111,8 +111,10 @@ describe("listen-start cue", () => {
     };
     expect(pulseListenHaptic({ vibrateFn, now: 1 })).toBe(true);
     expect(pulses).toEqual([LISTEN_HAPTIC_PATTERN]);
+    expect(typeof LISTEN_HAPTIC_PATTERN).toBe("number");
+    expect(LISTEN_HAPTIC_PATTERN).toBeGreaterThanOrEqual(10);
+    expect(Array.isArray(LISTEN_HAPTIC_PATTERN)).toBe(false);
     expect(pulseListenHaptic({ vibrateFn, now: 50 })).toBe(false);
-    expect(LISTEN_HAPTIC_PATTERN[0]).toBeGreaterThanOrEqual(10);
 
     const app = readFileSync("src/app.js", "utf8");
     expect(app).toMatch(/from "\.\/lib\/listen-cue\.js"/);

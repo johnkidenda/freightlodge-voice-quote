@@ -1,13 +1,18 @@
-# STT token proxy (Cartesia)
+# Cartesia token + TTS proxy
 
-Mints short-lived Cartesia `access_token`s with `{ grants: { stt: true } }` so the GitHub Pages SPA never sees `CARTESIA_API_KEY`.
+Mints short-lived Cartesia `access_token`s with `{ grants: { tts: true, stt: true } }` and proxies TTS audio so the GitHub Pages SPA never sees `CARTESIA_API_KEY`.
 
-The Pages client calls `VITE_STT_TOKEN_URL` (this Worker or the local stub), then opens:
+Mic → text is **Web Speech only**. Cartesia is used for **spoken agent replies** when Conversational mode is on.
 
-- `wss://api.cartesia.ai/stt/websocket` (manual finalize)
-- `wss://api.cartesia.ai/stt/turns/websocket` (auto turns)
+The Pages client:
 
-with query params `access_token` + `cartesia_version=2026-08-14`.
+1. Reads `VITE_STT_TOKEN_URL` (this Worker or the local stub)
+2. POSTs the agent reply to `{origin}/tts` (or `/api/tts` next to `/api/stt-token`)
+3. Plays the returned `audio/mpeg`
+
+Default voice: **Skylar** (`db6b0ed5-d5d3-463d-ae85-518a07d3c2b4`, Friendly Guide). Model `sonic-3`.
+
+Mint (`POST /` or `POST /api/stt-token`) still returns `{ token, expires_in }` for a short-lived access token. Do not put the long-lived key in `VITE_*`.
 
 ## Anthony — production Worker (workers.dev)
 
@@ -37,6 +42,8 @@ Then:
 
 CORS allows `https://johnkidenda.github.io` (and localhost Vite ports). Add other origins in `src/mint.js` (`CORS_ORIGINS`).
 
+Redeploy this Worker after pulling TTS (`POST /tts`) so spoken replies work on Pages.
+
 ## Local Node stub
 
 ```bash
@@ -45,9 +52,12 @@ CARTESIA_API_KEY= node token-proxy/local-stub.mjs
 
 Set the key in the environment only. Listens on `http://127.0.0.1:8787` (`PORT` / `HOST` override).
 
-`npm run dev` also mints at `/api/stt-token` when `CARTESIA_API_KEY` is in the server env — use `VITE_STT_TOKEN_URL=/api/stt-token`.
+- `POST /` — mint `{ token, expires_in }`
+- `POST /tts` — mp3 for `{ transcript }`
 
-Web Speech does **not** need this proxy. Cartesia modes fail-soft with “STT token proxy not configured” until the URL is set and Pages is rebuilt.
+`npm run dev` also serves `/api/stt-token` and `/api/tts` when `CARTESIA_API_KEY` is in the server env — use `VITE_STT_TOKEN_URL=/api/stt-token`.
+
+Web Speech does **not** need this proxy. Conversational mode still rewrites reply copy if the URL is unset; TTS stays silent.
 
 ## Env
 

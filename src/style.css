@@ -178,7 +178,8 @@ button, input { font: inherit; }
   color: var(--ok);
 }
 
-.stt-toggle {
+.stt-toggle,
+.mode-toggle {
   display: flex;
   flex-wrap: wrap;
   gap: 0;
@@ -186,6 +187,22 @@ button, input { font: inherit; }
   border-radius: 12px;
   overflow: hidden;
   background: #fff;
+}
+.mode-toggle {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--navy);
+  background: #fffdf8;
+  cursor: pointer;
+}
+.mode-toggle.is-active {
+  background: var(--navy);
+  color: #f6f1e8;
 }
 .stt-opt {
   flex: 1 1 auto;

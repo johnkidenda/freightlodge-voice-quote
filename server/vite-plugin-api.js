@@ -1,6 +1,6 @@
 import { simulateExfressoRunner } from "../src/lib/handoff.js";
 import { MAIL_FROM, formatQuoteEmail } from "../src/lib/email.js";
-import { mintCartesiaToken } from "../token-proxy/src/mint.js";
+import { mintCartesiaToken, synthesizeCartesiaTts } from "../token-proxy/src/mint.js";
 
 function readJson(req) {
   return new Promise((resolve, reject) => {
@@ -34,7 +34,7 @@ async function handler(req, res, next) {
   const path = routePath(req.url);
   if (
     req.method === "OPTIONS" &&
-    (path === "/api/quote-handoff" || path === "/api/email-quote" || path === "/api/stt-token")
+    (path === "/api/quote-handoff" || path === "/api/email-quote" || path === "/api/stt-token" || path === "/api/tts")
   ) {
     res.statusCode = 204;
     res.end();
@@ -52,6 +52,30 @@ async function handler(req, res, next) {
       send(res, 200, minted);
     } catch (err) {
       send(res, 502, { error: String(err.message || err) });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && path === "/api/tts") {
+    const apiKey = process.env.CARTESIA_API_KEY;
+    if (!apiKey) {
+      send(res, 503, { error: "STT token proxy not configured" });
+      return;
+    }
+    try {
+      const body = await readJson(req);
+      const audio = await synthesizeCartesiaTts({
+        apiKey,
+        transcript: body.transcript || body.text || "",
+        voiceId: body.voice_id,
+      });
+      res.statusCode = 200;
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("Cache-Control", "no-store");
+      res.end(Buffer.from(audio));
+    } catch (err) {
+      const status = err?.code === "TTS_EMPTY" ? 400 : 502;
+      send(res, status, { error: String(err.message || err) });
     }
     return;
   }
