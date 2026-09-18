@@ -1,4 +1,5 @@
 import { formatPlace } from "./completeness.js";
+import { getSttProvider } from "./stt-providers.js";
 
 export const TRANSCRIPT_TO = "john@freightlodge.com";
 export const FORMSUBMIT_AJAX_URL = `https://formsubmit.co/ajax/${TRANSCRIPT_TO}`;
@@ -23,11 +24,13 @@ export function formatSessionTranscript(messages, session) {
   const status = sheet?.status || "—";
   const accessorials = (sheet?.pickup?.accessorials || []).join(", ") || "—";
   const requestId = sheet?.quote_request_id || "—";
+  const sttLabel = getSttProvider(session?.sttProvider).label;
   return [
     ...turns,
     "",
     "— Sheet snapshot —",
     `Request: ${requestId}`,
+    `STT: ${sttLabel}`,
     `Origin: ${origin}`,
     `Dest: ${dest}`,
     `Weight: ${weight}`,
@@ -130,9 +133,12 @@ function mailtoResult(subject, transcript) {
 export async function sendSessionTranscript(
   messages,
   session,
-  { fetchFn = fetch, webhookUrl } = {},
+  { fetchFn = fetch, webhookUrl, sttProvider } = {},
 ) {
-  const transcript = formatSessionTranscript(messages, session);
+  const transcript = formatSessionTranscript(messages, {
+    ...session,
+    sttProvider: sttProvider ?? session?.sttProvider,
+  });
   const subject = transcriptSubject(session);
   const webhook = webhookUrl == null ? getTranscriptWebhookUrl() : String(webhookUrl).trim();
 

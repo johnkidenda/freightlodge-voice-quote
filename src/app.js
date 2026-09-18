@@ -368,7 +368,9 @@ async function sendTranscriptToTeam(els, state) {
   }
 
   try {
-    const result = await sendSessionTranscript(state.messages, state.session);
+    const result = await sendSessionTranscript(state.messages, state.session, {
+      sttProvider: state.sttProvider,
+    });
     if (result.ok && (result.mode === "formsubmit" || result.mode === "webhook")) {
       btn.textContent = "Sent";
       btn.classList.add("sent");
