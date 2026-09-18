@@ -150,7 +150,10 @@ const ACCESSORIAL_PATTERNS = [
   { re: /limited\s+access\s+deliv/i, ids: ["limited_access_delivery"] },
   { re: /appointment/i, ids: ["appointment_delivery"] },
   { re: /notify/i, ids: ["notify_before_delivery"] },
-  { re: /protect\s+from\s+freeze|freeze\s+protect|freeze\b[\s\w]{0,24}\bprotect|\bprotect\b[\s\w]{0,24}\bfreeze|\bplease\s+protect\b/i, ids: ["protect_from_freeze"] },
+  {
+    re: /protect(?:ed|ing)?\s+from\s+freeze|freeze\s+protect(?:ed|ing)?|freeze\b[\s\w]{0,24}\bprotect(?:ed|ing)?|\bprotect(?:ed|ing)?\b[\s\w]{0,24}\bfreeze|\bplease\s+protect(?:ed|ing)?\b/i,
+    ids: ["protect_from_freeze"],
+  },
   { re: /lift\s*-?\s*gates?/i, ids: ["liftgate_pickup", "liftgate_delivery"] },
   { re: /residential/i, ids: ["residential_pickup", "residential_delivery"] },
   { re: /limited\s+access/i, ids: ["limited_access_pickup", "limited_access_delivery"] },
@@ -283,6 +286,23 @@ const PLACE_NOISE = new Set([
   "zipcode",
   "thousand",
   "hundred",
+  "actually",
+  "sorry",
+  "wait",
+  "just",
+  "maybe",
+  "well",
+  "yeah",
+  "yes",
+  "yep",
+  "yup",
+  "okay",
+  "ok",
+  "so",
+  "then",
+  "now",
+  "really",
+  "right",
 ]);
 
 const PLACE_STOP = new Set([
@@ -380,6 +400,47 @@ const PLACE_STOP = new Set([
   "kilos",
   "thousand",
   "hundred",
+  "actually",
+  "sorry",
+  "wait",
+  "just",
+  "maybe",
+  "well",
+  "yeah",
+  "yes",
+  "yep",
+  "yup",
+  "okay",
+  "ok",
+  "so",
+  "then",
+  "now",
+  "really",
+  "right",
+]);
+
+const ZIP_PREFIX_NOISE = new Set([
+  "actually",
+  "sorry",
+  "wait",
+  "just",
+  "maybe",
+  "well",
+  "yeah",
+  "yes",
+  "yep",
+  "yup",
+  "okay",
+  "ok",
+  "so",
+  "then",
+  "now",
+  "really",
+  "right",
+  "hmm",
+  "please",
+  "thanks",
+  "thank",
 ]);
 
 const LEADING_FILLER = /^(need|please|want|hi|hello|quote|ship|shipping|can|we|i|get)\b/i;
@@ -764,7 +825,7 @@ function extractLane(raw, extracted, awaiting, sheetCities = {}) {
   const labeledLaneZip = isLabeledLaneZipPhrase(raw);
 
   if (!LEADING_FILLER.test(raw) && !zipOnly && !labeledLaneZip) {
-    const leading = takePlace(raw);
+    const leading = dropNoiseCityBeforeZip(takePlace(raw), sheetCities.originCity);
     if (leading?.postal_code && (leading.city || leading.state || awaiting === "origin_zip")) {
       Object.assign(extracted.origin, leading);
     }
@@ -855,6 +916,9 @@ function extractLane(raw, extracted, awaiting, sheetCities = {}) {
 
   const incomplete = detectIncompleteZip(raw, awaiting);
   if (incomplete && zipTokens.length === 0) extracted.flags.incompleteZip = incomplete;
+
+  stripNoiseCity(extracted.origin, sheetCities.originCity);
+  stripNoiseCity(extracted.destination, sheetCities.destCity);
 }
 
 function isLabeledLaneZipPhrase(raw) {
@@ -950,6 +1014,32 @@ export function isGarbagePlace(place) {
   return false;
 }
 
+/**
+ * Noise / unknown words before a ZIP must not rewrite a prior city.
+ * ZIP still applies. Known US cities (Atlanta 30301) may confirm the city.
+ */
+export function dropNoiseCityBeforeZip(place, priorCity) {
+  if (!place?.city) return place || {};
+  if (isKnownUsCity(place.city)) return place;
+  if (priorCity) {
+    const next = { ...place };
+    delete next.city;
+    return next;
+  }
+  if (place.postal_code && !place.state) {
+    const next = { ...place };
+    delete next.city;
+    return next;
+  }
+  return place;
+}
+
+function stripNoiseCity(place, priorCity) {
+  if (!place) return;
+  const cleaned = dropNoiseCityBeforeZip(place, priorCity);
+  if (!cleaned.city) delete place.city;
+}
+
 export function hasPlaceHint(place) {
   if (!place) return false;
   return Boolean(place.city || place.state || place.postal_code);
@@ -1037,6 +1127,7 @@ export function takePlace(text) {
 
     const lower = bare.toLowerCase();
     if (lower === "to" || lower === "through") break;
+    if (ZIP_PREFIX_NOISE.has(lower)) continue;
     if (SPEECH_FILLERS.has(lower) || PLACE_STOP.has(lower) || isPlaceNoise(bare)) {
       if (cityWords.length) break;
       continue;
@@ -1427,9 +1518,11 @@ function extractTime(raw, extracted) {
   extracted.pickup.ready_time_local = `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
 }
 
+const PROTECT_SYNONYM = /\b(?:please\s+)?protect(?:ed|ing)?\b/i;
+
 function extractAccessorials(raw, extracted, awaiting) {
   const mentionsAccessorial =
-    /lift|residential|inside|limited\s+access|appointment|notify|freeze/i.test(raw);
+    /lift|residential|inside|limited\s+access|appointment|notify|freeze|protect(?:ed|ing)?/i.test(raw);
   const sttNone = STT_NONE_ACCESSORIALS.test(raw) || (awaiting === "accessorials" && /^\s*num\s*$/i.test(raw));
   if ((NONE_ACCESSORIALS.test(raw) || sttNone) && !mentionsAccessorial) {
     extracted.flags.accessorialsNone = true;
@@ -1446,7 +1539,10 @@ function extractAccessorials(raw, extracted, awaiting) {
   }
   const nearEnd =
     awaiting === "accessorials" || awaiting === "email" || awaiting === "pickup_date";
-  const softProtect = /\bplease\s+protect\b/i.test(raw) || (nearEnd && /\bprotect\b/i.test(raw));
+  const softProtect =
+    /\bplease\s+protect(?:ed|ing)?\b/i.test(raw) ||
+    (nearEnd && PROTECT_SYNONYM.test(raw)) ||
+    (awaiting === "accessorials" && PROTECT_SYNONYM.test(raw));
   if (softProtect && !found.includes("protect_from_freeze") && !extracted.flags.accessorialsNone) {
     found.push("protect_from_freeze");
     extracted.flags.softProtect = true;
@@ -1540,6 +1636,12 @@ export function mergeExtracted(sheet, extracted) {
       ...extracted,
       destination: { ...extracted.destination, city: undefined, state: undefined },
     };
+  }
+  if (originKeep.city && extracted.origin?.city && !isKnownUsCity(extracted.origin.city)) {
+    extracted = { ...extracted, origin: { ...extracted.origin, city: undefined } };
+  }
+  if (destKeep.city && extracted.destination?.city && !isKnownUsCity(extracted.destination.city)) {
+    extracted = { ...extracted, destination: { ...extracted.destination, city: undefined } };
   }
   if (
     extracted.origin?.state &&

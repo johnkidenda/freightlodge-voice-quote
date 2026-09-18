@@ -98,7 +98,7 @@ describe("phone visual nits — logo B + powered-by", () => {
     expect(css).toMatch(/@media \(max-width: 640px\)[\s\S]*justify-content:\s*center/);
     expect(css).toMatch(/\.powered-logo img[\s\S]*max-width:\s*min\(6\.5rem/);
     const sw = readFileSync("public/sw.js", "utf8");
-    expect(sw).toMatch(/freightlodge-quote-v6/);
-    expect(sw).not.toMatch(/freightlodge-quote-v5/);
+    expect(sw).toMatch(/freightlodge-quote-v7/);
+    expect(sw).not.toMatch(/freightlodge-quote-v6/);
   });
 });
