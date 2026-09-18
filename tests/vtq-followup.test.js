@@ -71,7 +71,7 @@ describe("city vs ZIP metro mismatch — do not silent-keep", () => {
     const zip = handleUtterance(session, "30301");
     expect(zip.session.sheet.lanes.origin.postal_code).toBe("30301");
     expect(zip.session.sheet.lanes.origin.city).toBeNull();
-    expect(zip.session.sheet.lanes.origin.state).toBeNull();
+    expect(zip.session.sheet.lanes.origin.state).toBe("GA");
   });
 
   it("Atlanta origin + 78721 dest Austin still asks role, not city-vs-ZIP", () => {

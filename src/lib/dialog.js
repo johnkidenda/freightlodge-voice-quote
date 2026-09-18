@@ -13,6 +13,7 @@ import {
   resolveZipAttachment,
 } from "./extract.js";
 import { detectOutOfScope } from "./scope.js";
+import { stateDisplayName } from "./zip-state.js";
 
 export const GREETING =
   "Freight Lodge — I’ll take a US domestic LTL quote. Where are we picking up? I need the origin ZIP — I won’t guess it.";
@@ -61,6 +62,12 @@ export function isAlreadyMentioned(text) {
 }
 
 export function zipClarifyQuestion(clarify, sheet) {
+  if (clarify?.kind === "state" && clarify.zip && clarify.zipState && clarify.placeState) {
+    const zipName = stateDisplayName(clarify.zipState);
+    const placeName = stateDisplayName(clarify.placeState);
+    const side = clarify.attemptedRole === "dest" ? "destination" : "origin";
+    return `${clarify.zip} looks like ${zipName}, but ${side} is ${placeName} — which is right?`;
+  }
   if (!clarify?.zip || !clarify?.metro?.city) return PROMPTS.origin_zip;
   if (clarify.kind === "metro") {
     const stated = [clarify.statedCity, clarify.statedState].filter(Boolean).join(", ") || "that city";
@@ -86,8 +93,36 @@ export function zipClarifyQuestion(clarify, sheet) {
   return `${clarify.zip} looks like ${place}. Origin ZIP or destination ZIP? I won’t silently invert the lane.`;
 }
 
+function stateTokenRe(code) {
+  const name = stateDisplayName(code)
+    .toLowerCase()
+    .replace(/^the\s+/, "")
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const abbr = String(code || "").toLowerCase();
+  if (!name || !abbr) return null;
+  return new RegExp(`\\b(${name}|${abbr})\\b`, "i");
+}
+
+function decideZipStateClarify(raw, clarify) {
+  const t = String(raw || "")
+    .toLowerCase()
+    .replace(/['’]/g, "");
+  if (!t.trim()) return null;
+  const zipRe = stateTokenRe(clarify.zipState);
+  const placeRe = stateTokenRe(clarify.placeState);
+  const zipDigits = String(clarify.zip || "").replace(/\D/g, "").slice(0, 5);
+  if ((zipRe && zipRe.test(t)) || (zipDigits && t.includes(zipDigits)) || /\b(the zip|that zip|zip code)\b/.test(t)) {
+    return clarify.attemptedRole || "origin";
+  }
+  if ((placeRe && placeRe.test(t)) || /^\s*(no|nope|nah)\b/.test(t)) {
+    return "keep";
+  }
+  return null;
+}
+
 function decideZipClarify(raw, clarify) {
   if (!clarify) return null;
+  if (clarify.kind === "state") return decideZipStateClarify(raw, clarify);
   const t = String(raw || "")
     .toLowerCase()
     .replace(/['’]/g, "");
@@ -167,8 +202,11 @@ export function handleUtterance(session, text, { now } = {}) {
     } else if (decided === "keep_zip") {
       sheetFromClarify = applyCityZipChoice(sheet0, zipClarify, "zip");
       zipClarify = null;
+    } else if (decided === "keep") {
+      zipClarify = null;
     } else if (decided) {
-      sheetFromClarify = applyZipToRole(sheet0, decided, zipClarify.zip);
+      const forceState = zipClarify.kind === "state" ? zipClarify.zipState : undefined;
+      sheetFromClarify = applyZipToRole(sheet0, decided, zipClarify.zip, { state: forceState });
       zipClarify = null;
     } else if (firstBareZip(raw)) {
       zipClarify = null;
@@ -210,6 +248,24 @@ export function handleUtterance(session, text, { now } = {}) {
       extracted.flags.zipClarify = verdict.clarify;
       zipClarify = verdict.clarify;
     }
+  } else if (bothDistinctZips) {
+    const roles = awaitingNow === "dest_zip" ? ["dest", "origin"] : ["origin", "dest"];
+    for (const role of roles) {
+      const zip = role === "origin" ? extracted.origin.postal_code : extracted.destination.postal_code;
+      const verdict = resolveZipAttachment(sheetFromClarify, zip, role, extracted);
+      if (verdict.clarify) {
+        if (role === "origin") delete extracted.origin.postal_code;
+        if (role === "dest") delete extracted.destination.postal_code;
+        extracted.flags.zipClarify = verdict.clarify;
+        zipClarify = verdict.clarify;
+        break;
+      }
+    }
+  }
+
+  if (zipClarify?.kind === "state" && !extracted.flags.zipClarify) {
+    const parked = extracted.origin?.postal_code || extracted.destination?.postal_code;
+    if (!parked) extracted.flags.zipClarify = zipClarify;
   }
   if (!extracted.flags.zipClarify) {
     const metroClarify = detectCityZipMetroClarify(sheetFromClarify, extracted);
