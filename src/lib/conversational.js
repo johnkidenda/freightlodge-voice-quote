@@ -2,7 +2,7 @@ import { isValidZip } from "./completeness.js";
 import { isGarbagePlace } from "./extract.js";
 
 export const CONVERSATIONAL_GREETING =
-  "Hi — I can take a US domestic LTL quote. Where are we picking up? I’ll need the origin ZIP; I won’t guess it.";
+  "Hi — I can take a US domestic LTL quote. Where are we picking up? What’s the origin ZIP?";
 
 export const CONVERSATIONAL_STORAGE_KEY = "freightlodge.conversational";
 
@@ -108,7 +108,7 @@ function conversationalAsk(sheet, awaiting) {
   }
   if (awaiting === "pieces") return "How many pieces or pallets?";
   if (awaiting === "measure") {
-    return "What’s the total weight in pounds? Or dims or class if you already know them — I won’t guess.";
+    return "What’s the total weight in pounds? Or dims or class if you already know them.";
   }
   if (awaiting === "commodity") return "What’s the commodity?";
   if (awaiting === "pickup_date") return "What pickup date works?";
@@ -137,10 +137,10 @@ export function composeConversationalReply({
   }
   if (extracted?.flags?.zipClarify) return formalReply || "";
   if (extracted?.flags?.incompleteZip) {
-    return "That ZIP is short — I need a full 5-digit ZIP. I won’t pad or guess the last digits.";
+    return "That ZIP is short — I need a full 5-digit ZIP.";
   }
   if (extracted?.flags?.incompleteTo) {
-    return "That ended at “to” — I still need the destination city, state, or ZIP. I won’t invent a destination.";
+    return "That ended at “to” — I still need the destination city, state, or ZIP.";
   }
   if (
     extracted?.flags?.vagueMeasure &&
@@ -148,10 +148,10 @@ export function composeConversationalReply({
     !extracted.freight?.dims &&
     !extracted.freight?.freight_class
   ) {
-    return "I can’t invent a weight, dim, or class from that. If you have pounds, L×W×H, or a known NMFC class, say it.";
+    return "If you have pounds, L×W×H, or a known NMFC class, say it — otherwise I’ll keep asking.";
   }
   if (extracted?.flags?.vagueDate && !extracted.pickup?.date) {
-    return "I need a real pickup date — today, tomorrow, Friday, or YYYY-MM-DD. I won’t treat ASAP as a date.";
+    return "I need a pickup date — today, tomorrow, Friday, or YYYY-MM-DD.";
   }
 
   const have = conversationalHave(sheet, extracted);

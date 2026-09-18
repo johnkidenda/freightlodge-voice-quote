@@ -4,6 +4,12 @@ import {
   stopAgentSpeech as stopCartesiaSpeech,
 } from "./cartesia-tts.js";
 import { cancelBrowserSpeech, speakBrowserReply } from "./native-tts.js";
+import {
+  elapsedMs,
+  getLastTtsUtterance,
+  nowMs,
+  recordLastTtsUtterance,
+} from "./tts-timing.js";
 
 export const TTS_ENGINE_STORAGE_KEY = "freightlodge.ttsEngine";
 export const TTS_ENGINES = {
@@ -66,19 +72,67 @@ export function stopAgentSpeech() {
 /**
  * Speak an agent reply with the selected engine.
  * Cancels any in-flight utterance first.
+ * first-audio ms is speak-request → first audible/playable start
+ * (Cartesia includes the full proxy round-trip).
  */
 export async function speakAgentReply(transcript, opts = {}) {
   stopAgentSpeech();
   const engine = opts.engine || loadTtsEngine(opts.storage);
+  const startedAt = nowMs(opts.now);
+  recordLastTtsUtterance({ engine, firstAudioMs: null, durationMs: null });
+  const notify = () => {
+    try {
+      opts.onTtsStats?.(getLastTtsUtterance());
+    } catch {
+      /* UI hook */
+    }
+  };
+  notify();
+  const stampFirst = () => {
+    recordLastTtsUtterance({ engine, firstAudioMs: elapsedMs(startedAt, opts.now) });
+    notify();
+  };
+  const stampDuration = (durationMs) => {
+    recordLastTtsUtterance({ engine, durationMs: durationMs ?? null });
+    notify();
+  };
+
   if (engine === TTS_ENGINES.CARTESIA) {
-    return speakCartesiaReply(transcript, opts);
+    return speakCartesiaReply(transcript, {
+      ...opts,
+      onFirstAudio: stampFirst,
+      onEnded: (durationMs) => stampDuration(durationMs),
+    });
   }
+
   emitSpeaking(true);
+  let firstAt = null;
   const started = speakBrowserReply(transcript, {
     ...opts,
-    onStart: () => emitSpeaking(true),
-    onEnd: () => emitSpeaking(false),
+    onStart: () => {
+      firstAt = nowMs(opts.now);
+      stampFirst();
+      emitSpeaking(true);
+      try {
+        opts.onStart?.();
+      } catch {
+        /* UI hook */
+      }
+    },
+    onEnd: () => {
+      if (firstAt != null) stampDuration(elapsedMs(firstAt, opts.now));
+      emitSpeaking(false);
+      try {
+        opts.onEnd?.();
+      } catch {
+        /* UI hook */
+      }
+    },
   });
-  if (!started) emitSpeaking(false);
+  if (!started) {
+    emitSpeaking(false);
+    recordLastTtsUtterance({ engine, firstAudioMs: null, durationMs: null });
+    notify();
+  }
   return started;
 }

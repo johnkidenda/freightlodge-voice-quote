@@ -21,6 +21,11 @@ import {
 } from "./lib/agent-speech.js";
 import { copyTextToClipboard, sendSessionTranscript } from "./lib/transcript.js";
 import { playListenCue, primeListenCue } from "./lib/listen-cue.js";
+import {
+  clearLastTtsUtterance,
+  formatTtsLatencyReadout,
+  getLastTtsUtterance,
+} from "./lib/tts-timing.js";
 
 const SAMPLE =
   "Chicago IL 60601 to Dallas TX 75201, 3 pallets, 1200 pounds, auto parts, pickup tomorrow, liftgate delivery, email shipper@example.com";
@@ -45,6 +50,7 @@ export function mountApp(root) {
     conversational: loadConversationalMode(typeof localStorage !== "undefined" ? localStorage : null),
     ttsEngine: loadTtsEngine(typeof localStorage !== "undefined" ? localStorage : null),
     ttsSpeaking: false,
+    ttsStats: getLastTtsUtterance(),
   };
 
   root.innerHTML = layout(state.conversational);
@@ -60,6 +66,7 @@ export function mountApp(root) {
     convoAudio: root.querySelector("#convo-audio"),
     voiceEngine: root.querySelector("#voice-engine"),
     ttsWave: root.querySelector("#tts-wave"),
+    ttsLatency: root.querySelector("#tts-latency"),
     quote: root.querySelector("#quote-card"),
     status: root.querySelector("#status-pill"),
     sample: root.querySelector("#sample"),
@@ -136,6 +143,7 @@ export function mountApp(root) {
   onAgentSpeaking((speaking) => {
     state.ttsSpeaking = Boolean(speaking);
     renderTtsWave(els, state);
+    renderTtsLatency(els, state);
   });
 
   function toggleConversational() {
@@ -188,6 +196,8 @@ export function mountApp(root) {
       { role: "assistant", text: state.conversational ? CONVERSATIONAL_GREETING : openingMessage() },
     ];
     stopAgentSpeech();
+    clearLastTtsUtterance();
+    state.ttsStats = getLastTtsUtterance();
     state.emailNote = null;
     state.interim = "";
     render(els, state);
@@ -251,6 +261,7 @@ function layout(conversational) {
             <span id="tts-wave" class="tts-wave" hidden aria-hidden="true" title="Speaking">
               <span></span><span></span><span></span><span></span>
             </span>
+            <span id="tts-latency" class="tts-latency" hidden aria-live="polite">—</span>
           </div>
           <p class="stt-badge-row">
             <span id="stt-badge" class="stt-badge">${sttBadgeText(conversational)}</span>
@@ -351,6 +362,10 @@ async function acceptUserText(els, state, text) {
     void speakAgentReply(reply, {
       engine: state.ttsEngine,
       storage: typeof localStorage !== "undefined" ? localStorage : null,
+      onTtsStats(stats) {
+        state.ttsStats = stats;
+        renderTtsLatency(els, state);
+      },
     });
   } else {
     stopAgentSpeech();
@@ -422,8 +437,12 @@ async function sendTranscriptToTeam(els, state) {
   }
 
   try {
+    const tts = getLastTtsUtterance();
     const result = await sendSessionTranscript(state.messages, state.session, {
       sttProvider: STT_PROVIDER_IDS.WEB_SPEECH,
+      ttsEngine: state.ttsEngine,
+      ttsFirstAudioMs: tts.firstAudioMs,
+      ttsDurationMs: tts.durationMs,
     });
     if (result.ok && (result.mode === "formsubmit" || result.mode === "webhook")) {
       btn.textContent = "Sent";
@@ -540,6 +559,7 @@ function renderChrome(els, state) {
   renderConvoAudio(els, state);
   renderVoiceEngine(els, state);
   renderTtsWave(els, state);
+  renderTtsLatency(els, state);
   if (state.finishing) {
     els.holdHint.textContent = state.interim ? state.interim : "Finishing…";
   } else if (state.listening && state.interim) {
@@ -588,6 +608,17 @@ function renderTtsWave(els, state) {
   const show = Boolean(state.conversational && state.ttsSpeaking);
   els.ttsWave.hidden = !show;
   els.ttsWave.setAttribute("aria-hidden", show ? "false" : "true");
+}
+
+function renderTtsLatency(els, state) {
+  if (!els.ttsLatency) return;
+  const show = Boolean(state.conversational);
+  els.ttsLatency.hidden = !show;
+  els.ttsLatency.textContent = formatTtsLatencyReadout({
+    engine: state.ttsStats?.engine || state.ttsEngine,
+    firstAudioMs: state.ttsStats?.firstAudioMs,
+    silent: !show,
+  });
 }
 
 function sttBadgeText(conversational) {
@@ -650,7 +681,7 @@ function speechError(err) {
   if (/empty transcript/i.test(text)) {
     return `${label} heard nothing. Hold, speak clearly, then release — or type instead.`;
   }
-  return `${label} isn’t available (${text}). Type instead — I won’t invent ZIPs or weights.`;
+  return `${label} isn’t available (${text}). Type the lane instead.`;
 }
 
 function escapeHtml(s) {
