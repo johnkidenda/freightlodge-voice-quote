@@ -113,6 +113,10 @@ describe("conversational TTS wiring", () => {
     expect(app).toContain("speakAgentReply");
     expect(app).toContain("tts-wave");
     expect(app).toContain("onAgentSpeaking");
+    expect(app).toContain("convo-audio");
+    expect(app).toContain("speakerIcon");
+    expect(app).toMatch(/is-muted/);
+    expect(app).toMatch(/Voice replies (on|off)/);
     const css = readFileSync("src/style.css", "utf8");
     expect(css).toMatch(/@keyframes tts-wave/);
     expect(css).toMatch(/\.tts-wave\[hidden\]/);

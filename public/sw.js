@@ -1,5 +1,5 @@
-// v6: Cartesia empty-finalize + capture errors surface in chat.
-const CACHE = "freightlodge-quote-v6";
+// v7: sticky composer + conversational speaker icons + ZIP/protect nits.
+const CACHE = "freightlodge-quote-v7";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
