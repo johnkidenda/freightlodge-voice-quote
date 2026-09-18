@@ -115,7 +115,7 @@ function conversationalAsk(sheet, awaiting) {
   if (awaiting === "accessorials") {
     return "Any extras — liftgate, residential, inside, protect from freeze — or should I put none?";
   }
-  if (awaiting === "email") return "What email should I put on the sheet?";
+  if (awaiting === "email") return "What email should I put on the sheet? Typing it is safer than saying it.";
   return "";
 }
 
