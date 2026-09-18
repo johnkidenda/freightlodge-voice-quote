@@ -118,7 +118,8 @@ describe("conversational TTS wiring", () => {
     expect(app).toContain("speakerIcon");
     expect(app).toMatch(/is-muted/);
     expect(app).toMatch(/Turn conversational mode (on|off)/);
-    expect(app).toContain("data-tts-engine");
+    expect(app).not.toContain("data-tts-engine");
+    expect(app).not.toContain("tts-latency");
     expect(app).toContain("toggleConversational");
     expect(app).toContain("agent-speech.js");
     const css = readFileSync("src/style.css", "utf8");

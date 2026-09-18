@@ -1,0 +1,45 @@
+name: Bump VERSION on PR
+
+# Future change-sets: if the PR did not already increment VERSION vs main,
+# bump 0.XX → 0.(XX+1) on the PR branch so Pages ships the next label.
+# This ship committed VERSION=0.20 (19 merged + this PR).
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Bump VERSION when unchanged vs main
+        run: |
+          git fetch origin main
+          MAIN_VER=$(git show origin/main:VERSION 2>/dev/null | tr -d '[:space:]' || true)
+          CUR=$(tr -d '[:space:]' < VERSION || true)
+          if [ -z "$CUR" ]; then
+            echo "VERSION file missing"
+            exit 1
+          fi
+          if [ "$CUR" = "$MAIN_VER" ]; then
+            node scripts/bump-version.mjs
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add VERSION
+            git commit -m "chore: bump VERSION for this change-set"
+            git push
+          else
+            echo "VERSION already $CUR (main was ${MAIN_VER:-none}) — no bump"
+          fi

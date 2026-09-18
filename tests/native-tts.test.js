@@ -39,14 +39,13 @@ describe("browser voice picker", () => {
   });
 });
 
-describe("TTS engine persistence — default Browser", () => {
-  it("defaults to browser speechSynthesis and persists Cartesia when chosen", () => {
+describe("TTS engine — browser only", () => {
+  it("always uses browser speechSynthesis (Cartesia is not a UI engine)", () => {
     expect(DEFAULT_TTS_ENGINE).toBe(TTS_ENGINES.BROWSER);
     const store = memoryStorage();
     expect(loadTtsEngine(store)).toBe(TTS_ENGINES.BROWSER);
-    expect(saveTtsEngine(TTS_ENGINES.CARTESIA, store)).toBe(TTS_ENGINES.CARTESIA);
-    expect(loadTtsEngine(store)).toBe(TTS_ENGINES.CARTESIA);
-    expect(saveTtsEngine(TTS_ENGINES.BROWSER, store)).toBe(TTS_ENGINES.BROWSER);
+    expect(saveTtsEngine("cartesia", store)).toBe(TTS_ENGINES.BROWSER);
+    expect(loadTtsEngine(store)).toBe(TTS_ENGINES.BROWSER);
   });
 });
 
@@ -112,16 +111,17 @@ describe("native speak / cancel", () => {
 });
 
 describe("speaker toggle + voice control in the app", () => {
-  it("speaker button toggles the same conversational state; Voice: Browser / Cartesia is present", () => {
+  it("speaker button toggles conversational mode; Cartesia Voice toggle is gone", () => {
     const app = readFileSync("src/app.js", "utf8");
     expect(app).toContain('id="convo-audio"');
     expect(app).toContain("toggleConversational");
     expect(app).toMatch(/els\.convoAudio\?\.addEventListener\("click", toggleConversational\)/);
     expect(app).toMatch(/els\.conversational\?\.addEventListener\("click", toggleConversational\)/);
     expect(app).toContain("saveConversationalMode");
-    expect(app).toContain("data-tts-engine");
-    expect(app).toContain("Browser");
-    expect(app).toContain("Cartesia");
-    expect(app).toContain("DEFAULT_TTS_ENGINE");
+    expect(app).toContain("tts-wave");
+    expect(app).not.toContain("data-tts-engine");
+    expect(app).not.toContain("voice-engine");
+    expect(app).not.toContain("Cartesia");
+    expect(app).not.toContain("tts-latency");
   });
 });

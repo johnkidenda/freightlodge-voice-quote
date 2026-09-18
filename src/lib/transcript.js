@@ -1,6 +1,5 @@
 import { formatPlace } from "./completeness.js";
 import { getSttProvider } from "./stt-providers.js";
-import { formatTtsSnapshotLines, getLastTtsUtterance } from "./tts-timing.js";
 
 export const TRANSCRIPT_TO = "john@freightlodge.com";
 export const FORMSUBMIT_AJAX_URL = `https://formsubmit.co/ajax/${TRANSCRIPT_TO}`;
@@ -26,18 +25,12 @@ export function formatSessionTranscript(messages, session) {
   const accessorials = (sheet?.pickup?.accessorials || []).join(", ") || "—";
   const requestId = sheet?.quote_request_id || "—";
   const sttLabel = getSttProvider(session?.sttProvider).label;
-  const ttsLines = formatTtsSnapshotLines({
-    engine: session?.ttsEngine,
-    firstAudioMs: session?.ttsFirstAudioMs,
-    durationMs: session?.ttsDurationMs,
-  });
   return [
     ...turns,
     "",
     "— Sheet snapshot —",
     `Request: ${requestId}`,
     `STT: ${sttLabel}`,
-    ...ttsLines,
     `Origin: ${origin}`,
     `Dest: ${dest}`,
     `Weight: ${weight}`,
@@ -140,15 +133,11 @@ function mailtoResult(subject, transcript) {
 export async function sendSessionTranscript(
   messages,
   session,
-  { fetchFn = fetch, webhookUrl, sttProvider, ttsEngine, ttsFirstAudioMs, ttsDurationMs } = {},
+  { fetchFn = fetch, webhookUrl, sttProvider } = {},
 ) {
-  const lastTts = getLastTtsUtterance();
   const transcript = formatSessionTranscript(messages, {
     ...session,
     sttProvider: sttProvider ?? session?.sttProvider,
-    ttsEngine: ttsEngine ?? session?.ttsEngine ?? lastTts.engine,
-    ttsFirstAudioMs: ttsFirstAudioMs !== undefined ? ttsFirstAudioMs : session?.ttsFirstAudioMs ?? lastTts.firstAudioMs,
-    ttsDurationMs: ttsDurationMs !== undefined ? ttsDurationMs : session?.ttsDurationMs ?? lastTts.durationMs,
   });
   const subject = transcriptSubject(session);
   const webhook = webhookUrl == null ? getTranscriptWebhookUrl() : String(webhookUrl).trim();

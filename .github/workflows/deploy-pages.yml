@@ -28,6 +28,7 @@ jobs:
       - run: npm run build
         env:
           VITE_STT_TOKEN_URL: ${{ secrets.VITE_STT_TOKEN_URL }}
+          VITE_APP_COMMIT: ${{ github.sha }}
       - name: Add .nojekyll
         run: touch dist/.nojekyll
       - uses: actions/upload-pages-artifact@v3
@@ -61,6 +62,7 @@ jobs:
       - run: npm run build
         env:
           VITE_STT_TOKEN_URL: ${{ secrets.VITE_STT_TOKEN_URL }}
+          VITE_APP_COMMIT: ${{ github.sha }}
       - name: Add .nojekyll
         run: touch dist/.nojekyll
       - uses: peaceiris/actions-gh-pages@v4

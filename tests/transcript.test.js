@@ -42,9 +42,10 @@ describe("QA transcript copy", () => {
     expect(text).toMatch(/Awaiting:/);
     expect(text).toMatch(/Status: collecting/);
     expect(text).toContain("STT: Web Speech");
-    expect(text).toContain("Voice: Browser");
-    expect(text).toContain("TTS first-audio ms: —");
-    expect(text).toContain("TTS duration ms: —");
+    expect(text).not.toContain("Voice:");
+    expect(text).not.toContain("TTS first-audio ms:");
+    expect(text).not.toContain("TTS duration ms:");
+    expect(text).not.toMatch(/Jev:/);
   });
 
   it("stamps Web Speech on the sheet snapshot", () => {
@@ -106,8 +107,8 @@ describe("sendSessionTranscript delivery", () => {
     const body = JSON.parse(calls[0].init.body);
     expect(body.message).toContain("User: Chicago 60601 to Dallas 75201");
     expect(body.message).toContain("STT: Web Speech");
-    expect(body.message).toContain("Voice: Browser");
-    expect(body.message).toMatch(/TTS first-audio ms:/);
+    expect(body.message).not.toContain("Voice:");
+    expect(body.message).not.toMatch(/TTS first-audio ms:/);
     expect(body._subject).toContain("[Freight Lodge transcript]");
     expect(result.ok).toBe(true);
     expect(result.mode).toBe("formsubmit");

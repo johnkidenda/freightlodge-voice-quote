@@ -21,15 +21,17 @@ npm run dev
 
 Open the printed localhost URL (Chrome or Safari). Hold the mic button to talk, or type. Mic → text is **Web Speech only** (no Cartesia STT). No API keys required for dictation.
 
-**Conversational mode** (separate toggle) rewrites agent bubbles into short customer-service copy and, when the token proxy is configured, speaks them with Cartesia TTS. Mode off = formal prompts + silent. **Never** put `CARTESIA_API_KEY` in `VITE_*` or the Pages bundle.
+**Conversational mode** (separate toggle) rewrites agent bubbles into short customer-service copy and speaks them with the browser `speechSynthesis` API. Mode off = formal prompts + silent. There is no Cartesia TTS toggle or latency chip in the UI. **Never** put `CARTESIA_API_KEY` in `VITE_*` or the Pages bundle.
+
+**App version** is `v0.XX` where XX is `0.01` × (merged change-sets including the current ship). Source of truth: [`VERSION`](VERSION). This ship is **v0.20** (19 merged PRs + this one). Future PRs that do not bump `VERSION` are incremented by CI (`.github/workflows/version-on-pr.yml`).
 
 `npm run preview` serves the production build plus the same local API stubs.
 
-Optional: copy `.env.example` → `.env` if you later wire `OPENAI_API_KEY` into a local enhance endpoint, or `CARTESIA_API_KEY` + `VITE_STT_TOKEN_URL` for spoken replies. The static app must keep working without them (toggle still warms the copy; TTS no-ops).
+Optional: copy `.env.example` → `.env` if you later wire `OPENAI_API_KEY` into a local enhance endpoint. Conversational speech does not need a Cartesia key. The static app must keep working without secrets (toggle still warms the copy; browser TTS no-ops if `speechSynthesis` is missing).
 
-### Cartesia TTS token / audio proxy
+### Cartesia TTS token / audio proxy (dormant)
 
-The Pages SPA never talks to Cartesia with the long-lived key. `VITE_STT_TOKEN_URL` is the public mint URL; conversational TTS POSTs the reply to a sibling `/tts` path on that same origin. The proxy holds `CARTESIA_API_KEY` and returns mp3.
+The Pages SPA does not call Cartesia TTS. `POST /tts` on the token proxy can stay in place for a later ship. `VITE_STT_TOKEN_URL` is still the public mint URL. **Never** put `CARTESIA_API_KEY` in `VITE_*`.
 
 Default voice: **Skylar** (`db6b0ed5-d5d3-463d-ae85-518a07d3c2b4`, “Friendly Guide” — customer care / sales-leaning). Model: `sonic-3`.
 
@@ -159,7 +161,8 @@ npm test
 ```
 
 - Hold-and-dump: one utterance parks weight + commodity + cities while awaiting origin ZIP
-- Conversational copy + Cartesia TTS proxy (Skylar); Web Speech only for STT
+- Conversational copy + browser `speechSynthesis`; Web Speech only for STT
+- Visible `VERSION` (`v0.20` this ship) baked into the header/footer
 - Completeness rules for `ready_for_quote`
 - Never-invent: cities do not become ZIPs; “standard class” / “a few hundred pounds” stay `null`
 - Out of scope does not produce `quote_result`
@@ -168,3 +171,5 @@ npm test
 ## Out of scope for this MVP
 
 Booking, payment, live Exfresso credentials, and hard international / ocean / air quoting.
+
+Jev / TypeSafe System One is **not** in this ship (no key yet). When it lands later it will be TypeSafe’s **direct** API behind the token proxy — not OpenRouter.
