@@ -26,7 +26,8 @@ describe("conversational reply copy", () => {
     const result = handleUtterance(session, "hello");
     expect(presentAgentReply(result, false)).toBe(result.reply);
     expect(result.reply).toContain(PROMPTS.origin_zip);
-    expect(openingMessage()).toMatch(/I won’t guess it/);
+    expect(openingMessage()).toMatch(/What’s the origin ZIP/);
+    expect(openingMessage()).not.toMatch(/won’t guess|won’t invent|won’t look/i);
   });
 
   it("rewrites the origin-ZIP ask to a short CS line", () => {

@@ -85,7 +85,7 @@ export function stopAgentSpeech() {
   emitSpeaking(false);
 }
 
-export async function speakAgentReply(transcript, { url, fetchImpl, playAudio } = {}) {
+export async function speakAgentReply(transcript, { url, fetchImpl, playAudio, onFirstAudio, onEnded } = {}) {
   haltAudio();
   const gen = (speakingGeneration += 1);
   emitSpeaking(true);
@@ -93,12 +93,28 @@ export async function speakAgentReply(transcript, { url, fetchImpl, playAudio } 
     if (gen === speakingGeneration) emitSpeaking(false);
     return ok;
   };
+  const markFirst = () => {
+    try {
+      onFirstAudio?.();
+    } catch {
+      /* timing hook */
+    }
+  };
+  const markEnded = (durationMs) => {
+    try {
+      onEnded?.(durationMs);
+    } catch {
+      /* timing hook */
+    }
+  };
   try {
     const data = await fetchTtsAudio(transcript, { url, fetchImpl });
     if (gen !== speakingGeneration) return false;
     if (!data) return done(false);
     if (typeof playAudio === "function") {
+      markFirst();
       await playAudio(data);
+      markEnded(null);
       return done(true);
     }
     if (typeof Audio === "undefined" || typeof URL === "undefined") return done(false);
@@ -108,12 +124,15 @@ export async function speakAgentReply(transcript, { url, fetchImpl, playAudio } 
     const audio = new Audio(objectUrl);
     currentAudio = audio;
     audio.onended = () => {
+      const dur = Number.isFinite(audio.duration) ? Math.round(audio.duration * 1000) : null;
+      markEnded(dur);
       if (currentAudio === audio) currentAudio = null;
       URL.revokeObjectURL(objectUrl);
       if (gen === speakingGeneration) emitSpeaking(false);
     };
     try {
       await audio.play();
+      markFirst();
       return true;
     } catch {
       URL.revokeObjectURL(objectUrl);

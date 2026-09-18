@@ -51,7 +51,7 @@ describe("city vs ZIP metro mismatch — do not silent-keep", () => {
     expect(result.reply).toMatch(/You said New York/i);
     expect(result.reply).toMatch(/30301 looks like Atlanta/i);
     expect(result.reply).toMatch(/Which is right/i);
-    expect(result.reply).toMatch(/won’t invent a ZIP/i);
+    expect(result.reply).not.toMatch(/won’t invent|won’t guess|won’t look/i);
     expect(result.extracted.flags.zipClarify.kind).toBe("metro");
   });
 
