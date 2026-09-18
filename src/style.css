@@ -241,11 +241,53 @@ button, input { font: inherit; }
 .convo-audio {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   color: var(--muted);
   flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  padding: 4px;
+  border-radius: 8px;
+  cursor: pointer;
 }
 .convo-audio[data-on="true"] { color: var(--gold-deep); }
+.convo-audio:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
 .convo-speaker { display: block; }
+.voice-engine {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.voice-engine[hidden] { display: none; }
+.voice-engine-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+.voice-engine-btn {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--navy);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.voice-engine-btn.is-active {
+  background: var(--navy);
+  color: #f6f1e8;
+  border-color: var(--navy);
+}
+.composer.is-email-ask .input-row input {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(199, 154, 60, 0.22);
+  background: #fffdf6;
+}
 .tts-wave {
   display: inline-flex;
   align-items: flex-end;

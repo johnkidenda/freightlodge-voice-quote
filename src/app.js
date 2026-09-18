@@ -10,7 +10,15 @@ import {
   presentAgentReply,
   saveConversationalMode,
 } from "./lib/conversational.js";
-import { onAgentSpeaking, speakAgentReply, stopAgentSpeech } from "./lib/cartesia-tts.js";
+import {
+  DEFAULT_TTS_ENGINE,
+  TTS_ENGINES,
+  loadTtsEngine,
+  onAgentSpeaking,
+  saveTtsEngine,
+  speakAgentReply,
+  stopAgentSpeech,
+} from "./lib/agent-speech.js";
 import { copyTextToClipboard, sendSessionTranscript } from "./lib/transcript.js";
 import { playListenCue, primeListenCue } from "./lib/listen-cue.js";
 
@@ -35,6 +43,7 @@ export function mountApp(root) {
     emailNote: null,
     hold: null,
     conversational: loadConversationalMode(typeof localStorage !== "undefined" ? localStorage : null),
+    ttsEngine: loadTtsEngine(typeof localStorage !== "undefined" ? localStorage : null),
     ttsSpeaking: false,
   };
 
@@ -49,6 +58,7 @@ export function mountApp(root) {
     sttBadge: root.querySelector("#stt-badge"),
     conversational: root.querySelector("#conversational"),
     convoAudio: root.querySelector("#convo-audio"),
+    voiceEngine: root.querySelector("#voice-engine"),
     ttsWave: root.querySelector("#tts-wave"),
     quote: root.querySelector("#quote-card"),
     status: root.querySelector("#status-pill"),
@@ -128,7 +138,7 @@ export function mountApp(root) {
     renderTtsWave(els, state);
   });
 
-  els.conversational?.addEventListener("click", () => {
+  function toggleConversational() {
     state.conversational = saveConversationalMode(
       !state.conversational,
       typeof localStorage !== "undefined" ? localStorage : null,
@@ -137,6 +147,21 @@ export function mountApp(root) {
     if (state.messages.length === 1 && state.messages[0]?.role === "assistant") {
       state.messages[0].text = state.conversational ? CONVERSATIONAL_GREETING : openingMessage();
     }
+    render(els, state);
+  }
+
+  els.conversational?.addEventListener("click", toggleConversational);
+  els.convoAudio?.addEventListener("click", toggleConversational);
+  els.voiceEngine?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-tts-engine]");
+    if (!btn) return;
+    const next = btn.getAttribute("data-tts-engine");
+    if (next !== TTS_ENGINES.BROWSER && next !== TTS_ENGINES.CARTESIA) return;
+    stopAgentSpeech();
+    state.ttsEngine = saveTtsEngine(
+      next,
+      typeof localStorage !== "undefined" ? localStorage : null,
+    );
     render(els, state);
   });
 
@@ -215,8 +240,13 @@ function layout(conversational) {
             <button type="button" id="conversational" class="mode-toggle${conversational ? " is-active" : ""}" aria-pressed="${conversational ? "true" : "false"}">
               Conversational mode
             </button>
-            <span id="convo-audio" class="convo-audio" data-on="${conversational ? "true" : "false"}" aria-hidden="true" title="${conversational ? "Voice replies on" : "Voice replies off"}">
+            <button type="button" id="convo-audio" class="convo-audio" data-on="${conversational ? "true" : "false"}" aria-pressed="${conversational ? "true" : "false"}" title="${conversational ? "Turn conversational mode off" : "Turn conversational mode on"}" aria-label="${conversational ? "Turn conversational mode off" : "Turn conversational mode on"}">
               ${speakerIcon(conversational)}
+            </button>
+            <span id="voice-engine" class="voice-engine" ${conversational ? "" : "hidden"}>
+              <span class="voice-engine-label">Voice:</span>
+              <button type="button" data-tts-engine="${TTS_ENGINES.BROWSER}" class="voice-engine-btn${DEFAULT_TTS_ENGINE === TTS_ENGINES.BROWSER ? " is-active" : ""}">Browser</button>
+              <button type="button" data-tts-engine="${TTS_ENGINES.CARTESIA}" class="voice-engine-btn">Cartesia</button>
             </span>
             <span id="tts-wave" class="tts-wave" hidden aria-hidden="true" title="Speaking">
               <span></span><span></span><span></span><span></span>
@@ -318,7 +348,10 @@ async function acceptUserText(els, state, text) {
   push(state, "assistant", reply);
   render(els, state);
   if (state.conversational) {
-    void speakAgentReply(reply);
+    void speakAgentReply(reply, {
+      engine: state.ttsEngine,
+      storage: typeof localStorage !== "undefined" ? localStorage : null,
+    });
   } else {
     stopAgentSpeech();
   }
@@ -495,7 +528,17 @@ function renderChrome(els, state) {
     els.conversational.classList.toggle("is-active", state.conversational);
     els.conversational.setAttribute("aria-pressed", state.conversational ? "true" : "false");
   }
+  const awaitingEmail = state.session.awaiting === "email";
+  els.form?.classList.toggle("is-email-ask", awaitingEmail);
+  if (els.input) {
+    els.input.placeholder = awaitingEmail
+      ? "Type the email address…"
+      : "Type origin ZIP, dest ZIP, pieces…";
+    els.input.setAttribute("inputmode", awaitingEmail ? "email" : "text");
+    els.input.setAttribute("autocomplete", awaitingEmail ? "email" : "off");
+  }
   renderConvoAudio(els, state);
+  renderVoiceEngine(els, state);
   renderTtsWave(els, state);
   if (state.finishing) {
     els.holdHint.textContent = state.interim ? state.interim : "Finishing…";
@@ -523,8 +566,21 @@ function renderConvoAudio(els, state) {
   if (!els.convoAudio) return;
   const on = Boolean(state.conversational);
   els.convoAudio.dataset.on = on ? "true" : "false";
-  els.convoAudio.title = on ? "Voice replies on" : "Voice replies off";
+  els.convoAudio.setAttribute("aria-pressed", on ? "true" : "false");
+  const label = on ? "Turn conversational mode off" : "Turn conversational mode on";
+  els.convoAudio.title = label;
+  els.convoAudio.setAttribute("aria-label", label);
   els.convoAudio.innerHTML = speakerIcon(on);
+}
+
+function renderVoiceEngine(els, state) {
+  if (!els.voiceEngine) return;
+  const show = Boolean(state.conversational);
+  els.voiceEngine.hidden = !show;
+  const engine = state.ttsEngine === TTS_ENGINES.CARTESIA ? TTS_ENGINES.CARTESIA : TTS_ENGINES.BROWSER;
+  for (const btn of els.voiceEngine.querySelectorAll("[data-tts-engine]")) {
+    btn.classList.toggle("is-active", btn.getAttribute("data-tts-engine") === engine);
+  }
 }
 
 function renderTtsWave(els, state) {

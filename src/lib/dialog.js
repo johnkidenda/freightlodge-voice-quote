@@ -1,9 +1,11 @@
 import { emptySheet } from "./sheet.js";
 import { isReadyForQuote, nextRequiredSlot } from "./completeness.js";
 import {
+  applyCityZipChoice,
   applyExtractedSlots,
   applyZipRoleCorrection,
   applyZipToRole,
+  detectCityZipMetroClarify,
   detectZipRoleCorrection,
   extractSlots,
   firstBareZip,
@@ -35,7 +37,8 @@ const PROMPTS = {
   pickup_date: "What pickup date works? Say a day or YYYY-MM-DD — I won’t treat “ASAP” as a date.",
   accessorials:
     "Any accessorials — liftgate, residential, inside, limited access, appointment, freeze protect? Or say none.",
-  email: "What email should I put on the sheet so we can send the quote?",
+  email:
+    "What email should I put on the sheet so we can send the quote? Typing the address is safer than saying it — voice often mangles emails.",
 };
 
 export function createSession({ id, now } = {}) {
@@ -59,6 +62,11 @@ export function isAlreadyMentioned(text) {
 
 export function zipClarifyQuestion(clarify, sheet) {
   if (!clarify?.zip || !clarify?.metro?.city) return PROMPTS.origin_zip;
+  if (clarify.kind === "metro") {
+    const stated = [clarify.statedCity, clarify.statedState].filter(Boolean).join(", ") || "that city";
+    const cityName = clarify.statedCity || stated;
+    return `You said ${stated} but ${clarify.zip} looks like ${clarify.metro.city}. Which is right — ${cityName} or ${clarify.zip}? I won’t invent a ZIP.`;
+  }
   const place = clarify.metro.city;
   const destCity = sheet?.lanes?.destination?.city;
   const destConflicts =
@@ -84,6 +92,7 @@ function decideZipClarify(raw, clarify) {
     .toLowerCase()
     .replace(/['’]/g, "");
   if (!t.trim()) return null;
+  if (clarify.kind === "metro") return decideMetroClarify(t, clarify);
   if (/\b(dest|destination|going|deliver)\b/.test(t)) return "dest";
   if (/\b(origin|pickup|pick up|ship from)\b/.test(t)) return "origin";
   if (/^\s*(yes|yeah|yep|yup|correct|thats right|that is right|it is)\b/.test(t)) {
@@ -91,6 +100,22 @@ function decideZipClarify(raw, clarify) {
   }
   if (/^\s*(no|nope|nah)\b/.test(t)) {
     return clarify.attemptedRole || "origin";
+  }
+  return null;
+}
+
+function decideMetroClarify(t, clarify) {
+  const zip = String(clarify.zip || "");
+  const city = String(clarify.statedCity || "").toLowerCase();
+  const metroCity = String(clarify.metro?.city || "").toLowerCase();
+  const mentionsZip = (zip && t.includes(zip)) || /\b(the\s+)?zip(\s+code)?\b/.test(t);
+  const mentionsCity = (city && t.includes(city)) || /\b(the\s+)?city\b/.test(t);
+  const mentionsMetro = Boolean(metroCity && t.includes(metroCity));
+  if (mentionsCity && !mentionsZip && !mentionsMetro) return "keep_city";
+  if ((mentionsZip || mentionsMetro) && !mentionsCity) return "keep_zip";
+  if (mentionsCity && (mentionsZip || mentionsMetro) && /\b(not|isnt|wrong)\b/.test(t)) {
+    if (zip && t.includes(zip)) return "keep_city";
+    if (city && t.includes(city)) return "keep_zip";
   }
   return null;
 }
@@ -136,7 +161,13 @@ export function handleUtterance(session, text, { now } = {}) {
   let zipClarify = session.zipClarify || null;
   if (zipClarify) {
     const decided = decideZipClarify(raw, zipClarify);
-    if (decided) {
+    if (decided === "keep_city") {
+      sheetFromClarify = applyCityZipChoice(sheet0, zipClarify, "city");
+      zipClarify = null;
+    } else if (decided === "keep_zip") {
+      sheetFromClarify = applyCityZipChoice(sheet0, zipClarify, "zip");
+      zipClarify = null;
+    } else if (decided) {
       sheetFromClarify = applyZipToRole(sheet0, decided, zipClarify.zip);
       zipClarify = null;
     } else if (firstBareZip(raw)) {
@@ -169,7 +200,7 @@ export function handleUtterance(session, text, { now } = {}) {
   const zipForIntent =
     zipIntent === "origin" ? extracted.origin.postal_code : zipIntent === "dest" ? extracted.destination.postal_code : null;
   if (zipIntent && zipForIntent) {
-    const verdict = resolveZipAttachment(sheetFromClarify, zipForIntent, zipIntent);
+    const verdict = resolveZipAttachment(sheetFromClarify, zipForIntent, zipIntent, extracted);
     if (verdict.clarify) {
       const uttered = [...String(raw).matchAll(/\b(\d{5})(?:-\d{4})?\b/g)].map((m) => m[1]);
       const altZip = uttered.find((z) => z !== zipForIntent) || null;
@@ -178,6 +209,15 @@ export function handleUtterance(session, text, { now } = {}) {
       verdict.clarify.altZip = altZip;
       extracted.flags.zipClarify = verdict.clarify;
       zipClarify = verdict.clarify;
+    }
+  }
+  if (!extracted.flags.zipClarify) {
+    const metroClarify = detectCityZipMetroClarify(sheetFromClarify, extracted);
+    if (metroClarify) {
+      if (metroClarify.attemptedRole === "origin") delete extracted.origin.postal_code;
+      if (metroClarify.attemptedRole === "dest") delete extracted.destination.postal_code;
+      extracted.flags.zipClarify = metroClarify;
+      zipClarify = metroClarify;
     }
   }
 

@@ -653,15 +653,24 @@ export function placeMatchesMetro(place, metro) {
   return false;
 }
 
+export function overlayPlace(sheetPlace, extractedPlace) {
+  const next = { ...(sheetPlace || {}) };
+  if (extractedPlace?.city) next.city = extractedPlace.city;
+  if (extractedPlace?.state) next.state = extractedPlace.state;
+  if (extractedPlace?.postal_code) next.postal_code = extractedPlace.postal_code;
+  return next;
+}
+
 /**
  * Decide whether a ZIP can attach to the awaiting side without inverting
- * a known city/state pair (Atlanta + 78721, dest TX/Austin).
+ * a known city/state pair (Atlanta + 78721, dest TX/Austin) or silently
+ * pairing a ZIP whose metro disagrees with the stated city (NYC + 30301).
  */
-export function resolveZipAttachment(sheet, zip, intendedRole) {
+export function resolveZipAttachment(sheet, zip, intendedRole, extracted = null) {
   const metro = metroForZip(zip);
   if (!metro || !intendedRole) return { attach: intendedRole, clarify: null };
-  const origin = sheet?.lanes?.origin;
-  const dest = sheet?.lanes?.destination;
+  const origin = overlayPlace(sheet?.lanes?.origin, extracted?.origin);
+  const dest = overlayPlace(sheet?.lanes?.destination, extracted?.destination);
   const target = intendedRole === "origin" ? origin : dest;
   const other = intendedRole === "origin" ? dest : origin;
   const otherRole = intendedRole === "origin" ? "dest" : "origin";
@@ -670,21 +679,64 @@ export function resolveZipAttachment(sheet, zip, intendedRole) {
   if (targetConflict && otherMatch) {
     return {
       attach: null,
-      clarify: { zip, attemptedRole: intendedRole, suggestedRole: otherRole, metro },
+      clarify: {
+        kind: "role",
+        zip,
+        attemptedRole: intendedRole,
+        suggestedRole: otherRole,
+        metro,
+        statedCity: target.city || null,
+        statedState: target.state || null,
+      },
     };
   }
   if (targetConflict) {
     return {
       attach: null,
       clarify: {
+        kind: "metro",
         zip,
         attemptedRole: intendedRole,
-        suggestedRole: otherMatch ? otherRole : otherRole,
+        suggestedRole: null,
         metro,
+        statedCity: target.city || null,
+        statedState: target.state || null,
       },
     };
   }
   return { attach: intendedRole, clarify: null };
+}
+
+/** Same-side city vs ZIP metro mismatch when both ZIPs arrived in one turn. */
+export function detectCityZipMetroClarify(sheet, extracted) {
+  const roles = [
+    ["origin", extracted?.origin?.postal_code],
+    ["dest", extracted?.destination?.postal_code],
+  ];
+  for (const [role, zip] of roles) {
+    if (!zip) continue;
+    const place = overlayPlace(
+      role === "origin" ? sheet?.lanes?.origin : sheet?.lanes?.destination,
+      role === "origin" ? extracted.origin : extracted.destination,
+    );
+    const metro = metroForZip(zip);
+    if (!metro || !placeConflictsWithMetro(place, metro)) continue;
+    const other = overlayPlace(
+      role === "origin" ? sheet?.lanes?.destination : sheet?.lanes?.origin,
+      role === "origin" ? extracted.destination : extracted.origin,
+    );
+    if (placeMatchesMetro(other, metro) || placeCityMatchesMetro(other, metro)) continue;
+    return {
+      kind: "metro",
+      zip,
+      attemptedRole: role,
+      suggestedRole: null,
+      metro,
+      statedCity: place.city || null,
+      statedState: place.state || null,
+    };
+  }
+  return null;
 }
 
 export function applyZipToRole(sheet, role, zip) {
@@ -692,6 +744,24 @@ export function applyZipToRole(sheet, role, zip) {
   const next = structuredClone(sheet);
   if (role === "dest") next.lanes.destination.postal_code = zip;
   if (role === "origin") next.lanes.origin.postal_code = zip;
+  return next;
+}
+
+/**
+ * City vs ZIP metro choice. Keep the stated city (drop ZIP) or keep the ZIP
+ * (drop conflicting city/state). Never invent a replacement ZIP or city.
+ */
+export function applyCityZipChoice(sheet, clarify, keep) {
+  if (!clarify?.zip || !clarify.attemptedRole) return sheet;
+  const next = structuredClone(sheet);
+  const place = clarify.attemptedRole === "dest" ? next.lanes.destination : next.lanes.origin;
+  if (keep === "city") {
+    if (place.postal_code === clarify.zip) place.postal_code = null;
+  } else if (keep === "zip") {
+    place.postal_code = clarify.zip;
+    place.city = null;
+    place.state = null;
+  }
   return next;
 }
 
@@ -828,6 +898,10 @@ function extractLane(raw, extracted, awaiting, sheetCities = {}) {
     const leading = dropNoiseCityBeforeZip(takePlace(raw), sheetCities.originCity);
     if (leading?.postal_code && (leading.city || leading.state || awaiting === "origin_zip")) {
       Object.assign(extracted.origin, leading);
+    } else if (leading?.city && isKnownUsCity(leading.city)) {
+      const bits = { city: leading.city };
+      if (leading.state) bits.state = leading.state;
+      Object.assign(extracted.origin, bits);
     }
   }
 
@@ -1112,8 +1186,19 @@ export function takePlace(text) {
     if (bare.includes("@")) break;
 
     const nextBare = tokens[i + 1] ? tokens[i + 1].replace(/^[,\.;:]+|[,\.;:]+$/g, "") : "";
+    const afterNext = tokens[i + 2] ? tokens[i + 2].replace(/^[,\.;:]+|[,\.;:]+$/g, "") : "";
     const twoWord = nextBare ? normalizeState(`${bare} ${nextBare}`) : null;
     if (twoWord) {
+      if (isCitySuffix(afterNext)) {
+        cityWords.push(bare, nextBare, afterNext);
+        i += 2;
+        continue;
+      }
+      if (isKnownUsCity(`${bare} ${nextBare}`)) {
+        cityWords.push(bare, nextBare);
+        i += 1;
+        continue;
+      }
       state = twoWord;
       i += 1;
       continue;
@@ -1121,6 +1206,11 @@ export function takePlace(text) {
 
     const st = normalizeState(bare);
     if (st) {
+      if (isCitySuffix(nextBare)) {
+        cityWords.push(bare, nextBare);
+        i += 1;
+        continue;
+      }
       state = st;
       continue;
     }
@@ -1141,9 +1231,26 @@ export function takePlace(text) {
   const place = {};
   if (zip) place.postal_code = zip;
   if (state) place.state = state;
-  const city = cleanCity(cityWords.join(" "));
+  const city = cleanCity(normalizeCityPhrase(cityWords.join(" ")));
   if (city) place.city = city;
   return Object.keys(place).length ? place : null;
+}
+
+function isCitySuffix(word) {
+  return String(word || "").toLowerCase() === "city";
+}
+
+/** New York City → New York when the prefix is the known city. Keep Oklahoma City. */
+export function normalizeCityPhrase(value) {
+  const cleaned = String(value || "").replace(/\s+/g, " ").trim();
+  if (!cleaned) return cleaned;
+  if (isKnownUsCity(cleaned)) return cleaned;
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length >= 2 && isCitySuffix(words[words.length - 1])) {
+    const prefix = words.slice(0, -1).join(" ");
+    if (isKnownUsCity(prefix)) return prefix;
+  }
+  return cleaned;
 }
 
 function normalizeState(value) {
@@ -1498,6 +1605,24 @@ function extractDate(raw, extracted, now) {
     const d = new Date(year, month, Number(named[2]));
     if (d < startOfDay(n) && !named[3]) d.setFullYear(year + 1);
     extracted.pickup.date = isoDate(d);
+    return;
+  }
+  const afterNext = raw.match(
+    /\b(?:the\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\s+after\s+next\b/i,
+  );
+  if (afterNext) {
+    extracted.pickup.date = isoDate(addDays(nextWeekday(n, WEEKDAYS[afterNext[1].toLowerCase()], true), 7));
+    return;
+  }
+  const nFromNow = raw.match(
+    /\b(?:(\d+|two|three|four)\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)s\s+from\s+now\b/i,
+  );
+  if (nFromNow) {
+    const countToken = nFromNow[1];
+    let count = countToken ? (WORD_NUMBERS[countToken.toLowerCase()] ?? Number(countToken)) : 2;
+    if (!Number.isInteger(count) || count < 1) count = 2;
+    const first = nextWeekday(n, WEEKDAYS[nFromNow[2].toLowerCase()], true);
+    extracted.pickup.date = isoDate(addDays(first, (count - 1) * 7));
     return;
   }
   const dow = raw.match(/\b(?:next\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i);
