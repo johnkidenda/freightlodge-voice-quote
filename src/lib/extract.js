@@ -1,4 +1,5 @@
 import { ACCESSORIALS } from "./sheet.js";
+import { fillStateFromZip, zipStateClarify } from "./zip-state.js";
 
 const STATE_NAME_TO_CODE = {
   alabama: "AL",
@@ -663,20 +664,28 @@ export function overlayPlace(sheetPlace, extractedPlace) {
 
 /**
  * Decide whether a ZIP can attach to the awaiting side without inverting
- * a known city/state pair (Atlanta + 78721, dest TX/Austin) or silently
- * pairing a ZIP whose metro disagrees with the stated city (NYC + 30301).
+ * a known city/state pair (Atlanta + 78721, dest TX/Austin), silently
+ * pairing a ZIP whose metro disagrees with the stated city (NYC + 30301),
+ * or parking a ZIP that does not belong to the known / city-implied state.
  */
 export function resolveZipAttachment(sheet, zip, intendedRole, extracted = null) {
-  const metro = metroForZip(zip);
-  if (!metro || !intendedRole) return { attach: intendedRole, clarify: null };
+  if (!intendedRole || !zip) return { attach: intendedRole || null, clarify: null };
   const origin = overlayPlace(sheet?.lanes?.origin, extracted?.origin);
   const dest = overlayPlace(sheet?.lanes?.destination, extracted?.destination);
   const target = intendedRole === "origin" ? origin : dest;
   const other = intendedRole === "origin" ? dest : origin;
   const otherRole = intendedRole === "origin" ? "dest" : "origin";
-  const targetConflict = placeConflictsWithMetro(target, metro);
-  const otherMatch = placeMatchesMetro(other, metro) || placeCityMatchesMetro(other, metro);
-  if (targetConflict && otherMatch) {
+  const metro = metroForZip(zip);
+  const otherMatch = Boolean(
+    metro && (placeMatchesMetro(other, metro) || placeCityMatchesMetro(other, metro)),
+  );
+  const targetCity = cityOf(target);
+  const targetCityConflict = Boolean(
+    metro && targetCity && isKnownUsCity(targetCity) && targetCity !== metro.city.toLowerCase(),
+  );
+  const targetConflict = Boolean(metro && placeConflictsWithMetro(target, metro));
+
+  if (metro && targetConflict && otherMatch) {
     return {
       attach: null,
       clarify: {
@@ -690,7 +699,7 @@ export function resolveZipAttachment(sheet, zip, intendedRole, extracted = null)
       },
     };
   }
-  if (targetConflict) {
+  if (metro && targetCityConflict) {
     return {
       attach: null,
       clarify: {
@@ -704,6 +713,12 @@ export function resolveZipAttachment(sheet, zip, intendedRole, extracted = null)
       },
     };
   }
+
+  const stateClarify = zipStateClarify(target, zip, intendedRole);
+  if (stateClarify) {
+    return { attach: null, clarify: stateClarify };
+  }
+
   return { attach: intendedRole, clarify: null };
 }
 
@@ -720,7 +735,10 @@ export function detectCityZipMetroClarify(sheet, extracted) {
       role === "origin" ? extracted.origin : extracted.destination,
     );
     const metro = metroForZip(zip);
-    if (!metro || !placeConflictsWithMetro(place, metro)) continue;
+    if (!metro) continue;
+    const city = cityOf(place);
+    const cityConflict = Boolean(city && isKnownUsCity(city) && city !== metro.city.toLowerCase());
+    if (!cityConflict) continue;
     const other = overlayPlace(
       role === "origin" ? sheet?.lanes?.destination : sheet?.lanes?.origin,
       role === "origin" ? extracted.destination : extracted.origin,
@@ -739,11 +757,14 @@ export function detectCityZipMetroClarify(sheet, extracted) {
   return null;
 }
 
-export function applyZipToRole(sheet, role, zip) {
+export function applyZipToRole(sheet, role, zip, { state } = {}) {
   if (!role || !zip) return sheet;
   const next = structuredClone(sheet);
-  if (role === "dest") next.lanes.destination.postal_code = zip;
-  if (role === "origin") next.lanes.origin.postal_code = zip;
+  const place = role === "dest" ? next.lanes.destination : role === "origin" ? next.lanes.origin : null;
+  if (!place) return next;
+  place.postal_code = zip;
+  if (state) place.state = state;
+  else fillStateFromZip(place, zip);
   return next;
 }
 
@@ -993,6 +1014,19 @@ function extractLane(raw, extracted, awaiting, sheetCities = {}) {
 
   stripNoiseCity(extracted.origin, sheetCities.originCity);
   stripNoiseCity(extracted.destination, sheetCities.destCity);
+
+  const loneState = normalizeState(raw.trim().replace(/[.,!?]+$/g, ""));
+  if (loneState) {
+    if (awaiting === "dest_zip" && !extracted.destination.state && !extracted.destination.city) {
+      extracted.destination.state = loneState;
+    } else if (
+      (awaiting === "origin_zip" || !awaiting) &&
+      !extracted.origin.state &&
+      !extracted.origin.city
+    ) {
+      extracted.origin.state = loneState;
+    }
+  }
 }
 
 function isLabeledLaneZipPhrase(raw) {
@@ -1150,11 +1184,13 @@ export function applyZipRoleCorrection(sheet, role, zip) {
   const next = structuredClone(sheet);
   if (role === "dest") {
     next.lanes.destination.postal_code = zip;
+    fillStateFromZip(next.lanes.destination, zip);
     if (next.lanes.origin.postal_code === zip) {
       next.lanes.origin.postal_code = null;
     }
   } else if (role === "origin") {
     next.lanes.origin.postal_code = zip;
+    fillStateFromZip(next.lanes.origin, zip);
     if (next.lanes.destination.postal_code === zip) {
       next.lanes.destination.postal_code = null;
     }
@@ -1836,7 +1872,10 @@ function assignPlace(target, src) {
   if (!src) return;
   if (src.city) target.city = src.city;
   if (src.state) target.state = src.state;
-  if (src.postal_code) target.postal_code = src.postal_code;
+  if (src.postal_code) {
+    target.postal_code = src.postal_code;
+    fillStateFromZip(target, src.postal_code);
+  }
   if (src.country) target.country = src.country;
 }
 
