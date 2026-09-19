@@ -112,7 +112,7 @@ export function nextRequiredSlot(sheet, { askedAccessorials = false } = {}) {
   if (typeof sheet?.pickup?.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(sheet.pickup.date)) {
     return "pickup_date";
   }
-  if (!askedAccessorials) return "accessorials";
+  if (!askedAccessorials && !(sheet?.pickup?.accessorials?.length > 0)) return "accessorials";
   if (!isValidEmail(sheet?.contact?.email)) return "email";
   return null;
 }

@@ -2,7 +2,7 @@ name: Bump VERSION on PR
 
 # Future change-sets: if the PR did not already increment VERSION vs main,
 # bump 0.XX → 0.(XX+1) on the PR branch so Pages ships the next label.
-# This ship committed VERSION=0.23 (22 merged + this PR).
+# This ship committed VERSION=0.24 (23 merged + this PR).
 
 on:
   pull_request:

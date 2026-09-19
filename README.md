@@ -24,7 +24,7 @@ Open the printed localhost URL (Chrome or Safari). Hold the mic button to talk, 
 
 **Conversational mode** (separate toggle) rewrites agent bubbles into short customer-service copy and speaks them with the browser `speechSynthesis` API. Mode off = formal prompts + silent. There is no Cartesia TTS toggle, latency chip, or STT mode badge in the UI. **Never** put `CARTESIA_API_KEY` in `VITE_*` or the Pages bundle.
 
-**App version** is `v0.XX` where XX is `0.01` × (merged change-sets including the current ship). Source of truth: [`VERSION`](VERSION). This ship is **v0.23** (22 merged PRs + this one). Future PRs that do not bump `VERSION` are incremented by CI (`.github/workflows/version-on-pr.yml`).
+**App version** is `v0.XX` where XX is `0.01` × (merged change-sets including the current ship). Source of truth: [`VERSION`](VERSION). This ship is **v0.24** (23 merged PRs + this one). Future PRs that do not bump `VERSION` are incremented by CI (`.github/workflows/version-on-pr.yml`).
 
 `npm run preview` serves the production build plus the same local API stubs.
 
@@ -202,7 +202,7 @@ npm test
 
 - Hold-and-dump: one utterance parks weight + commodity + cities while awaiting origin ZIP
 - Conversational copy + browser `speechSynthesis`; Web Speech only for STT
-- Visible `VERSION` (`v0.23` this ship) baked into the header/footer
+- Visible `VERSION` (`v0.24` this ship) baked into the header/footer
 - Post-utterance Jev via `POST /jev` (fallback when the TypeSafe key is absent; `?jev=0` disables)
 - Completeness rules for `ready_for_quote`
 - Never-invent: cities do not become ZIPs; “standard class” / “a few hundred pounds” stay `null`

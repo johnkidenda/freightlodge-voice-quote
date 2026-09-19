@@ -143,8 +143,14 @@ const MONTHS = {
 const ACCESSORIAL_PATTERNS = [
   { re: /lift\s*-?\s*gates?\s+(?:at\s+)?pick/i, ids: ["liftgate_pickup"] },
   { re: /lift\s*-?\s*gates?\s+(?:at\s+)?deliv/i, ids: ["liftgate_delivery"] },
+  { re: /lift\s*-?\s*gates?\s+(?:at\s+)?(?:both|each|either)/i, ids: ["liftgate_pickup", "liftgate_delivery"] },
+  {
+    re: /lift\s*-?\s*gates?.{0,32}\b(?:pick\w*.{0,16}(?:and|&).{0,16}deliv|deliv\w*.{0,16}(?:and|&).{0,16}pick)/i,
+    ids: ["liftgate_pickup", "liftgate_delivery"],
+  },
   { re: /inside\s+pick/i, ids: ["inside_pickup"] },
   { re: /inside\s+deliv/i, ids: ["inside_delivery"] },
+  { re: /inside\s+both/i, ids: ["inside_pickup", "inside_delivery"] },
   { re: /residential\s+pick/i, ids: ["residential_pickup"] },
   { re: /residential\s+deliv/i, ids: ["residential_delivery"] },
   { re: /limited\s+access\s+pick/i, ids: ["limited_access_pickup"] },
@@ -155,10 +161,8 @@ const ACCESSORIAL_PATTERNS = [
     re: /protect(?:ed|ing)?\s+from\s+freeze|freeze\s+protect(?:ed|ing)?|freeze\b[\s\w]{0,24}\bprotect(?:ed|ing)?|\bprotect(?:ed|ing)?\b[\s\w]{0,24}\bfreeze|\bplease\s+protect(?:ed|ing)?\b/i,
     ids: ["protect_from_freeze"],
   },
-  { re: /lift\s*-?\s*gates?/i, ids: ["liftgate_pickup", "liftgate_delivery"] },
   { re: /residential/i, ids: ["residential_pickup", "residential_delivery"] },
   { re: /limited\s+access/i, ids: ["limited_access_pickup", "limited_access_delivery"] },
-  { re: /inside\s+(?:delivery|pickup|both)?/i, ids: ["inside_pickup", "inside_delivery"] },
 ];
 
 const NONE_ACCESSORIALS =
@@ -1066,6 +1070,7 @@ function extractLane(raw, extracted, awaiting, sheetCities = {}) {
 
 function isLabeledLaneZipPhrase(raw) {
   return (
+    /\b(?:origin|destination|dest)(?:\s+zip|\s+zipcode|\s+zip\s*code)?[:\s]+\d{3,5}/i.test(raw) ||
     /\b(?:origin|destination|dest)(?:\s+zip|\s+zipcode|\s+zip\s*code)/i.test(raw) ||
     /\b(?:zip|zipcode|zip\s*code)\s+is\s+\d/i.test(raw) ||
     /\b\d{3,5}(?:-\d{4})?\s+is\s+(?:the\s+)?(?:destination|dest|origin)\b/i.test(raw) ||
@@ -1742,6 +1747,14 @@ function extractAccessorials(raw, extracted, awaiting) {
   if (softProtect && !found.includes("protect_from_freeze") && !extracted.flags.accessorialsNone) {
     found.push("protect_from_freeze");
     extracted.flags.softProtect = true;
+  }
+  const hasInsideSide = found.includes("inside_pickup") || found.includes("inside_delivery");
+  if (/\binside\b/i.test(raw) && !hasInsideSide) {
+    found.push("inside_pickup", "inside_delivery");
+  }
+  const hasLiftgateSide = found.includes("liftgate_pickup") || found.includes("liftgate_delivery");
+  if (/lift\s*-?\s*gates?/i.test(raw) && !hasLiftgateSide) {
+    extracted.flags.ambiguousLiftgate = true;
   }
   if (found.length) extracted.pickup.accessorials = found;
 }
