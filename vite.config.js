@@ -8,9 +8,9 @@ const base = process.env.VITE_BASE || (process.env.GITHUB_ACTIONS ? pagesBase : 
 
 function readVersion() {
   try {
-    return readFileSync(new URL("./VERSION", import.meta.url), "utf8").trim().replace(/^v/i, "") || "0.24";
+    return readFileSync(new URL("./VERSION", import.meta.url), "utf8").trim().replace(/^v/i, "") || "0.25";
   } catch {
-    return "0.24";
+    return "0.25";
   }
 }
 

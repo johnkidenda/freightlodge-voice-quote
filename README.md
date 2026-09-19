@@ -24,7 +24,7 @@ Open the printed localhost URL (Chrome or Safari). Hold the mic button to talk, 
 
 **Conversational mode** (separate toggle) rewrites agent bubbles into short customer-service copy and speaks them with the browser `speechSynthesis` API. Mode off = formal prompts + silent. There is no Cartesia TTS toggle, latency chip, or STT mode badge in the UI. **Never** put `CARTESIA_API_KEY` in `VITE_*` or the Pages bundle.
 
-**App version** is `v0.XX` where XX is `0.01` × (merged change-sets including the current ship). Source of truth: [`VERSION`](VERSION). This ship is **v0.24** (23 merged PRs + this one). Future PRs that do not bump `VERSION` are incremented by CI (`.github/workflows/version-on-pr.yml`).
+**App version** is `v0.XX` where XX is `0.01` × (merged change-sets including the current ship). Source of truth: [`VERSION`](VERSION). This ship is **v0.25** (24 merged PRs + this one). Future PRs that do not bump `VERSION` are incremented by CI (`.github/workflows/version-on-pr.yml`).
 
 `npm run preview` serves the production build plus the same local API stubs.
 
@@ -56,6 +56,26 @@ Hard rules on top of Jev: never re-ask or focus a slot that already has a value 
 Kill switch: `?jev=0` (also `off` / `false`) skips Jev and persists in `localStorage`. `?jev=1` turns it back on.
 
 If `TYPESAFE_API_KEY` is unset, Jev fails, or the kill switch is on, the app uses heuristics only.
+
+### Fake Exfresso computer-use pilot (v0.25)
+
+Public form (does not touch the voice app):
+
+**https://johnkidenda.github.io/freightlodge-voice-quote/exfresso-pilot/**
+
+`POST /jev-action` on the token proxy runs one TypeSafe Choice over **listed DOM candidates** (sheet snapshot + visible controls). Confidence below 0.5 or `stop`/`clarify` pauses the runner. Key stays on the stub/Worker.
+
+```bash
+set -a && source /home/box/.secrets/typesafe.env && set +a
+TYPESAFE_API_KEY=$TYPESAFE_API_KEY node token-proxy/local-stub.mjs
+npx playwright install chromium
+node scripts/exfresso-pilot-runner.mjs \
+  --url https://johnkidenda.github.io/freightlodge-voice-quote/exfresso-pilot/ \
+  --jev-url http://127.0.0.1:8787/jev-action \
+  --arm both --runs 3
+```
+
+Full A/B scorecard and Anthony steps: [`docs/EXFRESSO_PILOT.md`](docs/EXFRESSO_PILOT.md).
 
 **Smoke when the key is on the local stub or tunnel** (Anthony persists it at `/home/box/.secrets/typesafe.env` and refreshes the stub):
 
@@ -202,7 +222,7 @@ npm test
 
 - Hold-and-dump: one utterance parks weight + commodity + cities while awaiting origin ZIP
 - Conversational copy + browser `speechSynthesis`; Web Speech only for STT
-- Visible `VERSION` (`v0.24` this ship) baked into the header/footer
+- Visible `VERSION` (`v0.25` this ship) baked into the header/footer
 - Post-utterance Jev via `POST /jev` (fallback when the TypeSafe key is absent; `?jev=0` disables)
 - Completeness rules for `ready_for_quote`
 - Never-invent: cities do not become ZIPs; “standard class” / “a few hundred pounds” stay `null`
@@ -213,4 +233,4 @@ npm test
 
 Booking, payment, live Exfresso credentials, and hard international / ocean / air quoting.
 
-Exfresso DOM step Choice, CDF triage, and bot-team auto-mode are **not** in this ship. Jev here is only the post-utterance slot / ready / clarify gate.
+Voice Jev is still the post-utterance slot / ready / clarify gate. A **fake** Exfresso multi-step form plus `POST /jev-action` DOM Choice lives at [`/exfresso-pilot/`](https://johnkidenda.github.io/freightlodge-voice-quote/exfresso-pilot/) for the computer-use A/B. It does not log into real Exfresso. Runbook: [`docs/EXFRESSO_PILOT.md`](docs/EXFRESSO_PILOT.md).
