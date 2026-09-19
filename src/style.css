@@ -217,16 +217,6 @@ button, input { font: inherit; }
   color: var(--ok);
 }
 
-.stt-toggle,
-.mode-toggle {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  overflow: hidden;
-  background: #fff;
-}
 .mode-toggle {
   align-self: flex-start;
   display: inline-flex;
@@ -237,6 +227,8 @@ button, input { font: inherit; }
   font-weight: 700;
   color: var(--navy);
   background: #fffdf8;
+  border: 1px solid var(--line);
+  border-radius: 12px;
   cursor: pointer;
 }
 .mode-toggle.is-active {
@@ -296,33 +288,6 @@ button, input { font: inherit; }
   50% { height: 16px; }
 }
 .tts-latency { display: none; }
-.stt-opt {
-  flex: 1 1 auto;
-  min-width: 7.2rem;
-  border: 0;
-  border-right: 1px solid var(--line);
-  background: #fffdf8;
-  color: var(--navy);
-  padding: 8px 10px;
-  font-size: 0.78rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-.stt-opt:last-child { border-right: 0; }
-.stt-opt.is-active {
-  background: var(--navy);
-  color: #f6f1e8;
-}
-.stt-badge-row { margin: 0; }
-.stt-badge {
-  display: inline-block;
-  border-radius: 999px;
-  padding: 2px 8px;
-  background: #e7edf6;
-  color: var(--navy);
-  font-size: 0.72rem;
-  font-weight: 700;
-}
 .hold {
   min-height: 64px;
   border: 0;

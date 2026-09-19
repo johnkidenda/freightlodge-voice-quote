@@ -22,6 +22,9 @@ describe("TTS timing removed from UI and Send transcript", () => {
     expect(app).not.toContain("voice-engine");
     expect(app).toContain("tts-wave");
     expect(app).toContain("Conversational mode");
+    expect(app).not.toContain("stt-badge");
+    expect(app).not.toContain("STT: Web Speech");
+    expect(app).not.toContain("STT: Cartesia");
   });
 
   it("Send snapshot does not stamp Voice or TTS first-audio ms", () => {
