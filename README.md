@@ -24,7 +24,7 @@ Open the printed localhost URL (Chrome or Safari). Hold the mic button to talk, 
 
 **Conversational mode** (separate toggle) rewrites agent bubbles into short customer-service copy and speaks them with the browser `speechSynthesis` API. Mode off = formal prompts + silent. There is no Cartesia TTS toggle, latency chip, or STT mode badge in the UI. **Never** put `CARTESIA_API_KEY` in `VITE_*` or the Pages bundle.
 
-**App version** is `v0.XX` where XX is `0.01` × (merged change-sets including the current ship). Source of truth: [`VERSION`](VERSION). This ship is **v0.22** (21 merged PRs + this one). Future PRs that do not bump `VERSION` are incremented by CI (`.github/workflows/version-on-pr.yml`).
+**App version** is `v0.XX` where XX is `0.01` × (merged change-sets including the current ship). Source of truth: [`VERSION`](VERSION). This ship is **v0.23** (22 merged PRs + this one). Future PRs that do not bump `VERSION` are incremented by CI (`.github/workflows/version-on-pr.yml`).
 
 `npm run preview` serves the production build plus the same local API stubs.
 
@@ -51,7 +51,11 @@ Act only when confidence is about `>= 0.5`. Otherwise the existing rule-based pa
 
 Send transcript stamps a quiet QA line: `Jev: on|off` plus a short decision summary.
 
-If `TYPESAFE_API_KEY` is unset or Jev fails, the app behaves as v0.21 (heuristics only).
+Hard rules on top of Jev: never re-ask or focus a slot that already has a value unless the user explicitly corrects it; if origin ZIP, dest ZIP, and weight are present, ignore a clarify / ready-low gate and ask the next missing field. ZIP-state checks compare a ZIP only to its own city/state (not origin vs dest).
+
+Kill switch: `?jev=0` (also `off` / `false`) skips Jev and persists in `localStorage`. `?jev=1` turns it back on.
+
+If `TYPESAFE_API_KEY` is unset, Jev fails, or the kill switch is on, the app uses heuristics only.
 
 **Smoke when the key is on the local stub or tunnel** (Anthony persists it at `/home/box/.secrets/typesafe.env` and refreshes the stub):
 
@@ -198,8 +202,8 @@ npm test
 
 - Hold-and-dump: one utterance parks weight + commodity + cities while awaiting origin ZIP
 - Conversational copy + browser `speechSynthesis`; Web Speech only for STT
-- Visible `VERSION` (`v0.22` this ship) baked into the header/footer
-- Post-utterance Jev via `POST /jev` (fallback when the TypeSafe key is absent)
+- Visible `VERSION` (`v0.23` this ship) baked into the header/footer
+- Post-utterance Jev via `POST /jev` (fallback when the TypeSafe key is absent; `?jev=0` disables)
 - Completeness rules for `ready_for_quote`
 - Never-invent: cities do not become ZIPs; “standard class” / “a few hundred pounds” stay `null`
 - Out of scope does not produce `quote_result`

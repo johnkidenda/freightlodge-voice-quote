@@ -360,8 +360,10 @@ export function overlayPlace(sheetPlace, extractedPlace) {
 }
 
 /**
- * ZIP vs known/implied state. No place state → not a mismatch (ZIP-only).
- * Match when ZIP state equals the place state.
+ * ZIP vs known/implied state on the SAME side only.
+ * Origin ZIP vs origin city/state; dest ZIP vs dest city/state.
+ * Never compare a dest ZIP to the origin place (or the reverse).
+ * No place state → not a mismatch (ZIP-only).
  */
 export function zipStateClarify(place, zip, role) {
   const zipState = stateForZip(zip);
