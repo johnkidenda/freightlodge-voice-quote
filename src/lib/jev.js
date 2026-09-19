@@ -12,15 +12,61 @@ export {
   JEV_SLOT_TO_AWAITING,
   JEV_CLARIFY_SCRIPTS,
   appendJevLog,
+  awaitingSlotIsFilled,
   buildJevQuestions,
   buildJevState,
   formatJevStamp,
   formatJevTranscriptLine,
+  guardJevDecision,
   interpretJevAnswers,
   jevClarifyScript,
   normalizeJevDecision,
   offDecision,
+  utteranceCorrectsSlot,
 } from "./jev-core.js";
+
+export const JEV_STORAGE_KEY = "freightlodge.jev";
+
+/** `?jev=0` / `off` / `false` disables; `?jev=1` re-enables. */
+export function readJevQueryFlag(search) {
+  const raw = String(search ?? "");
+  const qs = raw.startsWith("?") ? raw.slice(1) : raw;
+  const params = new URLSearchParams(qs);
+  if (!params.has("jev")) return null;
+  const v = String(params.get("jev") || "").trim().toLowerCase();
+  if (v === "0" || v === "off" || v === "false" || v === "no") return false;
+  if (v === "1" || v === "on" || v === "true" || v === "yes") return true;
+  return null;
+}
+
+export function isJevDisabled({ search, storage } = {}) {
+  const querySearch = search ?? (typeof location !== "undefined" ? location.search : "");
+  const store = storage === undefined
+    ? typeof localStorage !== "undefined" ? localStorage : null
+    : storage;
+  const fromQuery = readJevQueryFlag(querySearch);
+  if (fromQuery === false) {
+    try {
+      store?.setItem?.(JEV_STORAGE_KEY, "0");
+    } catch {
+      /* quota / private mode */
+    }
+    return true;
+  }
+  if (fromQuery === true) {
+    try {
+      store?.setItem?.(JEV_STORAGE_KEY, "1");
+    } catch {
+      /* quota / private mode */
+    }
+    return false;
+  }
+  try {
+    return store?.getItem?.(JEV_STORAGE_KEY) === "0";
+  } catch {
+    return false;
+  }
+}
 
 const JEV_TIMEOUT_MS = 2500;
 
@@ -54,7 +100,10 @@ export async function fetchJevDecision({
   url,
   fetchImpl,
   timeoutMs = JEV_TIMEOUT_MS,
+  search,
+  storage,
 } = {}) {
+  if (isJevDisabled({ search, storage })) return offDecision("disabled");
   const text = String(utterance || "").trim();
   const proxy = url == null ? getJevProxyUrl() : String(url).trim();
   if (!text || !proxy) return offDecision(proxy ? "empty utterance" : "no proxy");

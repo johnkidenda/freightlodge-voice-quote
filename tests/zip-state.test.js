@@ -244,6 +244,34 @@ describe("ZIP-in-state dialog", () => {
     expect(stateDisplayName("GA")).toBe("Georgia");
   });
 
+  it("does not challenge a Georgia dest ZIP against Texas origin", () => {
+    const session = createSession({ id: "ga-dest-tx-origin" });
+    session.sheet.lanes.origin = { city: "Austin", state: "TX", postal_code: "78721" };
+    session.sheet.lanes.destination = { city: "Atlanta", state: "GA", postal_code: null };
+    session.sheet.freight.total_weight_lbs = 1000;
+    session.sheet.freight.commodity = "oranges";
+    session.awaiting = "origin_zip";
+    const result = handleUtterance(session, "Atlanta 30010");
+    expect(result.session.sheet.lanes.origin.postal_code).toBe("78721");
+    expect(result.session.sheet.lanes.destination.postal_code).toBe("30010");
+    expect(result.session.sheet.lanes.origin.state).toBe("TX");
+    expect(result.session.sheet.lanes.destination.state).toBe("GA");
+    expect(result.reply).not.toMatch(/origin is Texas/i);
+    expect(result.extracted.flags.zipClarify).toBeFalsy();
+  });
+
+  it("resolveZipAttachment never compares dest ZIP 30010 to origin Texas", () => {
+    const sheet = emptySheet({ id: "same-side" });
+    sheet.lanes.origin = { city: "Austin", state: "TX", postal_code: "78721" };
+    sheet.lanes.destination = { city: "Atlanta", state: "GA", postal_code: null };
+    const verdict = resolveZipAttachment(sheet, "30010", "origin", {
+      origin: { postal_code: "30010" },
+      destination: { city: "Atlanta", state: "GA" },
+    });
+    expect(verdict.clarify).toBeNull();
+    expect(verdict.attach).toBe("dest");
+  });
+
   it("resolveZipAttachment overlay catches same-turn Texas + 30301", () => {
     const sheet = emptySheet({ id: "overlay" });
     const verdict = resolveZipAttachment(

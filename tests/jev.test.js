@@ -1,15 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { createSession, handleUtterance } from "../src/lib/dialog.js";
+import { presentAgentReply } from "../src/lib/conversational.js";
 import {
   JEV_SLOT_IDS,
+  JEV_STORAGE_KEY,
   buildJevQuestions,
   buildJevState,
   fetchJevDecision,
   formatJevStamp,
   formatJevTranscriptLine,
   getJevProxyUrl,
+  guardJevDecision,
   interpretJevAnswers,
+  isJevDisabled,
   normalizeJevDecision,
   offDecision,
 } from "../src/lib/jev.js";
@@ -125,6 +129,29 @@ describe("Jev answer threshold", () => {
   });
 });
 
+describe("Jev filled-slot guard", () => {
+  it("drops dest_zip focus when that ZIP is already on the sheet", () => {
+    const sheet = {
+      lanes: {
+        origin: { city: "Austin", state: "TX", postal_code: "78721" },
+        destination: { city: "Atlanta", state: "GA", postal_code: "30030" },
+      },
+      freight: { total_weight_lbs: 1000, commodity: "oranges" },
+    };
+    const raw = interpretJevAnswers(
+      jevAnswers({ ready: 0.03, clarify: 0.8, parse: 0.37, parseConf: 0.7, touched: { dest_zip: 0.9 } }),
+    );
+    expect(raw.focus).toBe("dest_zip");
+    expect(raw.needsClarify).toBe(true);
+    const guarded = guardJevDecision(raw, { sheet, utterance: "30030" });
+    expect(guarded.focus).toBeNull();
+    expect(guarded.needsClarify).toBe(false);
+    expect(guarded.gateOverride).toBe("min-fields");
+    expect(formatJevStamp(guarded)).toContain("gate=advance");
+    expect(formatJevStamp(guarded)).not.toContain("focus=dest_zip");
+  });
+});
+
 describe("dialog uses Jev for slot focus + gates", () => {
   it("focuses extract awaiting when Jev is confident about dest ZIP", () => {
     const session = createSession({ id: "jev-focus" });
@@ -144,11 +171,40 @@ describe("dialog uses Jev for slot focus + gates", () => {
     const result = handleUtterance(session, "75201", { jev });
     expect(result.session.sheet.lanes.destination.postal_code).toBe("75201");
     expect(result.session.sheet.lanes.origin.postal_code).toBe("30301");
-    expect(result.jev.focus).toBe("dest_zip");
+    expect(result.session.awaiting).not.toBe("origin_zip");
     expect(result.session.jevLog.at(-1)).toMatch(/^Jev: on /);
   });
 
-  it("prefers clarify script over ready when needs_clarify is high", () => {
+  it("does not re-focus or re-ask a filled dest ZIP (7c4fd9ff)", () => {
+    const session = createSession({ id: "filled-dest" });
+    session.sheet.lanes.origin = { city: "Austin", state: "TX", postal_code: "78721" };
+    session.sheet.lanes.destination = { city: "Atlanta", state: "GA", postal_code: "30030" };
+    session.sheet.freight.total_weight_lbs = 1000;
+    session.sheet.freight.commodity = "oranges";
+    session.awaiting = "dest_zip";
+    const jev = normalizeJevDecision({
+      on: true,
+      ready: false,
+      needsClarify: true,
+      focus: "dest_zip",
+      touchedSlots: ["dest_zip"],
+      readyNoul: 0.03,
+      clarifyNoul: 0.8,
+      parseScore: 0.37,
+    });
+    const result = handleUtterance(session, "30030", { jev });
+    expect(result.session.sheet.lanes.destination.postal_code).toBe("30030");
+    expect(result.session.awaiting).toBe("pieces");
+    expect(result.jev.focus).toBeNull();
+    expect(result.jev.needsClarify).toBe(false);
+    expect(result.reply).toMatch(/pieces|pallets/i);
+    expect(result.reply).not.toMatch(/destination ZIP/i);
+    expect(result.session.jevLog.at(-1)).toContain("gate=advance");
+    expect(result.session.jevLog.at(-1)).not.toContain("gate=clarify");
+    expect(result.session.jevLog.at(-1)).not.toContain("focus=dest_zip");
+  });
+
+  it("ignores clarify gate when origin ZIP, dest ZIP, and weight are filled", () => {
     const session = readySheet();
     const jev = normalizeJevDecision({
       on: true,
@@ -159,26 +215,72 @@ describe("dialog uses Jev for slot focus + gates", () => {
       clarifyNoul: 0.86,
     });
     const result = handleUtterance(session, "that date is fine I think", { jev });
-    expect(result.ready).toBe(false);
-    expect(result.session.sheet.status).toBe("collecting");
-    expect(result.reply).toMatch(/double-check pickup/i);
-    expect(result.reply).not.toMatch(/\u2014/);
-    expect(result.session.jevLog.at(-1)).toContain("gate=clarify");
+    expect(result.ready).toBe(true);
+    expect(result.session.sheet.status).toBe("ready_for_quote");
+    expect(result.reply).toMatch(/Handing this to Freight Ops/i);
+    expect(result.session.jevLog.at(-1)).toContain("gate=advance");
   });
 
-  it("blocks Exfresso ready when Jev is confident the sheet is not ready", () => {
+  it("does not block Exfresso ready when heuristics are complete and ready noul is low", () => {
     const session = readySheet();
     const jev = normalizeJevDecision({
       on: true,
       ready: false,
       needsClarify: false,
-      readyNoul: 0.2,
+      readyNoul: 0.03,
       clarifyNoul: 0.1,
     });
     const result = handleUtterance(session, "looks good", { jev });
+    expect(result.ready).toBe(true);
+    expect(result.session.sheet.status).toBe("ready_for_quote");
+    expect(result.reply).toMatch(/Handing this to Freight Ops/i);
+  });
+
+  it("still clarifies when dest ZIP is missing and Jev asks dest_zip", () => {
+    const session = createSession({ id: "jev-clarify-empty" });
+    session.sheet.lanes.origin = { city: "Austin", state: "TX", postal_code: "78721" };
+    session.sheet.lanes.destination = { city: "Atlanta", state: "GA", postal_code: null };
+    session.awaiting = "dest_zip";
+    const jev = normalizeJevDecision({
+      on: true,
+      ready: false,
+      needsClarify: true,
+      focus: "dest_zip",
+      readyNoul: 0.1,
+      clarifyNoul: 0.8,
+    });
+    const result = handleUtterance(session, "I think so", { jev });
     expect(result.ready).toBe(false);
-    expect(result.session.sheet.status).toBe("collecting");
-    expect(result.reply).not.toMatch(/Handing this to Freight Ops/i);
+    expect(result.session.awaiting).toBe("dest_zip");
+    expect(result.reply).toMatch(/double-check destination/i);
+    expect(result.reply).not.toMatch(/\u2014/);
+    expect(result.session.jevLog.at(-1)).toContain("gate=clarify");
+  });
+
+  it("does not re-ask origin ZIP after it is parked", () => {
+    let session = createSession({ id: "origin-once" });
+    session = handleUtterance(
+      session,
+      "want to ship a thousand pounds of oranges from Austin Texas to Atlanta Georgia",
+    ).session;
+    expect(session.sheet.lanes.origin.postal_code).toBeNull();
+    const jev = normalizeJevDecision({
+      on: true,
+      ready: false,
+      needsClarify: true,
+      focus: "origin_zip",
+      touchedSlots: ["origin_zip"],
+      readyNoul: 0.1,
+      clarifyNoul: 0.7,
+    });
+    const result = handleUtterance(session, "78721", { jev });
+    expect(result.session.sheet.lanes.origin.postal_code).toBe("78721");
+    expect(result.session.awaiting).toBe("dest_zip");
+    expect(result.jev.focus).toBeNull();
+    expect(result.jev.needsClarify).toBe(false);
+    const warm = presentAgentReply(result, true);
+    expect(warm).not.toMatch(/origin ZIP for Austin/i);
+    expect(warm).toMatch(/destination ZIP/i);
   });
 
   it("falls back to heuristics when Jev is off", () => {
@@ -197,6 +299,41 @@ describe("client Jev proxy helper", () => {
     );
     expect(getJevProxyUrl({ VITE_STT_TOKEN_URL: "https://proxy.example/token" })).toBe("https://proxy.example/jev");
     expect(getJevProxyUrl({ VITE_STT_TOKEN_URL: "" })).toBe("");
+  });
+
+  it("?jev=0 skips Jev and never calls the proxy", async () => {
+    const storage = new Map();
+    const mem = {
+      getItem: (k) => (storage.has(k) ? storage.get(k) : null),
+      setItem: (k, v) => storage.set(k, String(v)),
+    };
+    expect(isJevDisabled({ search: "?jev=0", storage: mem })).toBe(true);
+    expect(mem.getItem(JEV_STORAGE_KEY)).toBe("0");
+    const decision = await fetchJevDecision({
+      utterance: "78721",
+      url: "https://proxy.example/jev",
+      search: "?jev=0",
+      storage: mem,
+      fetchImpl: async () => {
+        throw new Error("should not fetch");
+      },
+    });
+    expect(decision).toEqual(offDecision("disabled"));
+    expect(isJevDisabled({ search: "", storage: mem })).toBe(true);
+    expect(isJevDisabled({ search: "?jev=1", storage: mem })).toBe(false);
+    expect(
+      await fetchJevDecision({
+        utterance: "78721",
+        url: "https://proxy.example/jev",
+        search: "?jev=1",
+        storage: mem,
+        fetchImpl: async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ ok: true, jev: "on", answers: jevAnswers() }),
+        }),
+      }),
+    ).toMatchObject({ on: true });
   });
 
   it("returns off on 503 / timeout and never throws", async () => {
@@ -351,6 +488,7 @@ describe("transcript + source guards", () => {
     }
     const app = readFileSync("src/app.js", "utf8");
     expect(app).toContain("fetchJevDecision");
+    expect(app).toContain("isJevDisabled");
     expect(app).toContain("handleUtterance(state.session, text, { jev })");
     expect(app).not.toMatch(/openrouter/i);
     expect(app).not.toMatch(/api\.anthropic|api\.x\.ai|openai\.com\/v1\/chat/i);
