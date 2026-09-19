@@ -1,4 +1,5 @@
 import { formatPlace } from "./completeness.js";
+import { formatJevTranscriptLine } from "./jev-core.js";
 import { getSttProvider } from "./stt-providers.js";
 
 export const TRANSCRIPT_TO = "john@freightlodge.com";
@@ -31,6 +32,7 @@ export function formatSessionTranscript(messages, session) {
     "— Sheet snapshot —",
     `Request: ${requestId}`,
     `STT: ${sttLabel}`,
+    formatJevTranscriptLine(session),
     `Origin: ${origin}`,
     `Dest: ${dest}`,
     `Weight: ${weight}`,
