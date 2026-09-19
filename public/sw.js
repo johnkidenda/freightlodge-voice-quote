@@ -1,5 +1,5 @@
-// v8: email type-tip, NYC city parse, city/ZIP metro clarify, browser TTS.
-const CACHE = "freightlodge-quote-v8";
+// v9: Jev filled-slot hard rule, same-side ZIP-state, ?jev=0.
+const CACHE = "freightlodge-quote-v9";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();

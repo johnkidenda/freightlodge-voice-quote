@@ -1,5 +1,5 @@
 import { ACCESSORIALS } from "./sheet.js";
-import { fillStateFromZip, zipStateClarify } from "./zip-state.js";
+import { fillStateFromZip, placeState, stateForZip, zipDigits, zipStateClarify } from "./zip-state.js";
 
 const STATE_NAME_TO_CODE = {
   alabama: "AL",
@@ -676,6 +676,35 @@ export function resolveZipAttachment(sheet, zip, intendedRole, extracted = null)
   const other = intendedRole === "origin" ? dest : origin;
   const otherRole = intendedRole === "origin" ? "dest" : "origin";
   const metro = metroForZip(zip);
+  const zip5 = zipDigits(zip).slice(0, 5);
+  const parkedOrigin = zipDigits(sheet?.lanes?.origin?.postal_code).slice(0, 5);
+  const parkedDest = zipDigits(sheet?.lanes?.destination?.postal_code).slice(0, 5);
+  const originParked = parkedOrigin.length === 5;
+  const destParked = parkedDest.length === 5;
+
+  // Sheet ZIPs only. Overlay may already contain the candidate ZIP.
+  if (intendedRole === "origin" && originParked && parkedOrigin !== zip5) {
+    const destSt = placeState(dest);
+    const zipSt = stateForZip(zip);
+    const destMetroMatch = Boolean(
+      metro && (placeMatchesMetro(dest, metro) || placeCityMatchesMetro(dest, metro)),
+    );
+    if (!destParked && (destMetroMatch || !destSt || destSt === zipSt)) {
+      return { attach: "dest", clarify: null };
+    }
+    return { attach: null, clarify: null };
+  }
+  if (intendedRole === "dest" && destParked && parkedDest !== zip5) {
+    const originSt = placeState(origin);
+    const zipSt = stateForZip(zip);
+    const originMetroMatch = Boolean(
+      metro && (placeMatchesMetro(origin, metro) || placeCityMatchesMetro(origin, metro)),
+    );
+    if (!originParked && (originMetroMatch || !originSt || originSt === zipSt)) {
+      return { attach: "origin", clarify: null };
+    }
+    return { attach: null, clarify: null };
+  }
   const otherMatch = Boolean(
     metro && (placeMatchesMetro(other, metro) || placeCityMatchesMetro(other, metro)),
   );
@@ -714,8 +743,14 @@ export function resolveZipAttachment(sheet, zip, intendedRole, extracted = null)
     };
   }
 
+  // Same-side only: origin ZIP vs origin city/state; dest ZIP vs dest city/state.
   const stateClarify = zipStateClarify(target, zip, intendedRole);
   if (stateClarify) {
+    const otherSt = placeState(other);
+    const zipSt = stateClarify.zipState;
+    if (otherSt && zipSt === otherSt && (intendedRole === "origin" ? !destParked : !originParked)) {
+      return { attach: otherRole, clarify: null };
+    }
     return { attach: null, clarify: stateClarify };
   }
 

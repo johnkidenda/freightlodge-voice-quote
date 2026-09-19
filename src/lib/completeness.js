@@ -72,6 +72,19 @@ export function isReadyForQuote(sheet) {
   return missingReadyFields(sheet).length === 0;
 }
 
+/**
+ * Lane minimum used to ignore a Jev clarify/ready-low gate:
+ * origin ZIP + dest ZIP + a real measure (weight, dims, or class).
+ * Pieces / accessorials / email stay askable after this.
+ */
+export function hasMinimumLane(sheet) {
+  return (
+    isValidZip(sheet?.lanes?.origin?.postal_code) &&
+    isValidZip(sheet?.lanes?.destination?.postal_code) &&
+    hasMeasure(sheet?.freight)
+  );
+}
+
 export const SLOT_ORDER = [
   "origin_zip",
   "dest_zip",

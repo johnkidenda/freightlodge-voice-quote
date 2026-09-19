@@ -14,12 +14,16 @@ import { onAgentSpeaking, speakAgentReply, stopAgentSpeech } from "./lib/agent-s
 import { copyTextToClipboard, sendSessionTranscript } from "./lib/transcript.js";
 import { playListenCue, primeListenCue } from "./lib/listen-cue.js";
 import { formatAppVersionLabel, formatAppVersionTitle, getAppCommit, getAppVersion } from "./lib/app-version.js";
-import { fetchJevDecision, recentAssistantReplies } from "./lib/jev.js";
+import { fetchJevDecision, isJevDisabled, recentAssistantReplies } from "./lib/jev.js";
 
 const SAMPLE =
   "Chicago IL 60601 to Dallas TX 75201, 3 pallets, 1200 pounds, auto parts, pickup tomorrow, liftgate delivery, email shipper@example.com";
 
 export function mountApp(root) {
+  isJevDisabled({
+    search: typeof location !== "undefined" ? location.search : "",
+    storage: typeof localStorage !== "undefined" ? localStorage : null,
+  });
   const state = {
     session: createSession(),
     messages: [

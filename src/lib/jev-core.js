@@ -4,6 +4,8 @@
  * builds candidates, interprets answers, and formats the QA stamp.
  */
 
+import { hasMeasure, hasMinimumLane, isValidEmail, isValidZip } from "./completeness.js";
+
 export const JEV_THRESHOLD = 0.5;
 export const JEV_MODEL = "jev-latest";
 export const TYPESAFE_SYSTEMONE_URL = "https://api.typesafe.ai/v1/systemone";
@@ -71,6 +73,7 @@ export function offDecision(reason = "off") {
     touchedSlots: [],
     primarySlot: null,
     focus: null,
+    gateOverride: null,
     readyNoul: null,
     clarifyNoul: null,
     parseScore: null,
@@ -92,10 +95,10 @@ export function buildJevQuestions() {
     needs_clarify: {
       type: "noul",
       instructions:
-        "Should the agent ask a clarify question instead of advancing? Yes for city/ZIP mismatch, same ZIP both ends, a soft/vague date (ASAP, soon), or garbled/ambiguous STT that could update the wrong slot.",
+        "Should the agent ask a clarify question instead of advancing? Yes for city/ZIP mismatch, same ZIP both ends, a soft/vague date (ASAP, soon), or garbled/ambiguous STT that could update the wrong empty slot. No if the focused slot already has a value on quote_sheet unless the utterance clearly corrects it. No if origin ZIP, dest ZIP, and weight/measure are already present; ask the next missing field instead.",
       criteria: {
-        true: "City/ZIP mismatch, soft date, or ambiguous STT. Prefer a clarify script.",
-        false: "Utterance is clear enough to apply extracted slots and continue.",
+        true: "City/ZIP mismatch, soft date, or ambiguous STT on a still-empty slot.",
+        false: "Utterance is clear enough to apply extracted slots, or the sheet already has origin ZIP, dest ZIP, and weight.",
       },
     },
     primary_slot: {
@@ -220,6 +223,7 @@ export function interpretJevAnswers(answers, { reason } = {}) {
     touchedSlots,
     primarySlot,
     focus,
+    gateOverride: null,
     readyNoul: ready.noul,
     clarifyNoul: clarify.noul,
     parseScore: parse.score,
@@ -242,6 +246,65 @@ export function resolveSlotFocus({ primarySlot, touchedSlots = [] } = {}) {
   return null;
 }
 
+export function awaitingSlotIsFilled(sheet, slot, { askedAccessorials = false } = {}) {
+  if (slot === "origin_zip") return isValidZip(sheet?.lanes?.origin?.postal_code);
+  if (slot === "dest_zip") return isValidZip(sheet?.lanes?.destination?.postal_code);
+  if (slot === "measure") return hasMeasure(sheet?.freight);
+  if (slot === "pieces") return Number.isInteger(sheet?.freight?.pieces) && sheet.freight.pieces >= 1;
+  if (slot === "commodity") {
+    return typeof sheet?.freight?.commodity === "string" && Boolean(sheet.freight.commodity.trim());
+  }
+  if (slot === "pickup_date") return /^\d{4}-\d{2}-\d{2}$/.test(String(sheet?.pickup?.date || ""));
+  if (slot === "accessorials") {
+    return Boolean(askedAccessorials || (sheet?.pickup?.accessorials || []).length);
+  }
+  if (slot === "email") return isValidEmail(sheet?.contact?.email);
+  return false;
+}
+
+/** Explicit correction, not a restatement of a value already on the sheet. */
+export function utteranceCorrectsSlot(text) {
+  return /\b(actually|correction|correct( that| the)?|change (the )?(origin|dest|destination|pickup)?\s*(zip|city|date)?|instead|wait,? no|not \d{5}|new (origin|dest|destination) zip)\b/i.test(
+    String(text || ""),
+  );
+}
+
+/**
+ * Hard rules on top of raw Jev answers:
+ * never focus a filled slot unless the user corrects it;
+ * never hold clarify / ready-low when origin+dest ZIPs and weight are present.
+ */
+export function guardJevDecision(decision, { sheet, utterance, askedAccessorials = false } = {}) {
+  const d = normalizeJevDecision(decision);
+  if (!d.on) return d;
+  const corrects = utteranceCorrectsSlot(utterance);
+  const ctx = { askedAccessorials };
+  let focus = d.focus;
+  if (focus && awaitingSlotIsFilled(sheet, focus, ctx) && !corrects) {
+    focus = null;
+  }
+  let needsClarify = d.needsClarify;
+  let ready = d.ready;
+  let gateOverride = null;
+  if (hasMinimumLane(sheet)) {
+    if (needsClarify) {
+      needsClarify = false;
+      gateOverride = "min-fields";
+    }
+    if (ready === false) {
+      ready = null;
+      gateOverride = gateOverride || "min-fields";
+    }
+  } else if (needsClarify) {
+    const clarifySlot = focus || d.focus;
+    if (clarifySlot && awaitingSlotIsFilled(sheet, clarifySlot, ctx) && !corrects) {
+      needsClarify = false;
+      gateOverride = "filled-slot";
+    }
+  }
+  return { ...d, focus, needsClarify, ready, gateOverride };
+}
+
 export function normalizeJevDecision(input) {
   if (!input) return offDecision("unused");
   if (input.on === false || input.jev === "off") {
@@ -255,7 +318,9 @@ export function normalizeJevDecision(input) {
     const primarySlot = JEV_SLOT_IDS.includes(input.primarySlot) || input.primarySlot === "none" || input.primarySlot === "multiple"
       ? input.primarySlot
       : null;
-    const focus = input.focus || resolveSlotFocus({ primarySlot, touchedSlots });
+    const focus = Object.prototype.hasOwnProperty.call(input, "focus")
+      ? input.focus || null
+      : resolveSlotFocus({ primarySlot, touchedSlots });
     return {
       ...offDecision(),
       on: true,
@@ -266,6 +331,7 @@ export function normalizeJevDecision(input) {
       touchedSlots,
       primarySlot,
       focus,
+      gateOverride: input.gateOverride || null,
       readyNoul: Number.isFinite(Number(input.readyNoul)) ? Number(input.readyNoul) : null,
       clarifyNoul: Number.isFinite(Number(input.clarifyNoul)) ? Number(input.clarifyNoul) : null,
       parseScore: Number.isFinite(Number(input.parseScore)) ? Number(input.parseScore) : null,
@@ -295,6 +361,7 @@ export function formatJevStamp(decision) {
   if (parse != null) bits.push(`parse=${parse}`);
   if (d.focus) bits.push(`focus=${d.focus}`);
   if (d.needsClarify) bits.push("gate=clarify");
+  else if (d.gateOverride) bits.push("gate=advance");
   else if (d.ready === false) bits.push("gate=not-ready");
   else if (d.ready === true) bits.push("gate=ready");
   return bits.join(" ");
