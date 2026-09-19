@@ -2,7 +2,7 @@
 /**
  * Computer-use runner for the fake Exfresso pilot form.
  *
- *   node scripts/exfresso-pilot-runner.mjs --arm both --runs 3
+ *   node scripts/exfresso-pilot-runner.mjs --arm compare --runs 3
  *
  * Against live Pages + local Jev stub (Anthony):
  *   set -a && source /home/box/.secrets/typesafe.env && set +a
@@ -11,7 +11,7 @@
  *   node scripts/exfresso-pilot-runner.mjs \
  *     --url https://johnkidenda.github.io/freightlodge-voice-quote/exfresso-pilot/ \
  *     --jev-url http://127.0.0.1:8787/jev-action \
- *     --arm both --runs 3
+ *     --arm compare --runs 1
  */
 import { createServer } from "node:http";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -28,6 +28,7 @@ import {
   isQuotedSuccess,
   mapVoiceJevToDomAction,
   pickHeuristicAction,
+  pickHybridAction,
   sheetValueForField,
 } from "../src/lib/exfresso-pilot-core.js";
 import { evaluateDomAction } from "../token-proxy/src/jev-action.js";
@@ -43,7 +44,7 @@ const MAX_STEPS = 40;
 function parseArgs(argv) {
   const out = {
     url: "",
-    arm: "both",
+    arm: "compare",
     runs: 3,
     jevUrl: process.env.JEV_ACTION_URL || "http://127.0.0.1:8787/jev-action",
     sheet: join(root, "scripts/fixtures/sheet-93ce7a5d.json"),
@@ -212,49 +213,62 @@ async function runOnce({ page, url, arm, sheet, jevUrl }) {
     const candidates = snap.candidates || [];
     let actionId = null;
     let candidate = null;
-    if (arm === "jev") {
+    const hybrid = arm === "hybrid" ? pickHybridAction(candidates, sheet, snap) : null;
+    const useJev = arm === "jev" || (arm === "hybrid" && hybrid?.askJev);
+    if (useJev) {
+      const jevCandidates = arm === "hybrid" && hybrid.jevCandidates?.length ? hybrid.jevCandidates : candidates;
       let result;
       try {
         result = await callJevAction(jevUrl, {
           sheet,
-          candidates,
+          candidates: jevCandidates,
           step: snap.step,
           status: snap.status,
           filled: snap.values,
         });
       } catch (err) {
-        card.clarifies += 1;
-        card.stop_reason = `jev-error:${err.status || err.message}`;
-        log.push({ step: snap.step, error: String(err.message || err) });
-        break;
+        if (arm === "hybrid" && hybrid?.actionId) {
+          log.push({ step: snap.step, hybrid, jev_error: String(err.message || err), fallback: "heuristic" });
+          actionId = hybrid.actionId;
+          candidate = hybrid.candidate || candidates.find((c) => c.id === actionId) || null;
+        } else {
+          card.clarifies += 1;
+          card.stop_reason = `jev-error:${err.status || err.message}`;
+          log.push({ step: snap.step, error: String(err.message || err) });
+          break;
+        }
       }
-      card.jev_calls += 1;
-      card.cost_usd += Number(result.cost_usd) || 0;
-      const decision = result.decision || {};
-      const conf = Number(decision.confidence ?? result.answers?.next_action?.confidence ?? result.answers?.primary_slot?.confidence);
-      if (Number.isFinite(conf) && conf > 0) {
-        card.jev_confidences.push(conf);
+      if (!actionId) {
+        card.jev_calls += 1;
+        card.cost_usd += Number(result.cost_usd) || 0;
+        const decision = result.decision || {};
+        const conf = Number(decision.confidence ?? result.answers?.next_action?.confidence ?? result.answers?.primary_slot?.confidence);
+        if (Number.isFinite(conf) && conf > 0) {
+          card.jev_confidences.push(conf);
+        }
+        log.push({
+          step: snap.step,
+          arm,
+          hybrid: hybrid || undefined,
+          jev: decision,
+          usage: result.usage || null,
+          cost_usd: result.cost_usd || 0,
+        });
+        if (decision.gateBlocked || !decision.act || !decision.actionId) {
+          card.jev_gate_blocks += 1;
+          card.clarifies += 1;
+          card.stop_reason = `jev-gate:${decision.choice || decision.reason || "block"}`;
+          break;
+        }
+        actionId = decision.actionId;
+        candidate = candidates.find((c) => c.id === actionId) || jevCandidates.find((c) => c.id === actionId) || null;
       }
-      log.push({
-        step: snap.step,
-        jev: decision,
-        usage: result.usage || null,
-        cost_usd: result.cost_usd || 0,
-      });
-      if (decision.gateBlocked || !decision.act || !decision.actionId) {
-        card.jev_gate_blocks += 1;
-        card.clarifies += 1;
-        card.stop_reason = `jev-gate:${decision.choice || decision.reason || "block"}`;
-        break;
-      }
-      actionId = decision.actionId;
-      candidate = candidates.find((c) => c.id === actionId) || null;
     } else {
-      const pick = pickHeuristicAction(candidates, sheet, snap);
-      log.push({ step: snap.step, heuristic: pick });
+      const pick = hybrid || pickHeuristicAction(candidates, sheet, snap);
+      log.push({ step: snap.step, arm, pick });
       if (!pick.actionId) {
         card.clarifies += 1;
-        card.stop_reason = `heuristic:${pick.reason}`;
+        card.stop_reason = `${arm}:${pick.reason}`;
         break;
       }
       actionId = pick.actionId;
@@ -301,7 +315,7 @@ async function runOnce({ page, url, arm, sheet, jevUrl }) {
     `stop=${card.stop_reason}`,
     `cu_steps=${card.cu_steps}`,
   ];
-  if (arm === "jev") {
+  if (arm === "jev" || arm === "hybrid") {
     bits.push(`jev_calls=${card.jev_calls}`);
     bits.push(`avg_conf=${avgConf == null ? "n/a" : avgConf}`);
     bits.push(`gate_blocks=${card.jev_gate_blocks}`);
@@ -338,7 +352,7 @@ function meanCard(cards) {
 async function main() {
   const args = parseArgs(process.argv);
   if (args.help) {
-    console.log(`Usage: node scripts/exfresso-pilot-runner.mjs [--url URL] [--arm jev|heuristic|both] [--runs N] [--jev-url URL]`);
+    console.log(`Usage: node scripts/exfresso-pilot-runner.mjs [--url URL] [--arm hybrid|jev|heuristic|compare] [--runs N] [--jev-url URL]`);
     process.exit(0);
   }
 
@@ -359,7 +373,10 @@ async function main() {
     console.log(`Serving local fake form at ${url}`);
   }
 
-  const arms = args.arm === "both" ? ["jev", "heuristic"] : [args.arm];
+  const arms =
+    args.arm === "compare" || args.arm === "both"
+      ? ["hybrid", "jev", "heuristic"]
+      : [args.arm];
   const browser = await playwright.chromium.launch({ headless: !args.headed });
   const results = { url, sheet_id: sheet.quote_request_id || DEMO_SHEET_ID, arms: {} };
 

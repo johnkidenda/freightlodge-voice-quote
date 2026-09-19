@@ -3,8 +3,8 @@
  * No TypeSafe key. The Playwright runner imports this from Node.
  */
 
-export const PILOT_VERSION = "0.25";
-export const PILOT_LABEL = "Exfresso pilot v0.25";
+export const PILOT_VERSION = "0.26";
+export const PILOT_LABEL = "Exfresso pilot v0.26";
 
 export const DEMO_SHEET_ID = "93ce7a5d";
 
@@ -295,6 +295,78 @@ export function pickHeuristicAction(candidates, sheet, snapshot = {}) {
   }
 
   return { actionId: null, reason: "stuck", candidate: null };
+}
+
+export function normalizeActionLabel(label) {
+  return String(label || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+export function labelsSimilar(a, b) {
+  const x = normalizeActionLabel(a);
+  const y = normalizeActionLabel(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  if (x.includes(y) || y.includes(x)) return true;
+  const stems = ["continue", "get rates", "inside", "liftgate", "residential", "freeze"];
+  return stems.some((stem) => x.includes(stem) && y.includes(stem));
+}
+
+function isForkClick(candidate) {
+  if (!candidate) return false;
+  if (candidate.kind !== "click" && candidate.role !== "button") return false;
+  if (/^edit-/.test(candidate.id || "")) return false;
+  if (candidate.decoy) return true;
+  return /continue|get-rates|get rates|skip|estimate|sample|same-as|use-last/.test(
+    `${candidate.id || ""} ${candidate.label || ""}`,
+  );
+}
+
+/**
+ * Hybrid CU picker: script-fill mapped sheet fields. Ask Jev only when
+ * visible clicks/checks are an ambiguous fork (Continue vs Get rates,
+ * similar labels, optional decoys).
+ */
+export function pickHybridAction(candidates, sheet, snapshot = {}) {
+  const pick = pickHeuristicAction(candidates, sheet, snapshot);
+  const list = Array.isArray(candidates) ? candidates.filter((c) => c && c.id) : [];
+  if (!pick.actionId) {
+    return { ...pick, askJev: false, jevCandidates: [] };
+  }
+  if (pick.reason === "fill-missing") {
+    return { ...pick, askJev: false, jevCandidates: [] };
+  }
+
+  if (pick.reason === "toggle-accessorial") {
+    const target = pick.candidate;
+    const similar = list.filter((c) => {
+      if (c.kind !== "check" && c.kind !== "uncheck" && c.role !== "checkbox") return false;
+      return labelsSimilar(c.label || c.id, target?.label || target?.id);
+    });
+    if (similar.length >= 2) {
+      return {
+        ...pick,
+        askJev: true,
+        jevCandidates: similar,
+        reason: "ambiguous-accessorial",
+      };
+    }
+    return { ...pick, askJev: false, jevCandidates: [] };
+  }
+
+  const forks = list.filter(isForkClick);
+  const nextIsClick = pick.candidate?.kind === "click" || pick.candidate?.role === "button";
+  if (nextIsClick && forks.length >= 2) {
+    return {
+      ...pick,
+      askJev: true,
+      jevCandidates: forks,
+      reason: "ambiguous-fork",
+    };
+  }
+  return { ...pick, askJev: false, jevCandidates: [] };
 }
 
 export function emptyScorecard() {

@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "pilot": "node scripts/exfresso-pilot-runner.mjs",
-    "pilot:ab": "node scripts/exfresso-pilot-runner.mjs --arm both --runs 3"
+    "pilot:ab": "node scripts/exfresso-pilot-runner.mjs --arm compare --runs 1"
   },
   "devDependencies": {
     "playwright": "^1.63.0",

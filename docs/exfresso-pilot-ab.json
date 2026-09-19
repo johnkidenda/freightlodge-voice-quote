@@ -1,684 +1,796 @@
 {
-  "url": "http://127.0.0.1:41443/",
+  "url": "http://127.0.0.1:33903/",
   "sheet_id": "93ce7a5d",
   "arms": {
+    "hybrid": {
+      "runs": [
+        {
+          "success": true,
+          "wall_s": 3.265,
+          "cost_usd": 0.000656208,
+          "steps": 18,
+          "wrong": 0,
+          "clarifies": 0,
+          "field_acc": 100,
+          "notes": "sheet=93ce7a5d; stop=quoted; cu_steps=18; jev_calls=7; avg_conf=0.08; gate_blocks=0",
+          "jev_calls": 7,
+          "jev_confidences": [
+            0.02,
+            0.06,
+            0.16
+          ],
+          "jev_gate_blocks": 0,
+          "cu_steps": 18,
+          "stop_reason": "quoted",
+          "filled": {
+            "origin_city": "Austin",
+            "origin_state": "TX",
+            "origin_zip": "78721",
+            "dest_city": "Atlanta",
+            "dest_state": "GA",
+            "dest_zip": "30030",
+            "billing_zip": "",
+            "weight": "1000",
+            "pieces": "3",
+            "commodity": "",
+            "pickup_date": "2026-09-22",
+            "accessorials": [
+              "inside_pickup",
+              "inside_delivery"
+            ],
+            "email": "qa@freightlodge.com",
+            "name": ""
+          },
+          "log": [
+            {
+              "step": "origin",
+              "arm": "hybrid",
+              "pick": {
+                "actionId": "origin-city",
+                "reason": "fill-missing",
+                "candidate": {
+                  "id": "origin-city",
+                  "kind": "fill",
+                  "role": "textbox",
+                  "label": "Origin city (optional)",
+                  "selector": "[data-pilot-id=\"origin-city\"]",
+                  "field": "origin_city",
+                  "required": false,
+                  "current": "",
+                  "checked": null,
+                  "decoy": false
+                },
+                "askJev": false,
+                "jevCandidates": []
+              }
+            },
+            {
+              "step": "origin",
+              "arm": "hybrid",
+              "pick": {
+                "actionId": "origin-state",
+                "reason": "fill-missing",
+                "candidate": {
+                  "id": "origin-state",
+                  "kind": "fill",
+                  "role": "textbox",
+                  "label": "State",
+                  "selector": "[data-pilot-id=\"origin-state\"]",
+                  "field": "origin_state",
+                  "required": false,
+                  "current": "",
+                  "checked": null,
+                  "decoy": false
+                },
+                "askJev": false,
+                "jevCandidates": []
+              }
+            },
+            {
+              "step": "origin",
+              "arm": "hybrid",
+              "pick": {
+                "actionId": "origin-zip",
+                "reason": "fill-missing",
+                "candidate": {
+                  "id": "origin-zip",
+                  "kind": "fill",
+                  "role": "textbox",
+                  "label": "Origin ZIP (required)",
+                  "selector": "[data-pilot-id=\"origin-zip\"]",
+                  "field": "origin_zip",
+                  "required": true,
+                  "current": "",
+                  "checked": null,
+                  "decoy": false
+                },
+                "askJev": false,
+                "jevCandidates": []
+              }
+            },
+            {
+              "step": "origin",
+              "arm": "hybrid",
+              "hybrid": {
+                "actionId": "continue-origin",
+                "reason": "ambiguous-fork",
+                "candidate": {
+                  "id": "continue-origin",
+                  "kind": "click",
+                  "role": "button",
+                  "label": "Continue",
+                  "selector": "[data-pilot-id=\"continue-origin\"]",
+                  "field": null,
+                  "required": false,
+                  "current": "",
+                  "checked": null,
+                  "decoy": false
+                },
+                "askJev": true,
+                "jevCandidates": [
+                  {
+                    "id": "continue-no-zip",
+                    "kind": "click",
+                    "role": "button",
+                    "label": "Continue without ZIP",
+                    "selector": "[data-pilot-id=\"continue-no-zip\"]",
+                    "field": null,
+                    "required": false,
+                    "current": "",
+                    "checked": null,
+                    "decoy": true
+                  },
+                  {
+                    "id": "use-last-origin",
+                    "kind": "click",
+                    "role": "button",
+                    "label": "Use last origin",
+                    "selector": "[data-pilot-id=\"use-last-origin\"]",
+                    "field": null,
+                    "required": false,
+                    "current": "",
+                    "checked": null,
+                    "decoy": true
+                  },
+                  {
+                    "id": "continue-origin",
+                    "kind": "click",
+                    "role": "button",
+                    "label": "Continue",
+                    "selector": "[data-pilot-id=\"continue-origin\"]",
+                    "field": null,
+                    "required": false,
+                    "current": "",
+                    "checked": null,
+                    "decoy": false
+                  }
+                ]
+              },
+              "jev": {
+                "act": true,
+                "actionId": "continue-origin",
+                "choice": "continue-origin",
+                "confidence": 0,
+                "gateBlocked": false,
+                "reason": "voice-jev-advance"
+              },
+              "usage": {
+                "input_tokens": 2210,
+                "output_tokens": 362
+              },
+              "cost_usd": 0.00009282000000000001
+            },
+            {
+              "step": "dest",
+              "arm": "hybrid",
+              "pick": {
+                "actionId": "dest-city",
+                "reason": "fill-missing",
+                "candidate": {
+                  "id": "dest-city",
+                  "kind": "fill",
+                  "role": "textbox",
+                  "label": "Destination city (optional)",
+                  "selector": "[data-pilot-id=\"dest-city\"]",
+                  "field": "dest_city",
+                  "required": false,
+                  "current": "",
+                  "checked": null,
+                  "decoy": false
+                },
+                "askJev": false,
+                "jevCandidates": []
+              }
+            },
+            {
+              "step": "dest",
+              "arm": "hybrid",
+              "pick": {
+                "actionId": "dest-state",
+                "reason": "fill-missing",
+                "candidate": {
+                  "id": "dest-state",
+                  "kind": "fill",
+                  "role": "textbox",
+                  "label": "State",
+                  "selector": "[data-pilot-id=\"dest-state\"]",
+                  "field": "dest_state",
+                  "required": false,
+                  "current": "",
+                  "checked": null,
+                  "decoy": false
+                },
+                "askJev": false,
+                "jevCandidates": []
+              }
+            },
+            {
+              "step": "dest",
+              "arm": "hybrid",
+              "pick": {
+                "actionId": "dest-zip",
+                "reason": "fill-missing",
+                "candidate": {
+                  "id": "dest-zip",
+                  "kind": "fill",
+                  "role": "textbox",
+                  "label": "Destination ZIP (required)",
+                  "selector": "[data-pilot-id=\"dest-zip\"]",
+                  "field": "dest_zip",
+                  "required": true,
+                  "current": "",
+                  "checked": null,
+                  "decoy": false
+                },
+                "askJev": false,
+                "jevCandidates": []
+              }
+            },
+            {
+              "step": "dest",
+              "arm": "hybrid",
+              "hybrid": {
+                "actionId": "continue-dest",
+                "reason": "ambiguous-fork",
+                "candidate": {
+                  "id": "continue-dest",
+                  "kind": "click",
+                  "role": "button",
+                  "label": "Continue",
+                  "selector": "[data-pilot-id=\"continue-dest\"]",
+                  "field": null,
+                  "required": false,
+                  "current": "",
+                  "checked": null,
+                  "decoy": false
+                },
+                "askJev": true,
+                "jevCandidates": [
+                  {
+                    "id": "same-as-origin",
+                    "kind": "click",
+                    "role": "button",
+                    "label": "Same as origin",
+                    "selector": "[data-pilot-id=\"same-as-origin\"]",
+                    "field": null,
+                    "required": false,
+                    "current": "",
+                    "checked": null,
+                    "decoy": true
+                  },
+                  {
+                    "id": "continue-dest",
+                    "kind": "click",
+                    "role": "button",
+                    "label": "Continue",
+                    "selector": "[data-pilot-id=\"continue-dest\"]",
+                    "field": null,
+                    "required": false,
+                    "current": "",
+                    "checked": null,
+                    "decoy": false
+                  }
+                ]
+              },
+              "jev": {
+                "act": true,
+                "actionId": "continue-dest",
+                "choice": "continue-dest",
+                "confidence": 0,
+                "gateBlocked": false,
+                "reason": "voice-jev-advance"
+              },
+              "usage": {
+                "input_tokens": 2216,
+                "output_tokens": 361
+              },
+              "cost_usd": 0.000093072
+            },
+            {
+              "step": "freight",
+              "arm": "hybrid",
+              "pick": {
+                "actionId": "weight",
+                "reason": "fill-missing",
+                "candidate": {
+                  "id": "weight",
+                  "kind": "fill",
+                  "role": "textbox",
+                  "label": "Total weight (lb) (required)",
+                  "selector": "[data-pilot-id=\"weight\"]",
+                  "field": "weight",
+                  "required": true,
+                  "current": "",
+                  "checked": null,
+                  "decoy": false
+                },
+                "askJev": false,
+                "jevCandidates": []
+              }
+            },
+            {
+              "step": "freight",
+              "arm": "hybrid",
+              "pick": {
+                "actionId": "pieces",
+                "reason": "fill-missing",
+                "candidate": {
+                  "id": "pieces",
+                  "kind": "fill",
+                  "role": "textbox",
+                  "label": "Pieces (required)",
+                  "selector": "[data-pilot-id=\"pieces\"]",
+                  "field": "pieces",
+                  "required": true,
+                  "current": "",
+                  "checked": null,
+                  "decoy": false
+                },
+                "askJev": false,
+                "jevCandidates": []
+              }
+            },
+            {
+              "step": "freight",
+              "arm": "hybrid",
+              "hybrid": {
+                "actionId": "continue-freight",
+                "reason": "ambiguous-fork",
+                "candidate": {
+                  "id": "continue-freight",
+                  "kind": "click",
+                  "role": "button",
+                  "label": "Continue",
+                  "selector": "[data-pilot-id=\"continue-freight\"]",
+                  "field": null,
+                  "required": false,
+                  "current": "",
+                  "checked": null,
+                  "decoy": false
+                },
+                "askJev": true,
+                "jevCandidates": [
+                  {
+                    "id": "estimate-weight",
+                    "kind": "click",
+                    "role": "button",
+                    "label": "Estimate weight",
+                    "selector": "[data-pilot-id=\"estimate-weight\"]",
+                    "field": null,
+                    "required": false,
+                    "current": "",
+                    "checked": null,
+                    "decoy": true
+                  },
+                  {
+                    "id": "continue-freight",
+                    "kind": "click",
+                    "role": "button",
+                    "label": "Continue",
+                    "selector": "[data-pilot-id=\"continue-freight\"]",
+                    "field": null,
+                    "required": false,
+                    "current": "",
+                    "checked": null,
+                    "decoy": false
+                  }
+                ]
+              },
+              "jev": {
+                "act": true,
+                "actionId": "continue-freight",
+                "choice": "continue-freight",
+                "confidence": 0,
+                "gateBlocked": false,
+                "reason": "voice-jev-advance"
+              },
+              "usage": {
+                "input_tokens": 2224,
+                "output_tokens": 363
+              },
+              "cost_usd": 0.000093408
+            },
+            {
+              "step": "pickup",
+              "arm": "hybrid",
+              "pick": {
+                "actionId": "pickup-date",
+                "reason": "fill-missing",
+                "candidate": {
+                  "id": "pickup-date",
+                  "kind": "fill",
+                  "role": "textbox",
+                  "label": "Pickup date (required)",
+                  "selector": "[data-pilot-id=\"pickup-date\"]",
+                  "field": "pickup_date",
+                  "required": true,
+                  "current": "",
+                  "checked": null,
+                  "decoy": false
+                },
+                "askJev": false,
+                "jevCandidates": []
+              }
+            },
+            {
+              "step": "pickup",
+              "arm": "hybrid",
+              "hybrid": {
+                "actionId": "inside_pickup",
+                "reason": "ambiguous-accessorial",
+                "candidate": {
+                  "id": "inside_pickup",
+                  "kind": "check",
+                  "role": "checkbox",
+                  "label": "Inside pickup",
+                  "selector": "[data-pilot-id=\"inside_pickup\"]",
+                  "field": "inside_pickup",
+                  "required": false,
+                  "current": "off",
+                  "checked": false,
+                  "decoy": false
+                },
+                "askJev": true,
+                "jevCandidates": [
+                  {
+                    "id": "inside_pickup",
+                    "kind": "check",
+                    "role": "checkbox",
+                    "label": "Inside pickup",
+                    "selector": "[data-pilot-id=\"inside_pickup\"]",
+                    "field": "inside_pickup",
+                    "required": false,
+                    "current": "off",
+                    "checked": false,
+                    "decoy": false
+                  },
+                  {
+                    "id": "inside",
+                    "kind": "check",
+                    "role": "checkbox",
+                    "label": "Inside",
+                    "selector": "[data-pilot-id=\"inside\"]",
+                    "field": "inside",
+                    "required": false,
+                    "current": "off",
+                    "checked": false,
+                    "decoy": true
+                  },
+                  {
+                    "id": "inside_delivery",
+                    "kind": "check",
+                    "role": "checkbox",
+                    "label": "Inside delivery",
+                    "selector": "[data-pilot-id=\"inside_delivery\"]",
+                    "field": "inside_delivery",
+                    "required": false,
+                    "current": "off",
+                    "checked": false,
+                    "decoy": false
+                  }
+                ]
+              },
+              "jev": {
+                "act": true,
+                "actionId": "inside_pickup",
+                "choice": "inside_pickup",
+                "confidence": 0,
+                "gateBlocked": false,
+                "reason": "voice-jev-accessorial"
+              },
+              "usage": {
+                "input_tokens": 2235,
+                "output_tokens": 364
+              },
+              "cost_usd": 0.00009387000000000001
+            },
+            {
+              "step": "pickup",
+              "arm": "hybrid",
+              "hybrid": {
+                "actionId": "inside_delivery",
+                "reason": "ambiguous-accessorial",
+                "candidate": {
+                  "id": "inside_delivery",
+                  "kind": "check",
+                  "role": "checkbox",
+                  "label": "Inside delivery",
+                  "selector": "[data-pilot-id=\"inside_delivery\"]",
+                  "field": "inside_delivery",
+                  "required": false,
+                  "current": "off",
+                  "checked": false,
+                  "decoy": false
+                },
+                "askJev": true,
+                "jevCandidates": [
+                  {
+                    "id": "inside_pickup",
+                    "kind": "uncheck",
+                    "role": "checkbox",
+                    "label": "Inside pickup",
+                    "selector": "[data-pilot-id=\"inside_pickup\"]",
+                    "field": "inside_pickup",
+                    "required": false,
+                    "current": "on",
+                    "checked": true,
+                    "decoy": false
+                  },
+                  {
+                    "id": "inside",
+                    "kind": "check",
+                    "role": "checkbox",
+                    "label": "Inside",
+                    "selector": "[data-pilot-id=\"inside\"]",
+                    "field": "inside",
+                    "required": false,
+                    "current": "off",
+                    "checked": false,
+                    "decoy": true
+                  },
+                  {
+                    "id": "inside_delivery",
+                    "kind": "check",
+                    "role": "checkbox",
+                    "label": "Inside delivery",
+                    "selector": "[data-pilot-id=\"inside_delivery\"]",
+                    "field": "inside_delivery",
+                    "required": false,
+                    "current": "off",
+                    "checked": false,
+                    "decoy": false
+                  }
+                ]
+              },
+              "jev": {
+                "act": true,
+                "actionId": "inside_delivery",
+                "choice": "inside_delivery",
+                "confidence": 0.02,
+                "gateBlocked": false,
+                "reason": "voice-jev-accessorial"
+              },
+              "usage": {
+                "input_tokens": 2239,
+                "output_tokens": 364
+              },
+              "cost_usd": 0.00009403800000000001
+            },
+            {
+              "step": "pickup",
+              "arm": "hybrid",
+              "hybrid": {
+                "actionId": "continue-pickup",
+                "reason": "ambiguous-fork",
+                "candidate": {
+                  "id": "continue-pickup",
+                  "kind": "click",
+                  "role": "button",
+                  "label": "Continue",
+                  "selector": "[data-pilot-id=\"continue-pickup\"]",
+                  "field": null,
+                  "required": false,
+                  "current": "",
+                  "checked": null,
+                  "decoy": false
+                },
+                "askJev": true,
+                "jevCandidates": [
+                  {
+                    "id": "skip-accessorials",
+                    "kind": "click",
+                    "role": "button",
+                    "label": "No extras, skip",
+                    "selector": "[data-pilot-id=\"skip-accessorials\"]",
+                    "field": null,
+                    "required": false,
+                    "current": "",
+                    "checked": null,
+                    "decoy": true
+                  },
+                  {
+                    "id": "continue-pickup",
+                    "kind": "click",
+                    "role": "button",
+                    "label": "Continue",
+                    "selector": "[data-pilot-id=\"continue-pickup\"]",
+                    "field": null,
+                    "required": false,
+                    "current": "",
+                    "checked": null,
+                    "decoy": false
+                  }
+                ]
+              },
+              "jev": {
+                "act": true,
+                "actionId": "continue-pickup",
+                "choice": "continue-pickup",
+                "confidence": 0.06,
+                "gateBlocked": false,
+                "reason": "voice-jev-advance"
+              },
+              "usage": {
+                "input_tokens": 2244,
+                "output_tokens": 364
+              },
+              "cost_usd": 0.000094248
+            },
+            {
+              "step": "contact",
+              "arm": "hybrid",
+              "pick": {
+                "actionId": "email",
+                "reason": "fill-missing",
+                "candidate": {
+                  "id": "email",
+                  "kind": "fill",
+                  "role": "textbox",
+                  "label": "Email (required)",
+                  "selector": "[data-pilot-id=\"email\"]",
+                  "field": "email",
+                  "required": true,
+                  "current": "",
+                  "checked": null,
+                  "decoy": false
+                },
+                "askJev": false,
+                "jevCandidates": []
+              }
+            },
+            {
+              "step": "contact",
+              "arm": "hybrid",
+              "hybrid": {
+                "actionId": "continue-contact",
+                "reason": "ambiguous-fork",
+                "candidate": {
+                  "id": "continue-contact",
+                  "kind": "click",
+                  "role": "button",
+                  "label": "Continue",
+                  "selector": "[data-pilot-id=\"continue-contact\"]",
+                  "field": null,
+                  "required": false,
+                  "current": "",
+                  "checked": null,
+                  "decoy": false
+                },
+                "askJev": true,
+                "jevCandidates": [
+                  {
+                    "id": "get-rates-sample",
+                    "kind": "click",
+                    "role": "button",
+                    "label": "Get rates (sample)",
+                    "selector": "[data-pilot-id=\"get-rates-sample\"]",
+                    "field": null,
+                    "required": false,
+                    "current": "",
+                    "checked": null,
+                    "decoy": true
+                  },
+                  {
+                    "id": "continue-contact",
+                    "kind": "click",
+                    "role": "button",
+                    "label": "Continue",
+                    "selector": "[data-pilot-id=\"continue-contact\"]",
+                    "field": null,
+                    "required": false,
+                    "current": "",
+                    "checked": null,
+                    "decoy": false
+                  },
+                  {
+                    "id": "get-rates-contact",
+                    "kind": "click",
+                    "role": "button",
+                    "label": "Get rates",
+                    "selector": "[data-pilot-id=\"get-rates-contact\"]",
+                    "field": null,
+                    "required": false,
+                    "current": "",
+                    "checked": null,
+                    "decoy": false
+                  }
+                ]
+              },
+              "jev": {
+                "act": true,
+                "actionId": "continue-contact",
+                "choice": "continue-contact",
+                "confidence": 0.16,
+                "gateBlocked": false,
+                "reason": "voice-jev-advance"
+              },
+              "usage": {
+                "input_tokens": 2256,
+                "output_tokens": 363
+              },
+              "cost_usd": 0.00009475200000000002
+            },
+            {
+              "step": "review",
+              "arm": "hybrid",
+              "pick": {
+                "actionId": "get-rates-review",
+                "reason": "submit-complete",
+                "candidate": {
+                  "id": "get-rates-review",
+                  "kind": "click",
+                  "role": "button",
+                  "label": "Get rates",
+                  "selector": "[data-pilot-id=\"get-rates-review\"]",
+                  "field": null,
+                  "required": false,
+                  "current": "",
+                  "checked": null,
+                  "decoy": false
+                },
+                "askJev": false,
+                "jevCandidates": []
+              }
+            }
+          ]
+        }
+      ],
+      "summary": {
+        "success": true,
+        "wall_s": 3.265,
+        "cost_usd": 0.000656208,
+        "steps": 18,
+        "wrong": 0,
+        "clarifies": 0,
+        "field_acc": 100,
+        "notes": "n=1; successes=1/1; avg_conf=0.08; jev_calls=7; gate_blocks=0; cu_steps=18",
+        "jev_calls": 7,
+        "jev_confidences": [],
+        "jev_gate_blocks": 0,
+        "cu_steps": 18,
+        "stop_reason": null,
+        "filled": {}
+      }
+    },
     "jev": {
       "runs": [
         {
           "success": true,
-          "wall_s": 7.003,
+          "wall_s": 7.963,
           "cost_usd": 0.0016922640000000002,
           "steps": 18,
           "wrong": 0,
           "clarifies": 0,
           "field_acc": 100,
-          "notes": "sheet=93ce7a5d; stop=quoted; cu_steps=18; jev_calls=18; avg_conf=0.3; gate_blocks=0",
+          "notes": "sheet=93ce7a5d; stop=quoted; cu_steps=18; jev_calls=18; avg_conf=0.205; gate_blocks=0",
           "jev_calls": 18,
           "jev_confidences": [
-            0.11,
-            0.26,
-            0.33,
-            0.5
-          ],
-          "jev_gate_blocks": 0,
-          "cu_steps": 18,
-          "stop_reason": "quoted",
-          "filled": {
-            "origin_city": "Austin",
-            "origin_state": "TX",
-            "origin_zip": "78721",
-            "dest_city": "Atlanta",
-            "dest_state": "GA",
-            "dest_zip": "30030",
-            "billing_zip": "",
-            "weight": "1000",
-            "pieces": "3",
-            "commodity": "",
-            "pickup_date": "2026-09-22",
-            "accessorials": [
-              "inside_pickup",
-              "inside_delivery"
-            ],
-            "email": "qa@freightlodge.com",
-            "name": ""
-          },
-          "log": [
-            {
-              "step": "origin",
-              "jev": {
-                "act": true,
-                "actionId": "origin-zip",
-                "choice": "origin-zip",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-origin_zip"
-              },
-              "usage": {
-                "input_tokens": 2210,
-                "output_tokens": 362
-              },
-              "cost_usd": 0.00009282000000000001
-            },
-            {
-              "step": "origin",
-              "jev": {
-                "act": true,
-                "actionId": "origin-city",
-                "choice": "origin-city",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-origin_city"
-              },
-              "usage": {
-                "input_tokens": 2216,
-                "output_tokens": 362
-              },
-              "cost_usd": 0.000093072
-            },
-            {
-              "step": "origin",
-              "jev": {
-                "act": true,
-                "actionId": "origin-state",
-                "choice": "origin-state",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-advance"
-              },
-              "usage": {
-                "input_tokens": 2218,
-                "output_tokens": 361
-              },
-              "cost_usd": 0.000093156
-            },
-            {
-              "step": "origin",
-              "jev": {
-                "act": true,
-                "actionId": "continue-origin",
-                "choice": "continue-origin",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-advance"
-              },
-              "usage": {
-                "input_tokens": 2220,
-                "output_tokens": 361
-              },
-              "cost_usd": 0.00009324000000000001
-            },
-            {
-              "step": "dest",
-              "jev": {
-                "act": true,
-                "actionId": "dest-zip",
-                "choice": "dest-zip",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-dest_zip"
-              },
-              "usage": {
-                "input_tokens": 2220,
-                "output_tokens": 362
-              },
-              "cost_usd": 0.00009324000000000001
-            },
-            {
-              "step": "dest",
-              "jev": {
-                "act": true,
-                "actionId": "dest-city",
-                "choice": "dest-city",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-dest_city"
-              },
-              "usage": {
-                "input_tokens": 2226,
-                "output_tokens": 362
-              },
-              "cost_usd": 0.000093492
-            },
-            {
-              "step": "dest",
-              "jev": {
-                "act": true,
-                "actionId": "dest-state",
-                "choice": "dest-state",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-advance"
-              },
-              "usage": {
-                "input_tokens": 2228,
-                "output_tokens": 361
-              },
-              "cost_usd": 0.000093576
-            },
-            {
-              "step": "dest",
-              "jev": {
-                "act": true,
-                "actionId": "continue-dest",
-                "choice": "continue-dest",
-                "confidence": 0.11,
-                "gateBlocked": false,
-                "reason": "voice-jev-advance"
-              },
-              "usage": {
-                "input_tokens": 2230,
-                "output_tokens": 361
-              },
-              "cost_usd": 0.00009366000000000002
-            },
-            {
-              "step": "freight",
-              "jev": {
-                "act": true,
-                "actionId": "weight",
-                "choice": "weight",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-weight"
-              },
-              "usage": {
-                "input_tokens": 2223,
-                "output_tokens": 361
-              },
-              "cost_usd": 0.00009336600000000001
-            },
-            {
-              "step": "freight",
-              "jev": {
-                "act": true,
-                "actionId": "pieces",
-                "choice": "pieces",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-pieces"
-              },
-              "usage": {
-                "input_tokens": 2228,
-                "output_tokens": 361
-              },
-              "cost_usd": 0.000093576
-            },
-            {
-              "step": "freight",
-              "jev": {
-                "act": true,
-                "actionId": "continue-freight",
-                "choice": "continue-freight",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-advance"
-              },
-              "usage": {
-                "input_tokens": 2230,
-                "output_tokens": 363
-              },
-              "cost_usd": 0.00009366000000000002
-            },
-            {
-              "step": "pickup",
-              "jev": {
-                "act": true,
-                "actionId": "pickup-date",
-                "choice": "pickup-date",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-pickup_date"
-              },
-              "usage": {
-                "input_tokens": 2259,
-                "output_tokens": 362
-              },
-              "cost_usd": 0.00009487800000000001
-            },
-            {
-              "step": "pickup",
-              "jev": {
-                "act": true,
-                "actionId": "inside_pickup",
-                "choice": "inside_pickup",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-accessorial"
-              },
-              "usage": {
-                "input_tokens": 2270,
-                "output_tokens": 364
-              },
-              "cost_usd": 0.00009534
-            },
-            {
-              "step": "pickup",
-              "jev": {
-                "act": true,
-                "actionId": "inside_delivery",
-                "choice": "inside_delivery",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-accessorial"
-              },
-              "usage": {
-                "input_tokens": 2274,
-                "output_tokens": 364
-              },
-              "cost_usd": 0.00009550800000000001
-            },
-            {
-              "step": "pickup",
-              "jev": {
-                "act": true,
-                "actionId": "continue-pickup",
-                "choice": "continue-pickup",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-advance"
-              },
-              "usage": {
-                "input_tokens": 2277,
-                "output_tokens": 364
-              },
-              "cost_usd": 0.000095634
-            },
-            {
-              "step": "contact",
-              "jev": {
-                "act": true,
-                "actionId": "email",
-                "choice": "email",
-                "confidence": 0.26,
-                "gateBlocked": false,
-                "reason": "voice-jev-email"
-              },
-              "usage": {
-                "input_tokens": 2253,
-                "output_tokens": 361
-              },
-              "cost_usd": 0.000094626
-            },
-            {
-              "step": "contact",
-              "jev": {
-                "act": true,
-                "actionId": "continue-contact",
-                "choice": "continue-contact",
-                "confidence": 0.33,
-                "gateBlocked": false,
-                "reason": "voice-jev-advance"
-              },
-              "usage": {
-                "input_tokens": 2261,
-                "output_tokens": 361
-              },
-              "cost_usd": 0.000094962
-            },
-            {
-              "step": "review",
-              "jev": {
-                "act": true,
-                "actionId": "get-rates-review",
-                "choice": "get-rates-review",
-                "confidence": 0.5,
-                "gateBlocked": false,
-                "reason": "voice-jev-advance"
-              },
-              "usage": {
-                "input_tokens": 2249,
-                "output_tokens": 363
-              },
-              "cost_usd": 0.00009445800000000001
-            }
-          ]
-        },
-        {
-          "success": true,
-          "wall_s": 7.211,
-          "cost_usd": 0.0016922640000000002,
-          "steps": 18,
-          "wrong": 0,
-          "clarifies": 0,
-          "field_acc": 100,
-          "notes": "sheet=93ce7a5d; stop=quoted; cu_steps=18; jev_calls=18; avg_conf=0.258; gate_blocks=0",
-          "jev_calls": 18,
-          "jev_confidences": [
-            0.11,
-            0.05,
-            0.31,
-            0.34,
-            0.48
-          ],
-          "jev_gate_blocks": 0,
-          "cu_steps": 18,
-          "stop_reason": "quoted",
-          "filled": {
-            "origin_city": "Austin",
-            "origin_state": "TX",
-            "origin_zip": "78721",
-            "dest_city": "Atlanta",
-            "dest_state": "GA",
-            "dest_zip": "30030",
-            "billing_zip": "",
-            "weight": "1000",
-            "pieces": "3",
-            "commodity": "",
-            "pickup_date": "2026-09-22",
-            "accessorials": [
-              "inside_pickup",
-              "inside_delivery"
-            ],
-            "email": "qa@freightlodge.com",
-            "name": ""
-          },
-          "log": [
-            {
-              "step": "origin",
-              "jev": {
-                "act": true,
-                "actionId": "origin-zip",
-                "choice": "origin-zip",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-origin_zip"
-              },
-              "usage": {
-                "input_tokens": 2210,
-                "output_tokens": 362
-              },
-              "cost_usd": 0.00009282000000000001
-            },
-            {
-              "step": "origin",
-              "jev": {
-                "act": true,
-                "actionId": "origin-city",
-                "choice": "origin-city",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-origin_city"
-              },
-              "usage": {
-                "input_tokens": 2216,
-                "output_tokens": 362
-              },
-              "cost_usd": 0.000093072
-            },
-            {
-              "step": "origin",
-              "jev": {
-                "act": true,
-                "actionId": "origin-state",
-                "choice": "origin-state",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-advance"
-              },
-              "usage": {
-                "input_tokens": 2218,
-                "output_tokens": 361
-              },
-              "cost_usd": 0.000093156
-            },
-            {
-              "step": "origin",
-              "jev": {
-                "act": true,
-                "actionId": "continue-origin",
-                "choice": "continue-origin",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-advance"
-              },
-              "usage": {
-                "input_tokens": 2220,
-                "output_tokens": 361
-              },
-              "cost_usd": 0.00009324000000000001
-            },
-            {
-              "step": "dest",
-              "jev": {
-                "act": true,
-                "actionId": "dest-zip",
-                "choice": "dest-zip",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-dest_zip"
-              },
-              "usage": {
-                "input_tokens": 2220,
-                "output_tokens": 362
-              },
-              "cost_usd": 0.00009324000000000001
-            },
-            {
-              "step": "dest",
-              "jev": {
-                "act": true,
-                "actionId": "dest-city",
-                "choice": "dest-city",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-dest_city"
-              },
-              "usage": {
-                "input_tokens": 2226,
-                "output_tokens": 362
-              },
-              "cost_usd": 0.000093492
-            },
-            {
-              "step": "dest",
-              "jev": {
-                "act": true,
-                "actionId": "dest-state",
-                "choice": "dest-state",
-                "confidence": 0.11,
-                "gateBlocked": false,
-                "reason": "voice-jev-advance"
-              },
-              "usage": {
-                "input_tokens": 2228,
-                "output_tokens": 361
-              },
-              "cost_usd": 0.000093576
-            },
-            {
-              "step": "dest",
-              "jev": {
-                "act": true,
-                "actionId": "continue-dest",
-                "choice": "continue-dest",
-                "confidence": 0.05,
-                "gateBlocked": false,
-                "reason": "voice-jev-advance"
-              },
-              "usage": {
-                "input_tokens": 2230,
-                "output_tokens": 361
-              },
-              "cost_usd": 0.00009366000000000002
-            },
-            {
-              "step": "freight",
-              "jev": {
-                "act": true,
-                "actionId": "weight",
-                "choice": "weight",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-weight"
-              },
-              "usage": {
-                "input_tokens": 2223,
-                "output_tokens": 361
-              },
-              "cost_usd": 0.00009336600000000001
-            },
-            {
-              "step": "freight",
-              "jev": {
-                "act": true,
-                "actionId": "pieces",
-                "choice": "pieces",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-pieces"
-              },
-              "usage": {
-                "input_tokens": 2228,
-                "output_tokens": 361
-              },
-              "cost_usd": 0.000093576
-            },
-            {
-              "step": "freight",
-              "jev": {
-                "act": true,
-                "actionId": "continue-freight",
-                "choice": "continue-freight",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-advance"
-              },
-              "usage": {
-                "input_tokens": 2230,
-                "output_tokens": 363
-              },
-              "cost_usd": 0.00009366000000000002
-            },
-            {
-              "step": "pickup",
-              "jev": {
-                "act": true,
-                "actionId": "pickup-date",
-                "choice": "pickup-date",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-pickup_date"
-              },
-              "usage": {
-                "input_tokens": 2259,
-                "output_tokens": 362
-              },
-              "cost_usd": 0.00009487800000000001
-            },
-            {
-              "step": "pickup",
-              "jev": {
-                "act": true,
-                "actionId": "inside_pickup",
-                "choice": "inside_pickup",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-accessorial"
-              },
-              "usage": {
-                "input_tokens": 2270,
-                "output_tokens": 364
-              },
-              "cost_usd": 0.00009534
-            },
-            {
-              "step": "pickup",
-              "jev": {
-                "act": true,
-                "actionId": "inside_delivery",
-                "choice": "inside_delivery",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-accessorial"
-              },
-              "usage": {
-                "input_tokens": 2274,
-                "output_tokens": 364
-              },
-              "cost_usd": 0.00009550800000000001
-            },
-            {
-              "step": "pickup",
-              "jev": {
-                "act": true,
-                "actionId": "continue-pickup",
-                "choice": "continue-pickup",
-                "confidence": 0,
-                "gateBlocked": false,
-                "reason": "voice-jev-advance"
-              },
-              "usage": {
-                "input_tokens": 2277,
-                "output_tokens": 364
-              },
-              "cost_usd": 0.000095634
-            },
-            {
-              "step": "contact",
-              "jev": {
-                "act": true,
-                "actionId": "email",
-                "choice": "email",
-                "confidence": 0.31,
-                "gateBlocked": false,
-                "reason": "voice-jev-email"
-              },
-              "usage": {
-                "input_tokens": 2253,
-                "output_tokens": 361
-              },
-              "cost_usd": 0.000094626
-            },
-            {
-              "step": "contact",
-              "jev": {
-                "act": true,
-                "actionId": "continue-contact",
-                "choice": "continue-contact",
-                "confidence": 0.34,
-                "gateBlocked": false,
-                "reason": "voice-jev-advance"
-              },
-              "usage": {
-                "input_tokens": 2261,
-                "output_tokens": 361
-              },
-              "cost_usd": 0.000094962
-            },
-            {
-              "step": "review",
-              "jev": {
-                "act": true,
-                "actionId": "get-rates-review",
-                "choice": "get-rates-review",
-                "confidence": 0.48,
-                "gateBlocked": false,
-                "reason": "voice-jev-advance"
-              },
-              "usage": {
-                "input_tokens": 2249,
-                "output_tokens": 363
-              },
-              "cost_usd": 0.00009445800000000001
-            }
-          ]
-        },
-        {
-          "success": true,
-          "wall_s": 7.07,
-          "cost_usd": 0.0016922640000000002,
-          "steps": 18,
-          "wrong": 0,
-          "clarifies": 0,
-          "field_acc": 100,
-          "notes": "sheet=93ce7a5d; stop=quoted; cu_steps=18; jev_calls=18; avg_conf=0.232; gate_blocks=0",
-          "jev_calls": 18,
-          "jev_confidences": [
-            0.14,
-            0.07,
-            0.23,
+            0.01,
+            0.12,
+            0.04,
+            0.3,
             0.27,
-            0.45
+            0.49
           ],
           "jev_gate_blocks": 0,
           "cu_steps": 18,
@@ -705,6 +817,7 @@
           "log": [
             {
               "step": "origin",
+              "arm": "jev",
               "jev": {
                 "act": true,
                 "actionId": "origin-zip",
@@ -721,6 +834,7 @@
             },
             {
               "step": "origin",
+              "arm": "jev",
               "jev": {
                 "act": true,
                 "actionId": "origin-city",
@@ -737,6 +851,7 @@
             },
             {
               "step": "origin",
+              "arm": "jev",
               "jev": {
                 "act": true,
                 "actionId": "origin-state",
@@ -753,6 +868,7 @@
             },
             {
               "step": "origin",
+              "arm": "jev",
               "jev": {
                 "act": true,
                 "actionId": "continue-origin",
@@ -769,6 +885,7 @@
             },
             {
               "step": "dest",
+              "arm": "jev",
               "jev": {
                 "act": true,
                 "actionId": "dest-zip",
@@ -785,11 +902,12 @@
             },
             {
               "step": "dest",
+              "arm": "jev",
               "jev": {
                 "act": true,
                 "actionId": "dest-city",
                 "choice": "dest-city",
-                "confidence": 0,
+                "confidence": 0.01,
                 "gateBlocked": false,
                 "reason": "voice-jev-dest_city"
               },
@@ -801,6 +919,7 @@
             },
             {
               "step": "dest",
+              "arm": "jev",
               "jev": {
                 "act": true,
                 "actionId": "dest-state",
@@ -817,11 +936,12 @@
             },
             {
               "step": "dest",
+              "arm": "jev",
               "jev": {
                 "act": true,
                 "actionId": "continue-dest",
                 "choice": "continue-dest",
-                "confidence": 0.14,
+                "confidence": 0.12,
                 "gateBlocked": false,
                 "reason": "voice-jev-advance"
               },
@@ -833,6 +953,7 @@
             },
             {
               "step": "freight",
+              "arm": "jev",
               "jev": {
                 "act": true,
                 "actionId": "weight",
@@ -849,6 +970,7 @@
             },
             {
               "step": "freight",
+              "arm": "jev",
               "jev": {
                 "act": true,
                 "actionId": "pieces",
@@ -865,6 +987,7 @@
             },
             {
               "step": "freight",
+              "arm": "jev",
               "jev": {
                 "act": true,
                 "actionId": "continue-freight",
@@ -881,6 +1004,7 @@
             },
             {
               "step": "pickup",
+              "arm": "jev",
               "jev": {
                 "act": true,
                 "actionId": "pickup-date",
@@ -897,6 +1021,7 @@
             },
             {
               "step": "pickup",
+              "arm": "jev",
               "jev": {
                 "act": true,
                 "actionId": "inside_pickup",
@@ -913,11 +1038,12 @@
             },
             {
               "step": "pickup",
+              "arm": "jev",
               "jev": {
                 "act": true,
                 "actionId": "inside_delivery",
                 "choice": "inside_delivery",
-                "confidence": 0.07,
+                "confidence": 0,
                 "gateBlocked": false,
                 "reason": "voice-jev-accessorial"
               },
@@ -929,11 +1055,12 @@
             },
             {
               "step": "pickup",
+              "arm": "jev",
               "jev": {
                 "act": true,
                 "actionId": "continue-pickup",
                 "choice": "continue-pickup",
-                "confidence": 0,
+                "confidence": 0.04,
                 "gateBlocked": false,
                 "reason": "voice-jev-advance"
               },
@@ -945,11 +1072,12 @@
             },
             {
               "step": "contact",
+              "arm": "jev",
               "jev": {
                 "act": true,
                 "actionId": "email",
                 "choice": "email",
-                "confidence": 0.23,
+                "confidence": 0.3,
                 "gateBlocked": false,
                 "reason": "voice-jev-email"
               },
@@ -961,6 +1089,7 @@
             },
             {
               "step": "contact",
+              "arm": "jev",
               "jev": {
                 "act": true,
                 "actionId": "continue-contact",
@@ -971,17 +1100,18 @@
               },
               "usage": {
                 "input_tokens": 2261,
-                "output_tokens": 363
+                "output_tokens": 361
               },
               "cost_usd": 0.000094962
             },
             {
               "step": "review",
+              "arm": "jev",
               "jev": {
                 "act": true,
                 "actionId": "get-rates-review",
                 "choice": "get-rates-review",
-                "confidence": 0.45,
+                "confidence": 0.49,
                 "gateBlocked": false,
                 "reason": "voice-jev-advance"
               },
@@ -996,13 +1126,13 @@
       ],
       "summary": {
         "success": true,
-        "wall_s": 7.095,
-        "cost_usd": 0.001692264,
+        "wall_s": 7.963,
+        "cost_usd": 0.0016922640000000002,
         "steps": 18,
         "wrong": 0,
         "clarifies": 0,
         "field_acc": 100,
-        "notes": "n=3; successes=3/3; avg_conf=0.261; jev_calls=18; gate_blocks=0; cu_steps=18",
+        "notes": "n=1; successes=1/1; avg_conf=0.205; jev_calls=18; gate_blocks=0; cu_steps=18",
         "jev_calls": 18,
         "jev_confidences": [],
         "jev_gate_blocks": 0,
@@ -1015,7 +1145,7 @@
       "runs": [
         {
           "success": true,
-          "wall_s": 0.054,
+          "wall_s": 0.055,
           "cost_usd": 0,
           "steps": 18,
           "wrong": 0,
@@ -1049,7 +1179,8 @@
           "log": [
             {
               "step": "origin",
-              "heuristic": {
+              "arm": "heuristic",
+              "pick": {
                 "actionId": "origin-city",
                 "reason": "fill-missing",
                 "candidate": {
@@ -1068,7 +1199,8 @@
             },
             {
               "step": "origin",
-              "heuristic": {
+              "arm": "heuristic",
+              "pick": {
                 "actionId": "origin-state",
                 "reason": "fill-missing",
                 "candidate": {
@@ -1087,7 +1219,8 @@
             },
             {
               "step": "origin",
-              "heuristic": {
+              "arm": "heuristic",
+              "pick": {
                 "actionId": "origin-zip",
                 "reason": "fill-missing",
                 "candidate": {
@@ -1106,7 +1239,8 @@
             },
             {
               "step": "origin",
-              "heuristic": {
+              "arm": "heuristic",
+              "pick": {
                 "actionId": "continue-origin",
                 "reason": "advance",
                 "candidate": {
@@ -1125,7 +1259,8 @@
             },
             {
               "step": "dest",
-              "heuristic": {
+              "arm": "heuristic",
+              "pick": {
                 "actionId": "dest-city",
                 "reason": "fill-missing",
                 "candidate": {
@@ -1144,7 +1279,8 @@
             },
             {
               "step": "dest",
-              "heuristic": {
+              "arm": "heuristic",
+              "pick": {
                 "actionId": "dest-state",
                 "reason": "fill-missing",
                 "candidate": {
@@ -1163,7 +1299,8 @@
             },
             {
               "step": "dest",
-              "heuristic": {
+              "arm": "heuristic",
+              "pick": {
                 "actionId": "dest-zip",
                 "reason": "fill-missing",
                 "candidate": {
@@ -1182,7 +1319,8 @@
             },
             {
               "step": "dest",
-              "heuristic": {
+              "arm": "heuristic",
+              "pick": {
                 "actionId": "continue-dest",
                 "reason": "advance",
                 "candidate": {
@@ -1201,7 +1339,8 @@
             },
             {
               "step": "freight",
-              "heuristic": {
+              "arm": "heuristic",
+              "pick": {
                 "actionId": "weight",
                 "reason": "fill-missing",
                 "candidate": {
@@ -1220,7 +1359,8 @@
             },
             {
               "step": "freight",
-              "heuristic": {
+              "arm": "heuristic",
+              "pick": {
                 "actionId": "pieces",
                 "reason": "fill-missing",
                 "candidate": {
@@ -1239,7 +1379,8 @@
             },
             {
               "step": "freight",
-              "heuristic": {
+              "arm": "heuristic",
+              "pick": {
                 "actionId": "continue-freight",
                 "reason": "advance",
                 "candidate": {
@@ -1258,7 +1399,8 @@
             },
             {
               "step": "pickup",
-              "heuristic": {
+              "arm": "heuristic",
+              "pick": {
                 "actionId": "pickup-date",
                 "reason": "fill-missing",
                 "candidate": {
@@ -1277,7 +1419,8 @@
             },
             {
               "step": "pickup",
-              "heuristic": {
+              "arm": "heuristic",
+              "pick": {
                 "actionId": "inside_pickup",
                 "reason": "toggle-accessorial",
                 "candidate": {
@@ -1296,7 +1439,8 @@
             },
             {
               "step": "pickup",
-              "heuristic": {
+              "arm": "heuristic",
+              "pick": {
                 "actionId": "inside_delivery",
                 "reason": "toggle-accessorial",
                 "candidate": {
@@ -1315,7 +1459,8 @@
             },
             {
               "step": "pickup",
-              "heuristic": {
+              "arm": "heuristic",
+              "pick": {
                 "actionId": "continue-pickup",
                 "reason": "advance",
                 "candidate": {
@@ -1334,7 +1479,8 @@
             },
             {
               "step": "contact",
-              "heuristic": {
+              "arm": "heuristic",
+              "pick": {
                 "actionId": "email",
                 "reason": "fill-missing",
                 "candidate": {
@@ -1353,7 +1499,8 @@
             },
             {
               "step": "contact",
-              "heuristic": {
+              "arm": "heuristic",
+              "pick": {
                 "actionId": "continue-contact",
                 "reason": "advance",
                 "candidate": {
@@ -1372,763 +1519,8 @@
             },
             {
               "step": "review",
-              "heuristic": {
-                "actionId": "get-rates-review",
-                "reason": "submit-complete",
-                "candidate": {
-                  "id": "get-rates-review",
-                  "kind": "click",
-                  "role": "button",
-                  "label": "Get rates",
-                  "selector": "[data-pilot-id=\"get-rates-review\"]",
-                  "field": null,
-                  "required": false,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            }
-          ]
-        },
-        {
-          "success": true,
-          "wall_s": 0.053,
-          "cost_usd": 0,
-          "steps": 18,
-          "wrong": 0,
-          "clarifies": 0,
-          "field_acc": 100,
-          "notes": "sheet=93ce7a5d; stop=quoted; cu_steps=18",
-          "jev_calls": 0,
-          "jev_confidences": [],
-          "jev_gate_blocks": 0,
-          "cu_steps": 18,
-          "stop_reason": "quoted",
-          "filled": {
-            "origin_city": "Austin",
-            "origin_state": "TX",
-            "origin_zip": "78721",
-            "dest_city": "Atlanta",
-            "dest_state": "GA",
-            "dest_zip": "30030",
-            "billing_zip": "",
-            "weight": "1000",
-            "pieces": "3",
-            "commodity": "",
-            "pickup_date": "2026-09-22",
-            "accessorials": [
-              "inside_pickup",
-              "inside_delivery"
-            ],
-            "email": "qa@freightlodge.com",
-            "name": ""
-          },
-          "log": [
-            {
-              "step": "origin",
-              "heuristic": {
-                "actionId": "origin-city",
-                "reason": "fill-missing",
-                "candidate": {
-                  "id": "origin-city",
-                  "kind": "fill",
-                  "role": "textbox",
-                  "label": "Origin city (optional)",
-                  "selector": "[data-pilot-id=\"origin-city\"]",
-                  "field": "origin_city",
-                  "required": false,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "origin",
-              "heuristic": {
-                "actionId": "origin-state",
-                "reason": "fill-missing",
-                "candidate": {
-                  "id": "origin-state",
-                  "kind": "fill",
-                  "role": "textbox",
-                  "label": "State",
-                  "selector": "[data-pilot-id=\"origin-state\"]",
-                  "field": "origin_state",
-                  "required": false,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "origin",
-              "heuristic": {
-                "actionId": "origin-zip",
-                "reason": "fill-missing",
-                "candidate": {
-                  "id": "origin-zip",
-                  "kind": "fill",
-                  "role": "textbox",
-                  "label": "Origin ZIP (required)",
-                  "selector": "[data-pilot-id=\"origin-zip\"]",
-                  "field": "origin_zip",
-                  "required": true,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "origin",
-              "heuristic": {
-                "actionId": "continue-origin",
-                "reason": "advance",
-                "candidate": {
-                  "id": "continue-origin",
-                  "kind": "click",
-                  "role": "button",
-                  "label": "Continue",
-                  "selector": "[data-pilot-id=\"continue-origin\"]",
-                  "field": null,
-                  "required": false,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "dest",
-              "heuristic": {
-                "actionId": "dest-city",
-                "reason": "fill-missing",
-                "candidate": {
-                  "id": "dest-city",
-                  "kind": "fill",
-                  "role": "textbox",
-                  "label": "Destination city (optional)",
-                  "selector": "[data-pilot-id=\"dest-city\"]",
-                  "field": "dest_city",
-                  "required": false,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "dest",
-              "heuristic": {
-                "actionId": "dest-state",
-                "reason": "fill-missing",
-                "candidate": {
-                  "id": "dest-state",
-                  "kind": "fill",
-                  "role": "textbox",
-                  "label": "State",
-                  "selector": "[data-pilot-id=\"dest-state\"]",
-                  "field": "dest_state",
-                  "required": false,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "dest",
-              "heuristic": {
-                "actionId": "dest-zip",
-                "reason": "fill-missing",
-                "candidate": {
-                  "id": "dest-zip",
-                  "kind": "fill",
-                  "role": "textbox",
-                  "label": "Destination ZIP (required)",
-                  "selector": "[data-pilot-id=\"dest-zip\"]",
-                  "field": "dest_zip",
-                  "required": true,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "dest",
-              "heuristic": {
-                "actionId": "continue-dest",
-                "reason": "advance",
-                "candidate": {
-                  "id": "continue-dest",
-                  "kind": "click",
-                  "role": "button",
-                  "label": "Continue",
-                  "selector": "[data-pilot-id=\"continue-dest\"]",
-                  "field": null,
-                  "required": false,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "freight",
-              "heuristic": {
-                "actionId": "weight",
-                "reason": "fill-missing",
-                "candidate": {
-                  "id": "weight",
-                  "kind": "fill",
-                  "role": "textbox",
-                  "label": "Total weight (lb) (required)",
-                  "selector": "[data-pilot-id=\"weight\"]",
-                  "field": "weight",
-                  "required": true,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "freight",
-              "heuristic": {
-                "actionId": "pieces",
-                "reason": "fill-missing",
-                "candidate": {
-                  "id": "pieces",
-                  "kind": "fill",
-                  "role": "textbox",
-                  "label": "Pieces (required)",
-                  "selector": "[data-pilot-id=\"pieces\"]",
-                  "field": "pieces",
-                  "required": true,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "freight",
-              "heuristic": {
-                "actionId": "continue-freight",
-                "reason": "advance",
-                "candidate": {
-                  "id": "continue-freight",
-                  "kind": "click",
-                  "role": "button",
-                  "label": "Continue",
-                  "selector": "[data-pilot-id=\"continue-freight\"]",
-                  "field": null,
-                  "required": false,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "pickup",
-              "heuristic": {
-                "actionId": "pickup-date",
-                "reason": "fill-missing",
-                "candidate": {
-                  "id": "pickup-date",
-                  "kind": "fill",
-                  "role": "textbox",
-                  "label": "Pickup date (required)",
-                  "selector": "[data-pilot-id=\"pickup-date\"]",
-                  "field": "pickup_date",
-                  "required": true,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "pickup",
-              "heuristic": {
-                "actionId": "inside_pickup",
-                "reason": "toggle-accessorial",
-                "candidate": {
-                  "id": "inside_pickup",
-                  "kind": "check",
-                  "role": "checkbox",
-                  "label": "Inside pickup",
-                  "selector": "[data-pilot-id=\"inside_pickup\"]",
-                  "field": "inside_pickup",
-                  "required": false,
-                  "current": "off",
-                  "checked": false,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "pickup",
-              "heuristic": {
-                "actionId": "inside_delivery",
-                "reason": "toggle-accessorial",
-                "candidate": {
-                  "id": "inside_delivery",
-                  "kind": "check",
-                  "role": "checkbox",
-                  "label": "Inside delivery",
-                  "selector": "[data-pilot-id=\"inside_delivery\"]",
-                  "field": "inside_delivery",
-                  "required": false,
-                  "current": "off",
-                  "checked": false,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "pickup",
-              "heuristic": {
-                "actionId": "continue-pickup",
-                "reason": "advance",
-                "candidate": {
-                  "id": "continue-pickup",
-                  "kind": "click",
-                  "role": "button",
-                  "label": "Continue",
-                  "selector": "[data-pilot-id=\"continue-pickup\"]",
-                  "field": null,
-                  "required": false,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "contact",
-              "heuristic": {
-                "actionId": "email",
-                "reason": "fill-missing",
-                "candidate": {
-                  "id": "email",
-                  "kind": "fill",
-                  "role": "textbox",
-                  "label": "Email (required)",
-                  "selector": "[data-pilot-id=\"email\"]",
-                  "field": "email",
-                  "required": true,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "contact",
-              "heuristic": {
-                "actionId": "continue-contact",
-                "reason": "advance",
-                "candidate": {
-                  "id": "continue-contact",
-                  "kind": "click",
-                  "role": "button",
-                  "label": "Continue",
-                  "selector": "[data-pilot-id=\"continue-contact\"]",
-                  "field": null,
-                  "required": false,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "review",
-              "heuristic": {
-                "actionId": "get-rates-review",
-                "reason": "submit-complete",
-                "candidate": {
-                  "id": "get-rates-review",
-                  "kind": "click",
-                  "role": "button",
-                  "label": "Get rates",
-                  "selector": "[data-pilot-id=\"get-rates-review\"]",
-                  "field": null,
-                  "required": false,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            }
-          ]
-        },
-        {
-          "success": true,
-          "wall_s": 0.05,
-          "cost_usd": 0,
-          "steps": 18,
-          "wrong": 0,
-          "clarifies": 0,
-          "field_acc": 100,
-          "notes": "sheet=93ce7a5d; stop=quoted; cu_steps=18",
-          "jev_calls": 0,
-          "jev_confidences": [],
-          "jev_gate_blocks": 0,
-          "cu_steps": 18,
-          "stop_reason": "quoted",
-          "filled": {
-            "origin_city": "Austin",
-            "origin_state": "TX",
-            "origin_zip": "78721",
-            "dest_city": "Atlanta",
-            "dest_state": "GA",
-            "dest_zip": "30030",
-            "billing_zip": "",
-            "weight": "1000",
-            "pieces": "3",
-            "commodity": "",
-            "pickup_date": "2026-09-22",
-            "accessorials": [
-              "inside_pickup",
-              "inside_delivery"
-            ],
-            "email": "qa@freightlodge.com",
-            "name": ""
-          },
-          "log": [
-            {
-              "step": "origin",
-              "heuristic": {
-                "actionId": "origin-city",
-                "reason": "fill-missing",
-                "candidate": {
-                  "id": "origin-city",
-                  "kind": "fill",
-                  "role": "textbox",
-                  "label": "Origin city (optional)",
-                  "selector": "[data-pilot-id=\"origin-city\"]",
-                  "field": "origin_city",
-                  "required": false,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "origin",
-              "heuristic": {
-                "actionId": "origin-state",
-                "reason": "fill-missing",
-                "candidate": {
-                  "id": "origin-state",
-                  "kind": "fill",
-                  "role": "textbox",
-                  "label": "State",
-                  "selector": "[data-pilot-id=\"origin-state\"]",
-                  "field": "origin_state",
-                  "required": false,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "origin",
-              "heuristic": {
-                "actionId": "origin-zip",
-                "reason": "fill-missing",
-                "candidate": {
-                  "id": "origin-zip",
-                  "kind": "fill",
-                  "role": "textbox",
-                  "label": "Origin ZIP (required)",
-                  "selector": "[data-pilot-id=\"origin-zip\"]",
-                  "field": "origin_zip",
-                  "required": true,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "origin",
-              "heuristic": {
-                "actionId": "continue-origin",
-                "reason": "advance",
-                "candidate": {
-                  "id": "continue-origin",
-                  "kind": "click",
-                  "role": "button",
-                  "label": "Continue",
-                  "selector": "[data-pilot-id=\"continue-origin\"]",
-                  "field": null,
-                  "required": false,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "dest",
-              "heuristic": {
-                "actionId": "dest-city",
-                "reason": "fill-missing",
-                "candidate": {
-                  "id": "dest-city",
-                  "kind": "fill",
-                  "role": "textbox",
-                  "label": "Destination city (optional)",
-                  "selector": "[data-pilot-id=\"dest-city\"]",
-                  "field": "dest_city",
-                  "required": false,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "dest",
-              "heuristic": {
-                "actionId": "dest-state",
-                "reason": "fill-missing",
-                "candidate": {
-                  "id": "dest-state",
-                  "kind": "fill",
-                  "role": "textbox",
-                  "label": "State",
-                  "selector": "[data-pilot-id=\"dest-state\"]",
-                  "field": "dest_state",
-                  "required": false,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "dest",
-              "heuristic": {
-                "actionId": "dest-zip",
-                "reason": "fill-missing",
-                "candidate": {
-                  "id": "dest-zip",
-                  "kind": "fill",
-                  "role": "textbox",
-                  "label": "Destination ZIP (required)",
-                  "selector": "[data-pilot-id=\"dest-zip\"]",
-                  "field": "dest_zip",
-                  "required": true,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "dest",
-              "heuristic": {
-                "actionId": "continue-dest",
-                "reason": "advance",
-                "candidate": {
-                  "id": "continue-dest",
-                  "kind": "click",
-                  "role": "button",
-                  "label": "Continue",
-                  "selector": "[data-pilot-id=\"continue-dest\"]",
-                  "field": null,
-                  "required": false,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "freight",
-              "heuristic": {
-                "actionId": "weight",
-                "reason": "fill-missing",
-                "candidate": {
-                  "id": "weight",
-                  "kind": "fill",
-                  "role": "textbox",
-                  "label": "Total weight (lb) (required)",
-                  "selector": "[data-pilot-id=\"weight\"]",
-                  "field": "weight",
-                  "required": true,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "freight",
-              "heuristic": {
-                "actionId": "pieces",
-                "reason": "fill-missing",
-                "candidate": {
-                  "id": "pieces",
-                  "kind": "fill",
-                  "role": "textbox",
-                  "label": "Pieces (required)",
-                  "selector": "[data-pilot-id=\"pieces\"]",
-                  "field": "pieces",
-                  "required": true,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "freight",
-              "heuristic": {
-                "actionId": "continue-freight",
-                "reason": "advance",
-                "candidate": {
-                  "id": "continue-freight",
-                  "kind": "click",
-                  "role": "button",
-                  "label": "Continue",
-                  "selector": "[data-pilot-id=\"continue-freight\"]",
-                  "field": null,
-                  "required": false,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "pickup",
-              "heuristic": {
-                "actionId": "pickup-date",
-                "reason": "fill-missing",
-                "candidate": {
-                  "id": "pickup-date",
-                  "kind": "fill",
-                  "role": "textbox",
-                  "label": "Pickup date (required)",
-                  "selector": "[data-pilot-id=\"pickup-date\"]",
-                  "field": "pickup_date",
-                  "required": true,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "pickup",
-              "heuristic": {
-                "actionId": "inside_pickup",
-                "reason": "toggle-accessorial",
-                "candidate": {
-                  "id": "inside_pickup",
-                  "kind": "check",
-                  "role": "checkbox",
-                  "label": "Inside pickup",
-                  "selector": "[data-pilot-id=\"inside_pickup\"]",
-                  "field": "inside_pickup",
-                  "required": false,
-                  "current": "off",
-                  "checked": false,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "pickup",
-              "heuristic": {
-                "actionId": "inside_delivery",
-                "reason": "toggle-accessorial",
-                "candidate": {
-                  "id": "inside_delivery",
-                  "kind": "check",
-                  "role": "checkbox",
-                  "label": "Inside delivery",
-                  "selector": "[data-pilot-id=\"inside_delivery\"]",
-                  "field": "inside_delivery",
-                  "required": false,
-                  "current": "off",
-                  "checked": false,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "pickup",
-              "heuristic": {
-                "actionId": "continue-pickup",
-                "reason": "advance",
-                "candidate": {
-                  "id": "continue-pickup",
-                  "kind": "click",
-                  "role": "button",
-                  "label": "Continue",
-                  "selector": "[data-pilot-id=\"continue-pickup\"]",
-                  "field": null,
-                  "required": false,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "contact",
-              "heuristic": {
-                "actionId": "email",
-                "reason": "fill-missing",
-                "candidate": {
-                  "id": "email",
-                  "kind": "fill",
-                  "role": "textbox",
-                  "label": "Email (required)",
-                  "selector": "[data-pilot-id=\"email\"]",
-                  "field": "email",
-                  "required": true,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "contact",
-              "heuristic": {
-                "actionId": "continue-contact",
-                "reason": "advance",
-                "candidate": {
-                  "id": "continue-contact",
-                  "kind": "click",
-                  "role": "button",
-                  "label": "Continue",
-                  "selector": "[data-pilot-id=\"continue-contact\"]",
-                  "field": null,
-                  "required": false,
-                  "current": "",
-                  "checked": null,
-                  "decoy": false
-                }
-              }
-            },
-            {
-              "step": "review",
-              "heuristic": {
+              "arm": "heuristic",
+              "pick": {
                 "actionId": "get-rates-review",
                 "reason": "submit-complete",
                 "candidate": {
@@ -2150,13 +1542,13 @@
       ],
       "summary": {
         "success": true,
-        "wall_s": 0.052,
+        "wall_s": 0.055,
         "cost_usd": 0,
         "steps": 18,
         "wrong": 0,
         "clarifies": 0,
         "field_acc": 100,
-        "notes": "n=3; successes=3/3; cu_steps=18",
+        "notes": "n=1; successes=1/1; cu_steps=18",
         "jev_calls": 0,
         "jev_confidences": [],
         "jev_gate_blocks": 0,
