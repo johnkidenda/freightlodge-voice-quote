@@ -1,5 +1,5 @@
-// v9: Jev filled-slot hard rule, same-side ZIP-state, ?jev=0.
-const CACHE = "freightlodge-quote-v9";
+// v10: inside sticks, liftgate side-clarify, partial ZIP retain.
+const CACHE = "freightlodge-quote-v10";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
