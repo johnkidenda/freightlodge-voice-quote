@@ -89,19 +89,20 @@ Worker path after deploy: `{VITE_STT_TOKEN_URL}/jev-action` (same origin as `/je
 - Pickup date 2026-09-22 (sheet placeholder; transcript was awaiting email)
 - Email `qa@freightlodge.com`
 
-## A/B scorecard (sheet 93ce7a5d, form v0.25, n=3)
+## A/B scorecard (sheet 93ce7a5d, form v0.26, n=1 smoke)
 
-Same local form HTML both arms. Jev arm called live TypeSafe (`jev-1.13.0`) through the existing `/jev` tunnel because the already-running stub does not have `POST /jev-action` yet. Candidates stayed listed-only; no invented ids. Heuristic arm is a script picker (no TypeSafe, $0).
+Same local form HTML. TypeSafe via the live `/jev` tunnel when `/jev-action` is not on the stub.
 
 Arm | success | wall_s | cost_usd | steps | wrong | clarifies | field_acc | notes
 --- | --- | --- | --- | --- | --- | --- | --- | ---
-jev | yes | 7.095 | 0.001692 | 18 | 0 | 0 | 100% | n=3; 3/3; avg_conf=0.261; jev_calls=18; gate_blocks=0; cu_steps=18
-heuristic | yes | 0.052 | 0.000000 | 18 | 0 | 0 | 100% | n=3; 3/3; cu_steps=18
+hybrid | yes | 3.265 | 0.000656 | 18 | 0 | 0 | 100% | n=1; jev_calls=7; gate_blocks=0
+jev | yes | 7.963 | 0.001692 | 18 | 0 | 0 | 100% | n=1; every-step; jev_calls=18
+heuristic | yes | 0.055 | 0.000000 | 18 | 0 | 0 | 100% | n=1; script only
 
 Raw JSON: [`docs/exfresso-pilot-ab.json`](exfresso-pilot-ab.json).
 
-Cost: TypeSafe published input price $0.042 per million tokens (output free). Computer-use/box compute is `cu_steps` (18 clicks/fills), not a dollar rate.
+Cost: TypeSafe published input price $0.042 per million tokens (output free). CU compute is `cu_steps` (18), not a dollar rate.
 
 ### Read
 
-Jev did not improve success or field accuracy on this instrumented form (both arms 3/3, 100%, 0 wrong). It added about 7s and $0.0017 per run (18 Choice calls). A stricter first policy that honored voice `needs_clarify` as a hard stop failed 3/3 after the lane ZIPs (field_acc 28.6%) until Continue was allowed when the sheet already had the next value. For real Exfresso, keep Jev as a low-confidence gate on ambiguous labels (Continue vs Get rates, Inside vs Inside delivery). Do not pause when the sheet already has the next value and a listed Continue exists. Redeploy the Worker so native `POST /jev-action` feeds DOM candidates directly.
+Hybrid kept 100% success and cut Jev from 18 calls / ~8s / $0.0017 to 7 calls / ~3.3s / $0.0007 by script-filling mapped fields. Jev still gated Continue vs Get rates and similar labels. For real Exfresso, ship hybrid: fill from the sheet, Choice only on ambiguous forks.
