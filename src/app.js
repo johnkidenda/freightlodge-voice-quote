@@ -14,6 +14,7 @@ import { onAgentSpeaking, speakAgentReply, stopAgentSpeech } from "./lib/agent-s
 import { copyTextToClipboard, sendSessionTranscript } from "./lib/transcript.js";
 import { playListenCue, primeListenCue } from "./lib/listen-cue.js";
 import { formatAppVersionLabel, formatAppVersionTitle, getAppCommit, getAppVersion } from "./lib/app-version.js";
+import { fetchJevDecision, recentAssistantReplies } from "./lib/jev.js";
 
 const SAMPLE =
   "Chicago IL 60601 to Dallas TX 75201, 3 pallets, 1200 pounds, auto parts, pickup tomorrow, liftgate delivery, email shipper@example.com";
@@ -314,7 +315,14 @@ async function acceptUserText(els, state, text) {
   if (state.busy) return;
   push(state, "user", text);
   render(els, state);
-  const result = handleUtterance(state.session, text);
+  const jev = await fetchJevDecision({
+    utterance: text,
+    sheet: state.session.sheet,
+    recentReplies: recentAssistantReplies(state.messages, 3),
+    awaiting: state.session.awaiting,
+    askedAccessorials: state.session.askedAccessorials,
+  });
+  const result = handleUtterance(state.session, text, { jev });
   state.session = result.session;
   const reply = presentAgentReply(result, state.conversational);
   push(state, "assistant", reply);

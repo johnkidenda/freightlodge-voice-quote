@@ -2,16 +2,18 @@
 /**
  * Local Node stub for the Cartesia token + TTS proxy.
  *
- *   CARTESIA_API_KEY= node token-proxy/local-stub.mjs
+ *   CARTESIA_API_KEY= TYPESAFE_API_KEY= node token-proxy/local-stub.mjs
  *
  * Then point the Vite app at it:
  *   VITE_STT_TOKEN_URL=http://127.0.0.1:8787 npm run dev
  *
  * Mint: POST /
  * TTS audio: POST /tts  (CARTESIA_API_KEY stays on this process)
+ * Jev: POST /jev  (TYPESAFE_API_KEY stays on this process)
  */
 import { createServer } from "node:http";
 import { corsHeaders, mintCartesiaToken, synthesizeCartesiaTts } from "./src/mint.js";
+import { evaluateUtteranceJev } from "./src/jev.js";
 
 const PORT = Number(process.env.PORT) || 8787;
 const HOST = process.env.HOST || "127.0.0.1";
@@ -51,6 +53,54 @@ const server = createServer(async (req, res) => {
   }
 
   const apiKey = process.env.CARTESIA_API_KEY;
+  const typesafeKey = process.env.TYPESAFE_API_KEY;
+
+  if (req.method === "GET" && path === "/") {
+    send(
+      res,
+      200,
+      {
+        ok: true,
+        service: "freightlodge-stt-token",
+        tts: Boolean(apiKey),
+        jev: Boolean(typesafeKey),
+      },
+      origin,
+    );
+    return;
+  }
+
+  if (path === "/jev") {
+    if (req.method === "GET") {
+      send(res, 200, { ok: true, jev: typesafeKey ? "on" : "off" }, origin);
+      return;
+    }
+    if (req.method !== "POST") {
+      send(res, 405, { error: "method not allowed" }, origin);
+      return;
+    }
+    if (!typesafeKey) {
+      send(res, 503, { ok: false, jev: "off", error: "Jev proxy not configured" }, origin);
+      return;
+    }
+    try {
+      const body = await readJson(req);
+      const result = await evaluateUtteranceJev({
+        apiKey: typesafeKey,
+        utterance: body.utterance || body.transcript || body.text || "",
+        sheet: body.sheet || body.quote_sheet || {},
+        recentReplies: body.recent_replies || body.recentReplies || [],
+        awaiting: body.awaiting || null,
+        askedAccessorials: body.asked_accessorials ?? body.askedAccessorials,
+      });
+      send(res, 200, result, origin);
+    } catch (err) {
+      const status = err?.code === "JEV_EMPTY" ? 400 : 502;
+      send(res, status, { ok: false, jev: "off", error: String(err?.message || err) }, origin);
+    }
+    return;
+  }
+
   if (!apiKey) {
     send(res, 503, { error: "STT token proxy not configured" }, origin);
     return;
@@ -94,6 +144,7 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`Cartesia token/TTS stub listening on http://${HOST}:${PORT}`);
-  console.log("Mint: POST /   TTS: POST /tts   CARTESIA_API_KEY stays on this process only.");
+  console.log(`Cartesia token/TTS + Jev stub listening on http://${HOST}:${PORT}`);
+  console.log("Mint: POST /   TTS: POST /tts   Jev: POST /jev");
+  console.log("CARTESIA_API_KEY and TYPESAFE_API_KEY stay on this process only.");
 });

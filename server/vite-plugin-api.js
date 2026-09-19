@@ -1,6 +1,7 @@
 import { simulateExfressoRunner } from "../src/lib/handoff.js";
 import { MAIL_FROM, formatQuoteEmail } from "../src/lib/email.js";
 import { mintCartesiaToken, synthesizeCartesiaTts } from "../token-proxy/src/mint.js";
+import { evaluateUtteranceJev } from "../token-proxy/src/jev.js";
 
 function readJson(req) {
   return new Promise((resolve, reject) => {
@@ -34,7 +35,11 @@ async function handler(req, res, next) {
   const path = routePath(req.url);
   if (
     req.method === "OPTIONS" &&
-    (path === "/api/quote-handoff" || path === "/api/email-quote" || path === "/api/stt-token" || path === "/api/tts")
+    (path === "/api/quote-handoff" ||
+      path === "/api/email-quote" ||
+      path === "/api/stt-token" ||
+      path === "/api/tts" ||
+      path === "/api/jev")
   ) {
     res.statusCode = 204;
     res.end();
@@ -52,6 +57,34 @@ async function handler(req, res, next) {
       send(res, 200, minted);
     } catch (err) {
       send(res, 502, { error: String(err.message || err) });
+    }
+    return;
+  }
+
+  if ((req.method === "POST" || req.method === "GET") && path === "/api/jev") {
+    if (req.method === "GET") {
+      send(res, 200, { ok: true, jev: process.env.TYPESAFE_API_KEY ? "on" : "off" });
+      return;
+    }
+    const typesafeKey = process.env.TYPESAFE_API_KEY;
+    if (!typesafeKey) {
+      send(res, 503, { ok: false, jev: "off", error: "Jev proxy not configured" });
+      return;
+    }
+    try {
+      const body = await readJson(req);
+      const result = await evaluateUtteranceJev({
+        apiKey: typesafeKey,
+        utterance: body.utterance || body.transcript || body.text || "",
+        sheet: body.sheet || body.quote_sheet || {},
+        recentReplies: body.recent_replies || body.recentReplies || [],
+        awaiting: body.awaiting || null,
+        askedAccessorials: body.asked_accessorials ?? body.askedAccessorials,
+      });
+      send(res, 200, result);
+    } catch (err) {
+      const status = err?.code === "JEV_EMPTY" ? 400 : 502;
+      send(res, status, { ok: false, jev: "off", error: String(err.message || err) });
     }
     return;
   }

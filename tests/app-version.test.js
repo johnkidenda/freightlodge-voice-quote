@@ -4,16 +4,16 @@ import { nextVersion } from "../scripts/bump-version.mjs";
 import { formatAppVersionLabel, formatAppVersionTitle } from "../src/lib/app-version.js";
 
 describe("app version 0.XX", () => {
-  it("VERSION is 0.21 for this ship (20 merged + this PR)", () => {
+  it("VERSION is 0.22 for this ship (21 merged + this PR)", () => {
     const raw = readFileSync("VERSION", "utf8").trim();
-    expect(raw).toBe("0.21");
-    expect(formatAppVersionLabel(raw)).toBe("v0.21");
-    expect(formatAppVersionTitle("0.21", "abc1234")).toBe("v0.21 (abc1234)");
-    expect(formatAppVersionTitle("0.21", "dev")).toBe("v0.21");
+    expect(raw).toBe("0.22");
+    expect(formatAppVersionLabel(raw)).toBe("v0.22");
+    expect(formatAppVersionTitle("0.22", "abc1234")).toBe("v0.22 (abc1234)");
+    expect(formatAppVersionTitle("0.22", "dev")).toBe("v0.22");
   });
 
   it("bump script increments 0.XX by one", () => {
-    expect(nextVersion("0.21")).toBe("0.22");
+    expect(nextVersion("0.22")).toBe("0.23");
     expect(nextVersion("v0.09")).toBe("0.10");
   });
 

@@ -1,4 +1,5 @@
 import { corsHeaders, mintCartesiaToken, synthesizeCartesiaTts } from "./mint.js";
+import { evaluateUtteranceJev } from "./jev.js";
 
 function json(body, status, origin) {
   return new Response(JSON.stringify(body), {
@@ -35,7 +36,43 @@ export default {
     const apiKey = env?.CARTESIA_API_KEY;
 
     if (request.method === "GET" && path === "/") {
-      return json({ ok: true, service: "freightlodge-stt-token" }, 200, origin);
+      return json(
+        {
+          ok: true,
+          service: "freightlodge-stt-token",
+          tts: Boolean(apiKey),
+          jev: Boolean(env?.TYPESAFE_API_KEY),
+        },
+        200,
+        origin,
+      );
+    }
+
+    if (path === "/jev") {
+      if (request.method === "GET") {
+        return json({ ok: true, jev: env?.TYPESAFE_API_KEY ? "on" : "off" }, 200, origin);
+      }
+      if (request.method !== "POST") return json({ error: "method not allowed" }, 405, origin);
+      const typesafeKey = env?.TYPESAFE_API_KEY;
+      if (!typesafeKey) {
+        return json({ ok: false, jev: "off", error: "Jev proxy not configured" }, 503, origin);
+      }
+      const body = await readJson(request);
+      try {
+        const result = await evaluateUtteranceJev({
+          apiKey: typesafeKey,
+          utterance: body.utterance || body.transcript || body.text || "",
+          sheet: body.sheet || body.quote_sheet || {},
+          recentReplies: body.recent_replies || body.recentReplies || [],
+          awaiting: body.awaiting || null,
+          askedAccessorials: body.asked_accessorials ?? body.askedAccessorials,
+        });
+        return json(result, 200, origin);
+      } catch (err) {
+        const message = String(err?.message || err);
+        const status = err?.code === "JEV_UNCONFIGURED" ? 503 : err?.code === "JEV_EMPTY" ? 400 : 502;
+        return json({ ok: false, jev: "off", error: message }, status, origin);
+      }
     }
 
     if (path === "/tts") {

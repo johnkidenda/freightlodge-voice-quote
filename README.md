@@ -10,6 +10,7 @@ Playable URL (GitHub Pages project site):
 - Out of scope (hard international, ocean/air) → `status=out_of_scope` + honest message, never a fake rate
 - Sheet contract: [`docs/QUOTE_SHEET_V1.json`](docs/QUOTE_SHEET_V1.json) (`schema_version: "1.0"`)
 - v1.0.1 additives: optional `error_reason`, default `mode: "LTL"`, lowest `total_usd` if multiple rates
+- Post-utterance **Jev** (TypeSafe System One) behind the token proxy: slot focus + ready/clarify gate. Missing key or Jev failure falls back to the current heuristics. **Never** put `TYPESAFE_API_KEY` in `VITE_*`.
 
 ## Run locally
 
@@ -23,7 +24,7 @@ Open the printed localhost URL (Chrome or Safari). Hold the mic button to talk, 
 
 **Conversational mode** (separate toggle) rewrites agent bubbles into short customer-service copy and speaks them with the browser `speechSynthesis` API. Mode off = formal prompts + silent. There is no Cartesia TTS toggle, latency chip, or STT mode badge in the UI. **Never** put `CARTESIA_API_KEY` in `VITE_*` or the Pages bundle.
 
-**App version** is `v0.XX` where XX is `0.01` × (merged change-sets including the current ship). Source of truth: [`VERSION`](VERSION). This ship is **v0.21** (20 merged PRs + this one). Future PRs that do not bump `VERSION` are incremented by CI (`.github/workflows/version-on-pr.yml`).
+**App version** is `v0.XX` where XX is `0.01` × (merged change-sets including the current ship). Source of truth: [`VERSION`](VERSION). This ship is **v0.22** (21 merged PRs + this one). Future PRs that do not bump `VERSION` are incremented by CI (`.github/workflows/version-on-pr.yml`).
 
 `npm run preview` serves the production build plus the same local API stubs.
 
@@ -36,6 +37,41 @@ The Pages SPA does not call Cartesia TTS. `POST /tts` on the token proxy can sta
 Default voice: **Skylar** (`db6b0ed5-d5d3-463d-ae85-518a07d3c2b4`, “Friendly Guide” — customer care / sales-leaning). Model: `sonic-3`.
 
 The mint endpoint still returns `{ token, expires_in }` with `{ grants: { tts: true, stt: true } }` so a short-lived token is available; the browser does not embed the API key.
+
+### Jev (TypeSafe System One) post-utterance decisions
+
+After each completed utterance (hold release, turn end, or typed submit) the client POSTs once to `{VITE_STT_TOKEN_URL}/jev` with the current quote sheet JSON, the raw transcript, and a short recent-reply tail. The proxy calls TypeSafe (`POST https://api.typesafe.ai/v1/systemone`, model `jev-latest`) with:
+
+1. **Noul** `sheet_ready_for_exfresso` (enough to run Quote without inventing fields)
+2. **Choice** `primary_slot` plus per-slot **Nouls** `touched_*` (origin city/ZIP, dest city/ZIP, weight, pieces, commodity, pickup date, accessorials, email). Candidates only. No invented options.
+3. **Noul** `needs_clarify` (city/ZIP mismatch, soft date, ambiguous STT)
+4. **Score** `parse_confidence`
+
+Act only when confidence is about `>= 0.5`. Otherwise the existing rule-based parse / clarify stays in charge. Opus/Grok are not on this path. Reply copy stays as today.
+
+Send transcript stamps a quiet QA line: `Jev: on|off` plus a short decision summary.
+
+If `TYPESAFE_API_KEY` is unset or Jev fails, the app behaves as v0.21 (heuristics only).
+
+**Smoke when the key is on the local stub or tunnel** (Anthony persists it at `/home/box/.secrets/typesafe.env` and refreshes the stub):
+
+```bash
+# Local stub
+set -a && source /home/box/.secrets/typesafe.env && set +a
+TYPESAFE_API_KEY=$TYPESAFE_API_KEY node token-proxy/local-stub.mjs
+
+curl -sS -X POST "${VITE_STT_TOKEN_URL:-http://127.0.0.1:8787}/jev" \
+  -H "Content-Type: application/json" \
+  -d '{"utterance":"Chicago 60601 to Dallas 75201, 3 pallets, 1200 pounds","sheet":{"schema_version":"1.0","status":"collecting"},"awaiting":"origin_zip"}'
+```
+
+Against the Pages-baked proxy origin:
+
+```bash
+curl -sS -X POST "https://opens-trio-tune-disciplines.trycloudflare.com/jev" \
+  -H "Content-Type: application/json" \
+  -d '{"utterance":"Chicago 60601 to Dallas 75201, 3 pallets, 1200 pounds","sheet":{"schema_version":"1.0","status":"collecting"},"awaiting":"origin_zip"}'
+```
 
 - Worker + local stub: [`token-proxy/README.md`](token-proxy/README.md)
 - Local Vite (`npm run dev`) exposes `POST /api/stt-token` and `POST /api/tts` when `CARTESIA_API_KEY` is in the server env — point `VITE_STT_TOKEN_URL=/api/stt-token`
@@ -162,7 +198,8 @@ npm test
 
 - Hold-and-dump: one utterance parks weight + commodity + cities while awaiting origin ZIP
 - Conversational copy + browser `speechSynthesis`; Web Speech only for STT
-- Visible `VERSION` (`v0.21` this ship) baked into the header/footer
+- Visible `VERSION` (`v0.22` this ship) baked into the header/footer
+- Post-utterance Jev via `POST /jev` (fallback when the TypeSafe key is absent)
 - Completeness rules for `ready_for_quote`
 - Never-invent: cities do not become ZIPs; “standard class” / “a few hundred pounds” stay `null`
 - Out of scope does not produce `quote_result`
@@ -172,4 +209,4 @@ npm test
 
 Booking, payment, live Exfresso credentials, and hard international / ocean / air quoting.
 
-Jev / TypeSafe System One is **not** in this ship (no key yet). When it lands later it will be TypeSafe’s **direct** API behind the token proxy — not OpenRouter.
+Exfresso DOM step Choice, CDF triage, and bot-team auto-mode are **not** in this ship. Jev here is only the post-utterance slot / ready / clarify gate.

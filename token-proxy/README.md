@@ -1,6 +1,6 @@
 # Cartesia token + TTS proxy
 
-Mints short-lived Cartesia `access_token`s with `{ grants: { tts: true, stt: true } }` and proxies TTS audio so the GitHub Pages SPA never sees `CARTESIA_API_KEY`.
+Mints short-lived Cartesia `access_token`s with `{ grants: { tts: true, stt: true } }`, proxies TTS audio, and proxies **Jev** (TypeSafe System One) so the GitHub Pages SPA never sees `CARTESIA_API_KEY` or `TYPESAFE_API_KEY`.
 
 Mic → text is **Web Speech only**. Cartesia is used for **spoken agent replies** when Conversational mode is on.
 
@@ -9,6 +9,7 @@ The Pages client:
 1. Reads `VITE_STT_TOKEN_URL` (this Worker or the local stub)
 2. POSTs the agent reply to `{origin}/tts` (or `/api/tts` next to `/api/stt-token`)
 3. Plays the returned `audio/mpeg`
+4. After each completed utterance, POSTs `{origin}/jev` with the current quote sheet + raw transcript. Jev answers ready / slot / clarify questions. If the key is missing or Jev fails, the client keeps the rule-based parse.
 
 Default voice: **Skylar** (`db6b0ed5-d5d3-463d-ae85-518a07d3c2b4`, Friendly Guide). Model `sonic-3`.
 
@@ -16,12 +17,13 @@ Mint (`POST /` or `POST /api/stt-token`) still returns `{ token, expires_in }` f
 
 ## Anthony — production Worker (workers.dev)
 
-Needs only this directory’s `wrangler.toml` plus the secret name **`CARTESIA_API_KEY`** (value from the box — do not commit it).
+Needs this directory’s `wrangler.toml` plus secrets **`CARTESIA_API_KEY`** and **`TYPESAFE_API_KEY`** (values from the box — do not commit them).
 
 ```bash
 cd token-proxy
 npx wrangler login          # once per machine, if needed
 npx wrangler secret put CARTESIA_API_KEY
+npx wrangler secret put TYPESAFE_API_KEY
 npx wrangler deploy
 ```
 
@@ -42,20 +44,44 @@ Then:
 
 CORS allows `https://johnkidenda.github.io` (and localhost Vite ports). Add other origins in `src/mint.js` (`CORS_ORIGINS`).
 
-Redeploy this Worker after pulling TTS (`POST /tts`) so spoken replies work on Pages.
+Redeploy this Worker after pulling TTS (`POST /tts`) and Jev (`POST /jev`) so spoken replies and post-utterance decisions work on Pages.
 
 ## Local Node stub
 
 ```bash
-CARTESIA_API_KEY= node token-proxy/local-stub.mjs
+# Cartesia TTS mint + Jev. Source Anthony's box file when the key lands:
+#   set -a && source /home/box/.secrets/typesafe.env && set +a
+CARTESIA_API_KEY= TYPESAFE_API_KEY= node token-proxy/local-stub.mjs
 ```
 
-Set the key in the environment only. Listens on `http://127.0.0.1:8787` (`PORT` / `HOST` override).
+Set keys in the environment only. Listens on `http://127.0.0.1:8787` (`PORT` / `HOST` override).
 
 - `POST /` — mint `{ token, expires_in }`
 - `POST /tts` — mp3 for `{ transcript }`
+- `POST /jev` — TypeSafe System One (Jev) for one utterance. Body: `{ utterance, sheet, recent_replies?, awaiting? }`
+- `GET /jev` — `{ jev: "on"|"off" }` without calling TypeSafe
 
-`npm run dev` also serves `/api/stt-token` and `/api/tts` when `CARTESIA_API_KEY` is in the server env — use `VITE_STT_TOKEN_URL=/api/stt-token`.
+`/jev` works when `TYPESAFE_API_KEY` is set even if Cartesia is unset. Missing key → `503 { jev: "off" }`; the SPA falls back to heuristics.
+
+`npm run dev` also serves `/api/stt-token`, `/api/tts`, and `/api/jev` from the server env — use `VITE_STT_TOKEN_URL=/api/stt-token`.
+
+### Smoke (when the TypeSafe key is in the stub env)
+
+```bash
+curl -sS -X POST "${VITE_STT_TOKEN_URL:-http://127.0.0.1:8787}/jev" \
+  -H "Content-Type: application/json" \
+  -d '{"utterance":"Chicago 60601 to Dallas 75201, 3 pallets, 1200 pounds","sheet":{"schema_version":"1.0","status":"collecting"},"awaiting":"origin_zip"}'
+```
+
+Against the Pages-baked tunnel origin:
+
+```bash
+curl -sS -X POST "https://opens-trio-tune-disciplines.trycloudflare.com/jev" \
+  -H "Content-Type: application/json" \
+  -d '{"utterance":"Chicago 60601 to Dallas 75201, 3 pallets, 1200 pounds","sheet":{"schema_version":"1.0","status":"collecting"},"awaiting":"origin_zip"}'
+```
+
+Expect `{ "ok": true, "jev": "on", "decision": { ... } }`. `503` + `"Jev proxy not configured"` means the key is not on that process yet; the app still quotes via heuristics.
 
 Web Speech does **not** need this proxy. Conversational mode still rewrites reply copy if the URL is unset; TTS stays silent.
 
@@ -64,6 +90,7 @@ Web Speech does **not** need this proxy. Conversational mode still rewrites repl
 | Var | Where | Purpose |
 | --- | --- | --- |
 | `CARTESIA_API_KEY` | Worker secret / local stub / Vite server env | Long-lived Cartesia key. **Never** `VITE_*`. |
-| `VITE_STT_TOKEN_URL` | Pages build / `.env` for local | Public URL of this proxy. Safe to bake into the SPA. |
+| `TYPESAFE_API_KEY` | Worker secret / local stub / Vite server env | TypeSafe Jev key. **Never** `VITE_*`. |
+| `VITE_STT_TOKEN_URL` | Pages build / `.env` for local | Public URL of this proxy. Safe to bake into the SPA. Client calls `{origin}/jev`. |
 
 Token TTL is ~90s (clamped 60–120).
