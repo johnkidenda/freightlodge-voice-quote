@@ -1,5 +1,6 @@
 import { corsHeaders, mintCartesiaToken, synthesizeCartesiaTts } from "./mint.js";
 import { evaluateUtteranceJev } from "./jev.js";
+import { evaluateDomAction } from "./jev-action.js";
 
 function json(body, status, origin) {
   return new Response(JSON.stringify(body), {
@@ -46,6 +47,33 @@ export default {
         200,
         origin,
       );
+    }
+
+    if (path === "/jev-action") {
+      if (request.method === "GET") {
+        return json({ ok: true, jev: env?.TYPESAFE_API_KEY ? "on" : "off", action: true }, 200, origin);
+      }
+      if (request.method !== "POST") return json({ error: "method not allowed" }, 405, origin);
+      const typesafeKey = env?.TYPESAFE_API_KEY;
+      if (!typesafeKey) {
+        return json({ ok: false, jev: "off", error: "Jev proxy not configured" }, 503, origin);
+      }
+      const body = await readJson(request);
+      try {
+        const result = await evaluateDomAction({
+          apiKey: typesafeKey,
+          sheet: body.sheet || body.quote_sheet || {},
+          candidates: body.candidates || body.visible_candidates || [],
+          step: body.step || body.form_step || null,
+          status: body.status || body.form_status || null,
+          filled: body.filled || body.filled_snapshot || body.values || null,
+        });
+        return json(result, 200, origin);
+      } catch (err) {
+        const message = String(err?.message || err);
+        const status = err?.code === "JEV_UNCONFIGURED" ? 503 : err?.code === "JEV_EMPTY" ? 400 : 502;
+        return json({ ok: false, jev: "off", error: message }, status, origin);
+      }
     }
 
     if (path === "/jev") {

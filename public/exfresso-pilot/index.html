@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Exfresso Quote Pilot (fake form)</title>
+    <meta
+      name="description"
+      content="Fake multi-step Exfresso quote form for the Freight Lodge Jev plus computer-use pilot. Not live Exfresso."
+    />
+    <link rel="icon" href="../icons/logo.svg" type="image/svg+xml" />
+    <style>
+      :root {
+        --navy: #1b2a4a;
+        --ink: #142033;
+        --paper: #f6f1e8;
+        --card: #fffdf8;
+        --line: #d5cbb8;
+        --accent: #c45c26;
+        --good: #2f6f4e;
+        --muted: #5c6574;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Source Sans 3", "Segoe UI", sans-serif;
+        background: var(--paper);
+        color: var(--ink);
+      }
+      header {
+        background: var(--navy);
+        color: #fff;
+        padding: 1rem 1.25rem;
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        align-items: baseline;
+        flex-wrap: wrap;
+      }
+      header h1 {
+        margin: 0;
+        font-size: 1.15rem;
+        font-weight: 700;
+      }
+      header p { margin: 0.2rem 0 0; color: #d7deea; font-size: 0.9rem; }
+      .chip {
+        background: #f0c36d;
+        color: var(--navy);
+        font-weight: 700;
+        padding: 0.2rem 0.55rem;
+        border-radius: 999px;
+        font-size: 0.8rem;
+      }
+      main { max-width: 720px; margin: 0 auto; padding: 1.25rem; }
+      .banner {
+        background: #fff4d6;
+        border: 1px solid #e2c56a;
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        font-size: 0.92rem;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 1.25rem;
+      }
+      h2 { margin: 0 0 0.35rem; font-size: 1.25rem; }
+      .lede { color: var(--muted); margin: 0 0 1rem; }
+      label { display: block; font-weight: 600; margin: 0.7rem 0 0.25rem; }
+      .hint { font-weight: 400; color: var(--muted); font-size: 0.85rem; }
+      input[type="text"], input[type="email"], input[type="number"], input[type="date"] {
+        width: 100%;
+        padding: 0.55rem 0.65rem;
+        border: 1px solid #b9b1a1;
+        border-radius: 8px;
+        font: inherit;
+        background: #fff;
+      }
+      .row { display: grid; grid-template-columns: 1fr 90px 120px; gap: 0.6rem; }
+      @media (max-width: 640px) { .row { grid-template-columns: 1fr; } }
+      .checks { display: grid; gap: 0.45rem; margin: 0.6rem 0 1rem; }
+      .checks label { font-weight: 500; display: flex; gap: 0.5rem; align-items: center; margin: 0; }
+      .actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+      button {
+        font: inherit;
+        border-radius: 8px;
+        padding: 0.55rem 0.85rem;
+        border: 1px solid #b9b1a1;
+        background: #fff;
+        cursor: pointer;
+      }
+      button.primary { background: var(--navy); color: #fff; border-color: var(--navy); }
+      button.accent { background: var(--accent); color: #fff; border-color: var(--accent); }
+      button.warn { background: #efe7d8; }
+      .err { color: #9b1c1c; min-height: 1.2em; margin: 0.4rem 0 0; font-size: 0.92rem; }
+      .review dt { font-weight: 700; }
+      .review dd { margin: 0 0 0.6rem; }
+      .quote {
+        border: 2px solid var(--good);
+        background: #eef7f1;
+        padding: 1rem;
+        border-radius: 10px;
+      }
+      footer {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 0 1.25rem 2rem;
+        color: var(--muted);
+        font-size: 0.85rem;
+      }
+      footer a { color: var(--navy); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Exfresso Quote (pilot form)</h1>
+        <p>Fake multi-step portal for Jev Choice plus computer-use. Not a live Exfresso login.</p>
+      </div>
+      <span class="chip" id="pilot-version">Exfresso pilot v0.25</span>
+    </header>
+    <main>
+      <p class="banner">
+        Practice path only. Voice-to-quote stays at
+        <a href="../">the Freight Lodge app</a>.
+        Required quote fields: origin ZIP, dest ZIP, weight, pieces, pickup date, accessorials, email.
+      </p>
+      <section class="card" id="pilot-root" data-pilot-step="origin" data-pilot-status="collecting">
+        <div id="step-origin">
+          <h2>1. Origin</h2>
+          <p class="lede">Where are we picking up? ZIP is required. City and state help the carrier.</p>
+          <div class="row">
+            <div>
+              <label for="origin-city">Origin city <span class="hint">(optional)</span></label>
+              <input id="origin-city" data-pilot-id="origin-city" data-pilot-field="origin_city" type="text" autocomplete="off" />
+            </div>
+            <div>
+              <label for="origin-state">State</label>
+              <input id="origin-state" data-pilot-id="origin-state" data-pilot-field="origin_state" type="text" maxlength="2" autocomplete="off" />
+            </div>
+            <div>
+              <label for="origin-zip">Origin ZIP <span class="hint">(required)</span></label>
+              <input id="origin-zip" data-pilot-id="origin-zip" data-pilot-field="origin_zip" data-pilot-required="1" type="text" inputmode="numeric" maxlength="10" autocomplete="off" />
+            </div>
+          </div>
+          <div class="actions">
+            <button type="button" data-pilot-id="continue-no-zip" data-pilot-decoy="1" class="warn">Continue without ZIP</button>
+            <button type="button" data-pilot-id="use-last-origin" data-pilot-decoy="1" class="warn">Use last origin</button>
+            <button type="button" data-pilot-id="continue" class="primary">Continue</button>
+          </div>
+        </div>
+
+        <div id="step-dest" hidden>
+          <h2>2. Destination</h2>
+          <p class="lede">Where is this going? Destination ZIP is required. Billing ZIP is optional and unused.</p>
+          <div class="row">
+            <div>
+              <label for="dest-city">Destination city <span class="hint">(optional)</span></label>
+              <input id="dest-city" data-pilot-id="dest-city" data-pilot-field="dest_city" type="text" autocomplete="off" />
+            </div>
+            <div>
+              <label for="dest-state">State</label>
+              <input id="dest-state" data-pilot-id="dest-state" data-pilot-field="dest_state" type="text" maxlength="2" autocomplete="off" />
+            </div>
+            <div>
+              <label for="dest-zip">Destination ZIP <span class="hint">(required)</span></label>
+              <input id="dest-zip" data-pilot-id="dest-zip" data-pilot-field="dest_zip" data-pilot-required="1" type="text" inputmode="numeric" maxlength="10" autocomplete="off" />
+            </div>
+          </div>
+          <label for="billing-zip">Billing ZIP <span class="hint">(optional, not used for the rate)</span></label>
+          <input id="billing-zip" data-pilot-id="billing-zip" data-pilot-field="billing_zip" data-pilot-decoy="1" type="text" inputmode="numeric" autocomplete="off" />
+          <div class="actions">
+            <button type="button" data-pilot-id="same-as-origin" data-pilot-decoy="1" class="warn">Same as origin</button>
+            <button type="button" data-pilot-id="continue" class="primary">Continue</button>
+          </div>
+        </div>
+
+        <div id="step-freight" hidden>
+          <h2>3. Freight</h2>
+          <p class="lede">Total weight and piece count are required. Do not invent a class.</p>
+          <label for="weight">Total weight (lb) <span class="hint">(required)</span></label>
+          <input id="weight" data-pilot-id="weight" data-pilot-field="weight" data-pilot-required="1" type="number" min="1" step="1" />
+          <label for="pieces">Pieces <span class="hint">(required)</span></label>
+          <input id="pieces" data-pilot-id="pieces" data-pilot-field="pieces" data-pilot-required="1" type="number" min="1" step="1" />
+          <label for="commodity">Commodity <span class="hint">(optional)</span></label>
+          <input id="commodity" data-pilot-id="commodity" data-pilot-field="commodity" type="text" />
+          <div class="actions">
+            <button type="button" data-pilot-id="estimate-weight" data-pilot-decoy="1" class="warn">Estimate weight</button>
+            <button type="button" data-pilot-id="continue" class="primary">Continue</button>
+          </div>
+        </div>
+
+        <div id="step-pickup" hidden>
+          <h2>4. Pickup and accessorials</h2>
+          <p class="lede">Pickup date is required. Check only the extras on the sheet. Similar labels are on purpose.</p>
+          <label for="pickup-date">Pickup date <span class="hint">(required)</span></label>
+          <input id="pickup-date" data-pilot-id="pickup-date" data-pilot-field="pickup_date" data-pilot-required="1" type="date" />
+          <div class="checks">
+            <label><input type="checkbox" data-pilot-id="liftgate_pickup" data-pilot-field="liftgate_pickup" /> Liftgate at pickup</label>
+            <label><input type="checkbox" data-pilot-id="liftgate_delivery" data-pilot-field="liftgate_delivery" /> Liftgate at delivery</label>
+            <label><input type="checkbox" data-pilot-id="inside_pickup" data-pilot-field="inside_pickup" /> Inside pickup</label>
+            <label><input type="checkbox" data-pilot-id="inside" data-pilot-field="inside" data-pilot-decoy="1" /> Inside</label>
+            <label><input type="checkbox" data-pilot-id="inside_delivery" data-pilot-field="inside_delivery" /> Inside delivery</label>
+            <label><input type="checkbox" data-pilot-id="residential_pickup" data-pilot-field="residential_pickup" /> Residential pickup</label>
+            <label><input type="checkbox" data-pilot-id="residential_delivery" data-pilot-field="residential_delivery" /> Residential delivery</label>
+            <label><input type="checkbox" data-pilot-id="protect_from_freeze" data-pilot-field="protect_from_freeze" /> Protect from freeze</label>
+          </div>
+          <div class="actions">
+            <button type="button" data-pilot-id="skip-accessorials" data-pilot-decoy="1" class="warn">No extras, skip</button>
+            <button type="button" data-pilot-id="continue" class="primary">Continue</button>
+          </div>
+        </div>
+
+        <div id="step-contact" hidden>
+          <h2>5. Contact</h2>
+          <p class="lede">Email is required for the rate confirmation. Continue reviews the sheet. Get rates submits now.</p>
+          <label for="email">Email <span class="hint">(required)</span></label>
+          <input id="email" data-pilot-id="email" data-pilot-field="email" data-pilot-required="1" type="email" autocomplete="off" />
+          <label for="contact-name">Name <span class="hint">(optional)</span></label>
+          <input id="contact-name" data-pilot-id="contact-name" data-pilot-field="name" type="text" />
+          <div class="actions">
+            <button type="button" data-pilot-id="get-rates-sample" data-pilot-decoy="1" class="warn">Get rates (sample)</button>
+            <button type="button" data-pilot-id="continue" class="primary">Continue</button>
+            <button type="button" data-pilot-id="get-rates" class="accent">Get rates</button>
+          </div>
+        </div>
+
+        <div id="step-review" hidden>
+          <h2>6. Review</h2>
+          <p class="lede">Check the sheet, then get rates. This is the confirmation step before quoted.</p>
+          <dl class="review" id="review-list"></dl>
+          <div class="actions">
+            <button type="button" data-pilot-id="edit-origin">Edit origin</button>
+            <button type="button" data-pilot-id="get-rates" class="accent">Get rates</button>
+          </div>
+        </div>
+
+        <div id="step-quoted" hidden>
+          <h2>Quoted</h2>
+          <div class="quote" data-pilot-confirmation="1">
+            <p><strong>Confirmation.</strong> Fake rate only. Stop here. No book or pay.</p>
+            <p id="quote-summary"></p>
+          </div>
+        </div>
+
+        <p class="err" id="pilot-error" hidden></p>
+      </section>
+    </main>
+    <footer>
+      <p>
+        <span id="pilot-foot-version">Exfresso pilot v0.25</span>
+        · VTQ app <span id="vtq-version">v0.25</span>
+        · <a href="../">Back to voice quote</a>
+        · Form version is locked for A/B (same HTML for both arms).
+      </p>
+    </footer>
+    <script>
+      const STEPS = ["origin", "dest", "freight", "pickup", "contact", "review", "quoted"];
+      const ACC = [
+        "liftgate_pickup",
+        "liftgate_delivery",
+        "inside_pickup",
+        "inside_delivery",
+        "residential_pickup",
+        "residential_delivery",
+        "protect_from_freeze",
+      ];
+      const state = {
+        step: "origin",
+        status: "collecting",
+        values: {
+          origin_city: "",
+          origin_state: "",
+          origin_zip: "",
+          dest_city: "",
+          dest_state: "",
+          dest_zip: "",
+          billing_zip: "",
+          weight: "",
+          pieces: "",
+          commodity: "",
+          pickup_date: "",
+          accessorials: [],
+          email: "",
+          name: "",
+        },
+        quote: null,
+      };
+
+      const root = document.getElementById("pilot-root");
+      const errEl = document.getElementById("pilot-error");
+
+      function showError(msg) {
+        errEl.hidden = !msg;
+        errEl.textContent = msg || "";
+      }
+
+      function readDomIntoState() {
+        const v = state.values;
+        const val = (id) => {
+          const el = document.querySelector(`[data-pilot-id="${id}"]`);
+          return el && "value" in el ? String(el.value || "").trim() : "";
+        };
+        v.origin_city = val("origin-city");
+        v.origin_state = val("origin-state").toUpperCase();
+        v.origin_zip = val("origin-zip");
+        v.dest_city = val("dest-city");
+        v.dest_state = val("dest-state").toUpperCase();
+        v.dest_zip = val("dest-zip");
+        v.billing_zip = val("billing-zip");
+        v.weight = val("weight");
+        v.pieces = val("pieces");
+        v.commodity = val("commodity");
+        v.pickup_date = val("pickup-date");
+        v.email = val("email");
+        v.name = val("contact-name");
+        v.accessorials = ACC.filter((id) => document.querySelector(`[data-pilot-id="${id}"]`)?.checked);
+      }
+
+      function zipOk(z) {
+        return /^\d{5}(-\d{4})?$/.test(String(z || ""));
+      }
+      function emailOk(e) {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || ""));
+      }
+
+      function requiredReady() {
+        const v = state.values;
+        return (
+          zipOk(v.origin_zip) &&
+          zipOk(v.dest_zip) &&
+          Number(v.weight) > 0 &&
+          Number(v.pieces) >= 1 &&
+          /^\d{4}-\d{2}-\d{2}$/.test(v.pickup_date) &&
+          emailOk(v.email)
+        );
+      }
+
+      function setStep(step) {
+        state.step = step;
+        state.status = step === "quoted" ? "quoted" : "collecting";
+        root.dataset.pilotStep = step;
+        root.dataset.pilotStatus = state.status;
+        for (const s of STEPS) {
+          const el = document.getElementById(`step-${s}`);
+          if (el) el.hidden = s !== step;
+        }
+        if (step === "review") renderReview();
+        showError("");
+      }
+
+      function renderReview() {
+        readDomIntoState();
+        const v = state.values;
+        const rows = [
+          ["Origin", `${v.origin_city || "(blank)"} ${v.origin_state || ""} ${v.origin_zip || ""}`.trim()],
+          ["Destination", `${v.dest_city || "(blank)"} ${v.dest_state || ""} ${v.dest_zip || ""}`.trim()],
+          ["Weight", v.weight ? `${v.weight} lb` : "(blank)"],
+          ["Pieces", v.pieces || "(blank)"],
+          ["Pickup", v.pickup_date || "(blank)"],
+          ["Accessorials", v.accessorials.length ? v.accessorials.join(", ") : "none"],
+          ["Email", v.email || "(blank)"],
+        ];
+        document.getElementById("review-list").innerHTML = rows
+          .map(([k, val]) => `<dt>${k}</dt><dd>${val}</dd>`)
+          .join("");
+      }
+
+      function quoteNow(mode) {
+        readDomIntoState();
+        if (mode === "sample") {
+          state.values.origin_city = "Chicago";
+          state.values.origin_state = "IL";
+          state.values.origin_zip = "60601";
+          state.values.dest_city = "Dallas";
+          state.values.dest_state = "TX";
+          state.values.dest_zip = "75201";
+          state.values.weight = "500";
+          state.values.pieces = "1";
+          state.values.pickup_date = "2026-09-21";
+          state.values.accessorials = [];
+          state.values.email = "sample@exfresso.test";
+        }
+        const v = state.values;
+        const id = `XQ-PILOT-${Date.now().toString(36).toUpperCase()}`;
+        const lbs = Number(v.weight) || 0;
+        const total = Math.max(180, Math.round(lbs * 0.42 + (v.accessorials.length * 45) + 95));
+        state.quote = {
+          carrier: "Pilot LTL (fake)",
+          service: "Standard",
+          total_usd: total,
+          quote_id: id,
+          raw_summary: `Pilot LTL Standard · $${total} · fake confirmation ${id}`,
+        };
+        document.getElementById("quote-summary").textContent =
+          `${state.quote.raw_summary}. Origin ${v.origin_zip} to dest ${v.dest_zip}. ${v.weight} lb, ${v.pieces} pcs. Email ${v.email}.`;
+        setStep("quoted");
+      }
+
+      function continueFrom(step) {
+        readDomIntoState();
+        const v = state.values;
+        if (step === "origin" && !zipOk(v.origin_zip)) {
+          showError("Origin ZIP is required (5 digits).");
+          return;
+        }
+        if (step === "dest" && !zipOk(v.dest_zip)) {
+          showError("Destination ZIP is required (5 digits).");
+          return;
+        }
+        if (step === "freight" && !(Number(v.weight) > 0 && Number(v.pieces) >= 1)) {
+          showError("Weight and pieces are required.");
+          return;
+        }
+        if (step === "pickup" && !/^\d{4}-\d{2}-\d{2}$/.test(v.pickup_date)) {
+          showError("Pickup date is required.");
+          return;
+        }
+        if (step === "contact" && !emailOk(v.email)) {
+          showError("A valid email is required.");
+          return;
+        }
+        const next = { origin: "dest", dest: "freight", freight: "pickup", pickup: "contact", contact: "review" };
+        setStep(next[step] || step);
+      }
+
+      function candidates() {
+        const stepEl = document.getElementById(`step-${state.step}`);
+        if (!stepEl) return [];
+        const nodes = stepEl.querySelectorAll("[data-pilot-id]");
+        const out = [];
+        nodes.forEach((el) => {
+          const id = el.getAttribute("data-pilot-id");
+          const field = el.getAttribute("data-pilot-field");
+          const decoy = el.getAttribute("data-pilot-decoy") === "1";
+          const required = el.getAttribute("data-pilot-required") === "1";
+          const tag = el.tagName.toLowerCase();
+          const type = (el.getAttribute("type") || "").toLowerCase();
+          let kind = "click";
+          let role = "button";
+          let current = "";
+          let checked = null;
+          if (tag === "input" && type === "checkbox") {
+            kind = el.checked ? "uncheck" : "check";
+            role = "checkbox";
+            checked = el.checked;
+            current = el.checked ? "on" : "off";
+          } else if (tag === "input") {
+            kind = "fill";
+            role = type === "email" ? "textbox" : type === "date" ? "textbox" : "textbox";
+            current = String(el.value || "");
+          } else if (tag === "button") {
+            kind = "click";
+            role = "button";
+          }
+          const label =
+            tag === "button"
+              ? el.textContent.trim()
+              : (el.closest("label")?.textContent || document.querySelector(`label[for="${el.id}"]`)?.textContent || id)
+                  .replace(/\s+/g, " ")
+                  .trim();
+          out.push({
+            id,
+            kind,
+            role,
+            label,
+            selector: `[data-pilot-id="${id}"]`,
+            field: field || null,
+            required,
+            current,
+            checked,
+            decoy,
+          });
+        });
+        return out;
+      }
+
+      function snapshot() {
+        readDomIntoState();
+        return {
+          version: "0.25",
+          label: "Exfresso pilot v0.25",
+          step: state.step,
+          status: state.status,
+          values: { ...state.values, accessorials: [...state.values.accessorials] },
+          quote: state.quote,
+          candidates: candidates(),
+        };
+      }
+
+      function applyAction(id, value) {
+        const el = document.querySelector(`[data-pilot-id="${id}"]`);
+        if (!el) return { ok: false, error: "unknown candidate" };
+        if (el.tagName === "INPUT" && el.type === "checkbox") {
+          el.checked = !el.checked;
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+          readDomIntoState();
+          return { ok: true, snapshot: snapshot() };
+        }
+        if (el.tagName === "INPUT") {
+          el.value = value == null ? "" : String(value);
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          readDomIntoState();
+          return { ok: true, snapshot: snapshot() };
+        }
+        el.click();
+        return { ok: true, snapshot: snapshot() };
+      }
+
+      document.getElementById("step-origin").addEventListener("click", (e) => {
+        const id = e.target.getAttribute("data-pilot-id");
+        if (id === "continue") continueFrom("origin");
+        if (id === "continue-no-zip") setStep("dest");
+        if (id === "use-last-origin") {
+          document.getElementById("origin-city").value = "Chicago";
+          document.getElementById("origin-state").value = "IL";
+          document.getElementById("origin-zip").value = "60601";
+        }
+      });
+      document.getElementById("step-dest").addEventListener("click", (e) => {
+        const id = e.target.getAttribute("data-pilot-id");
+        if (id === "continue") continueFrom("dest");
+        if (id === "same-as-origin") {
+          readDomIntoState();
+          document.getElementById("dest-city").value = state.values.origin_city;
+          document.getElementById("dest-state").value = state.values.origin_state;
+          document.getElementById("dest-zip").value = state.values.origin_zip;
+        }
+      });
+      document.getElementById("step-freight").addEventListener("click", (e) => {
+        const id = e.target.getAttribute("data-pilot-id");
+        if (id === "continue") continueFrom("freight");
+        if (id === "estimate-weight") {
+          document.getElementById("weight").value = "500";
+          document.getElementById("pieces").value = document.getElementById("pieces").value || "1";
+        }
+      });
+      document.getElementById("step-pickup").addEventListener("click", (e) => {
+        const id = e.target.getAttribute("data-pilot-id");
+        if (id === "continue") continueFrom("pickup");
+        if (id === "skip-accessorials") {
+          ACC.forEach((accId) => {
+            const box = document.querySelector(`[data-pilot-id="${accId}"]`);
+            if (box) box.checked = false;
+          });
+          const decoy = document.querySelector('[data-pilot-id="inside"]');
+          if (decoy) decoy.checked = false;
+          continueFrom("pickup");
+        }
+      });
+      document.getElementById("step-contact").addEventListener("click", (e) => {
+        const id = e.target.getAttribute("data-pilot-id");
+        if (id === "continue") continueFrom("contact");
+        if (id === "get-rates") {
+          readDomIntoState();
+          if (!requiredReady()) {
+            showError("Get rates needs origin ZIP, dest ZIP, weight, pieces, pickup date, and email.");
+            return;
+          }
+          quoteNow("live");
+        }
+        if (id === "get-rates-sample") quoteNow("sample");
+      });
+      document.getElementById("step-review").addEventListener("click", (e) => {
+        const id = e.target.getAttribute("data-pilot-id");
+        if (id === "edit-origin") setStep("origin");
+        if (id === "get-rates") {
+          readDomIntoState();
+          quoteNow("live");
+        }
+      });
+
+      window.__EXFRESSO_PILOT__ = {
+        version: "0.25",
+        snapshot,
+        candidates,
+        applyAction,
+        STEPS,
+      };
+    </script>
+  </body>
+</html>

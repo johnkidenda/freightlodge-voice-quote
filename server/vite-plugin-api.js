@@ -2,6 +2,7 @@ import { simulateExfressoRunner } from "../src/lib/handoff.js";
 import { MAIL_FROM, formatQuoteEmail } from "../src/lib/email.js";
 import { mintCartesiaToken, synthesizeCartesiaTts } from "../token-proxy/src/mint.js";
 import { evaluateUtteranceJev } from "../token-proxy/src/jev.js";
+import { evaluateDomAction } from "../token-proxy/src/jev-action.js";
 
 function readJson(req) {
   return new Promise((resolve, reject) => {
@@ -39,7 +40,8 @@ async function handler(req, res, next) {
       path === "/api/email-quote" ||
       path === "/api/stt-token" ||
       path === "/api/tts" ||
-      path === "/api/jev")
+      path === "/api/jev" ||
+      path === "/api/jev-action")
   ) {
     res.statusCode = 204;
     res.end();
@@ -57,6 +59,34 @@ async function handler(req, res, next) {
       send(res, 200, minted);
     } catch (err) {
       send(res, 502, { error: String(err.message || err) });
+    }
+    return;
+  }
+
+  if ((req.method === "POST" || req.method === "GET") && path === "/api/jev-action") {
+    if (req.method === "GET") {
+      send(res, 200, { ok: true, jev: process.env.TYPESAFE_API_KEY ? "on" : "off", action: true });
+      return;
+    }
+    const typesafeKey = process.env.TYPESAFE_API_KEY;
+    if (!typesafeKey) {
+      send(res, 503, { ok: false, jev: "off", error: "Jev proxy not configured" });
+      return;
+    }
+    try {
+      const body = await readJson(req);
+      const result = await evaluateDomAction({
+        apiKey: typesafeKey,
+        sheet: body.sheet || body.quote_sheet || {},
+        candidates: body.candidates || body.visible_candidates || [],
+        step: body.step || body.form_step || null,
+        status: body.status || body.form_status || null,
+        filled: body.filled || body.filled_snapshot || body.values || null,
+      });
+      send(res, 200, result);
+    } catch (err) {
+      const status = err?.code === "JEV_EMPTY" ? 400 : 502;
+      send(res, status, { ok: false, jev: "off", error: String(err.message || err) });
     }
     return;
   }

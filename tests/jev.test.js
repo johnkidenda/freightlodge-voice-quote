@@ -478,6 +478,8 @@ describe("transcript + source guards", () => {
       "src/app.js",
       "src/lib/jev.js",
       "src/lib/jev-core.js",
+      "src/lib/jev-action-core.js",
+      "token-proxy/src/jev-action.js",
       "src/lib/transcript.js",
       "src/lib/stt-providers.js",
     ];

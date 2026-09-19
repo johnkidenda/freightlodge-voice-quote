@@ -60,10 +60,12 @@ Set keys in the environment only. Listens on `http://127.0.0.1:8787` (`PORT` / `
 - `POST /tts` — mp3 for `{ transcript }`
 - `POST /jev` — TypeSafe System One (Jev) for one utterance. Body: `{ utterance, sheet, recent_replies?, awaiting? }`
 - `GET /jev` — `{ jev: "on"|"off" }` without calling TypeSafe
+- `POST /jev-action` — TypeSafe Choice for one fake-Exfresso DOM step. Body: `{ sheet, candidates, step?, status?, filled? }`. Candidates only; do not invent ids.
+- `GET /jev-action` — `{ jev: "on"|"off", action: true }`
 
-`/jev` works when `TYPESAFE_API_KEY` is set even if Cartesia is unset. Missing key → `503 { jev: "off" }`; the SPA falls back to heuristics.
+`/jev` and `/jev-action` work when `TYPESAFE_API_KEY` is set even if Cartesia is unset. Missing key → `503 { jev: "off" }`; the voice SPA falls back to heuristics. The computer-use runner pauses.
 
-`npm run dev` also serves `/api/stt-token`, `/api/tts`, and `/api/jev` from the server env — use `VITE_STT_TOKEN_URL=/api/stt-token`.
+`npm run dev` also serves `/api/stt-token`, `/api/tts`, `/api/jev`, and `/api/jev-action` from the server env — use `VITE_STT_TOKEN_URL=/api/stt-token`.
 
 ### Smoke (when the TypeSafe key is in the stub env)
 
@@ -82,6 +84,14 @@ curl -sS -X POST "https://opens-trio-tune-disciplines.trycloudflare.com/jev" \
 ```
 
 Expect `{ "ok": true, "jev": "on", "decision": { ... } }`. `503` + `"Jev proxy not configured"` means the key is not on that process yet; the app still quotes via heuristics.
+
+DOM-step Choice for the fake Exfresso pilot:
+
+```bash
+curl -sS -X POST "${VITE_STT_TOKEN_URL:-http://127.0.0.1:8787}/jev-action" \
+  -H "Content-Type: application/json" \
+  -d '{"step":"origin","candidates":[{"id":"origin-zip","kind":"fill","label":"Origin ZIP","field":"origin_zip"},{"id":"continue","kind":"click","label":"Continue"}],"sheet":{"lanes":{"origin":{"postal_code":"78721"}}}}'
+```
 
 Web Speech does **not** need this proxy. Conversational mode still rewrites reply copy if the URL is unset; TTS stays silent.
 

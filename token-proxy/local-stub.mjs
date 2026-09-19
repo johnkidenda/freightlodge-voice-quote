@@ -14,6 +14,7 @@
 import { createServer } from "node:http";
 import { corsHeaders, mintCartesiaToken, synthesizeCartesiaTts } from "./src/mint.js";
 import { evaluateUtteranceJev } from "./src/jev.js";
+import { evaluateDomAction } from "./src/jev-action.js";
 
 const PORT = Number(process.env.PORT) || 8787;
 const HOST = process.env.HOST || "127.0.0.1";
@@ -67,6 +68,37 @@ const server = createServer(async (req, res) => {
       },
       origin,
     );
+    return;
+  }
+
+  if (path === "/jev-action") {
+    if (req.method === "GET") {
+      send(res, 200, { ok: true, jev: typesafeKey ? "on" : "off", action: true }, origin);
+      return;
+    }
+    if (req.method !== "POST") {
+      send(res, 405, { error: "method not allowed" }, origin);
+      return;
+    }
+    if (!typesafeKey) {
+      send(res, 503, { ok: false, jev: "off", error: "Jev proxy not configured" }, origin);
+      return;
+    }
+    try {
+      const body = await readJson(req);
+      const result = await evaluateDomAction({
+        apiKey: typesafeKey,
+        sheet: body.sheet || body.quote_sheet || {},
+        candidates: body.candidates || body.visible_candidates || [],
+        step: body.step || body.form_step || null,
+        status: body.status || body.form_status || null,
+        filled: body.filled || body.filled_snapshot || body.values || null,
+      });
+      send(res, 200, result, origin);
+    } catch (err) {
+      const status = err?.code === "JEV_EMPTY" ? 400 : 502;
+      send(res, status, { ok: false, jev: "off", error: String(err?.message || err) }, origin);
+    }
     return;
   }
 
@@ -145,6 +177,6 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
   console.log(`Cartesia token/TTS + Jev stub listening on http://${HOST}:${PORT}`);
-  console.log("Mint: POST /   TTS: POST /tts   Jev: POST /jev");
+  console.log("Mint: POST /   TTS: POST /tts   Jev: POST /jev   Jev-action: POST /jev-action");
   console.log("CARTESIA_API_KEY and TYPESAFE_API_KEY stay on this process only.");
 });

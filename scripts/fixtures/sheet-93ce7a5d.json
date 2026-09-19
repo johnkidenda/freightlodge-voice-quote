@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "quote_request_id": "93ce7a5d",
+  "status": "ready_for_quote",
+  "mode": "LTL",
+  "lanes": {
+    "origin": { "city": "Austin", "state": "TX", "postal_code": "78721", "country": "US" },
+    "destination": { "city": "Atlanta", "state": "GA", "postal_code": "30030", "country": "US" }
+  },
+  "freight": {
+    "pieces": 3,
+    "total_weight_lbs": 1000,
+    "commodity": null
+  },
+  "pickup": {
+    "date": "2026-09-22",
+    "accessorials": ["inside_pickup", "inside_delivery"]
+  },
+  "contact": {
+    "email": "qa@freightlodge.com"
+  }
+}
