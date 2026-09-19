@@ -14,6 +14,7 @@
     "pilot:ab": "node scripts/exfresso-pilot-runner.mjs --arm both --runs 3"
   },
   "devDependencies": {
+    "playwright": "^1.63.0",
     "vite": "^6.2.0",
     "vitest": "^3.0.8"
   }

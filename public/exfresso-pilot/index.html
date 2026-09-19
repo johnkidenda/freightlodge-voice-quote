@@ -148,7 +148,7 @@
           <div class="actions">
             <button type="button" data-pilot-id="continue-no-zip" data-pilot-decoy="1" class="warn">Continue without ZIP</button>
             <button type="button" data-pilot-id="use-last-origin" data-pilot-decoy="1" class="warn">Use last origin</button>
-            <button type="button" data-pilot-id="continue" class="primary">Continue</button>
+            <button type="button" data-pilot-id="continue-origin" class="primary">Continue</button>
           </div>
         </div>
 
@@ -173,7 +173,7 @@
           <input id="billing-zip" data-pilot-id="billing-zip" data-pilot-field="billing_zip" data-pilot-decoy="1" type="text" inputmode="numeric" autocomplete="off" />
           <div class="actions">
             <button type="button" data-pilot-id="same-as-origin" data-pilot-decoy="1" class="warn">Same as origin</button>
-            <button type="button" data-pilot-id="continue" class="primary">Continue</button>
+            <button type="button" data-pilot-id="continue-dest" class="primary">Continue</button>
           </div>
         </div>
 
@@ -188,7 +188,7 @@
           <input id="commodity" data-pilot-id="commodity" data-pilot-field="commodity" type="text" />
           <div class="actions">
             <button type="button" data-pilot-id="estimate-weight" data-pilot-decoy="1" class="warn">Estimate weight</button>
-            <button type="button" data-pilot-id="continue" class="primary">Continue</button>
+            <button type="button" data-pilot-id="continue-freight" class="primary">Continue</button>
           </div>
         </div>
 
@@ -209,7 +209,7 @@
           </div>
           <div class="actions">
             <button type="button" data-pilot-id="skip-accessorials" data-pilot-decoy="1" class="warn">No extras, skip</button>
-            <button type="button" data-pilot-id="continue" class="primary">Continue</button>
+            <button type="button" data-pilot-id="continue-pickup" class="primary">Continue</button>
           </div>
         </div>
 
@@ -222,8 +222,8 @@
           <input id="contact-name" data-pilot-id="contact-name" data-pilot-field="name" type="text" />
           <div class="actions">
             <button type="button" data-pilot-id="get-rates-sample" data-pilot-decoy="1" class="warn">Get rates (sample)</button>
-            <button type="button" data-pilot-id="continue" class="primary">Continue</button>
-            <button type="button" data-pilot-id="get-rates" class="accent">Get rates</button>
+            <button type="button" data-pilot-id="continue-contact" class="primary">Continue</button>
+            <button type="button" data-pilot-id="get-rates-contact" class="accent">Get rates</button>
           </div>
         </div>
 
@@ -233,7 +233,7 @@
           <dl class="review" id="review-list"></dl>
           <div class="actions">
             <button type="button" data-pilot-id="edit-origin">Edit origin</button>
-            <button type="button" data-pilot-id="get-rates" class="accent">Get rates</button>
+            <button type="button" data-pilot-id="get-rates-review" class="accent">Get rates</button>
           </div>
         </div>
 
@@ -491,7 +491,10 @@
       }
 
       function applyAction(id, value) {
-        const el = document.querySelector(`[data-pilot-id="${id}"]`);
+        const stepEl = document.getElementById(`step-${state.step}`);
+        const el =
+          (stepEl && stepEl.querySelector(`[data-pilot-id="${id}"]`)) ||
+          document.querySelector(`[data-pilot-id="${id}"]`);
         if (!el) return { ok: false, error: "unknown candidate" };
         if (el.tagName === "INPUT" && el.type === "checkbox") {
           el.checked = !el.checked;
@@ -511,7 +514,7 @@
 
       document.getElementById("step-origin").addEventListener("click", (e) => {
         const id = e.target.getAttribute("data-pilot-id");
-        if (id === "continue") continueFrom("origin");
+        if (id === "continue" || id === "continue-origin") continueFrom("origin");
         if (id === "continue-no-zip") setStep("dest");
         if (id === "use-last-origin") {
           document.getElementById("origin-city").value = "Chicago";
@@ -521,7 +524,7 @@
       });
       document.getElementById("step-dest").addEventListener("click", (e) => {
         const id = e.target.getAttribute("data-pilot-id");
-        if (id === "continue") continueFrom("dest");
+        if (id === "continue" || id === "continue-dest") continueFrom("dest");
         if (id === "same-as-origin") {
           readDomIntoState();
           document.getElementById("dest-city").value = state.values.origin_city;
@@ -531,7 +534,7 @@
       });
       document.getElementById("step-freight").addEventListener("click", (e) => {
         const id = e.target.getAttribute("data-pilot-id");
-        if (id === "continue") continueFrom("freight");
+        if (id === "continue" || id === "continue-freight") continueFrom("freight");
         if (id === "estimate-weight") {
           document.getElementById("weight").value = "500";
           document.getElementById("pieces").value = document.getElementById("pieces").value || "1";
@@ -539,7 +542,7 @@
       });
       document.getElementById("step-pickup").addEventListener("click", (e) => {
         const id = e.target.getAttribute("data-pilot-id");
-        if (id === "continue") continueFrom("pickup");
+        if (id === "continue" || id === "continue-pickup") continueFrom("pickup");
         if (id === "skip-accessorials") {
           ACC.forEach((accId) => {
             const box = document.querySelector(`[data-pilot-id="${accId}"]`);
@@ -552,8 +555,8 @@
       });
       document.getElementById("step-contact").addEventListener("click", (e) => {
         const id = e.target.getAttribute("data-pilot-id");
-        if (id === "continue") continueFrom("contact");
-        if (id === "get-rates") {
+        if (id === "continue" || id === "continue-contact") continueFrom("contact");
+        if (id === "get-rates" || id === "get-rates-contact") {
           readDomIntoState();
           if (!requiredReady()) {
             showError("Get rates needs origin ZIP, dest ZIP, weight, pieces, pickup date, and email.");
@@ -566,7 +569,7 @@
       document.getElementById("step-review").addEventListener("click", (e) => {
         const id = e.target.getAttribute("data-pilot-id");
         if (id === "edit-origin") setStep("origin");
-        if (id === "get-rates") {
+        if (id === "get-rates" || id === "get-rates-review") {
           readDomIntoState();
           quoteNow("live");
         }

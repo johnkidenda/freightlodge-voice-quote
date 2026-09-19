@@ -5,6 +5,7 @@ import {
   demoSheet93ce7a5d,
   fieldAccuracy,
   isQuotedSuccess,
+  mapVoiceJevToDomAction,
   pickHeuristicAction,
   sheetValueForField,
 } from "../src/lib/exfresso-pilot-core.js";
@@ -27,8 +28,10 @@ describe("fake Exfresso multi-step form", () => {
   });
 
   it("has a Continue vs Get rates fork and similar decoy buttons", () => {
-    expect(form).toContain('data-pilot-id="continue"');
-    expect(form).toContain('data-pilot-id="get-rates"');
+    expect(form).toContain('data-pilot-id="continue-origin"');
+    expect(form).toContain('data-pilot-id="continue-contact"');
+    expect(form).toContain('data-pilot-id="get-rates-contact"');
+    expect(form).toContain('data-pilot-id="get-rates-review"');
     expect(form).toContain("Continue without ZIP");
     expect(form).toContain("Get rates (sample)");
     expect(form).toContain("Use last origin");
@@ -88,7 +91,7 @@ describe("heuristic picker (no TypeSafe)", () => {
       [
         { id: "inside", kind: "check", field: "inside", checked: false, decoy: true, label: "Inside" },
         { id: "inside_pickup", kind: "check", field: "inside_pickup", checked: false },
-        { id: "continue", kind: "click", role: "button", label: "Continue" },
+        { id: "continue-pickup", kind: "click", role: "button", label: "Continue" },
       ],
       sheet,
       { status: "collecting", values: { accessorials: [] } },
@@ -109,14 +112,47 @@ describe("heuristic picker (no TypeSafe)", () => {
     const pick = pickHeuristicAction(
       [
         { id: "edit-origin", kind: "click", label: "Edit origin" },
-        { id: "get-rates", kind: "click", label: "Get rates" },
+        { id: "get-rates-review", kind: "click", label: "Get rates" },
       ],
       sheet,
       { status: "review", values: filled },
     );
-    expect(pick.actionId).toBe("get-rates");
+    expect(pick.actionId).toBe("get-rates-review");
     expect(isQuotedSuccess({ status: "quoted", values: filled }, sheet)).toBe(true);
     expect(fieldAccuracy(filled, sheet).pct).toBe(100);
+  });
+
+  it("maps a voice Jev origin_zip focus onto the listed origin-zip candidate", () => {
+    const mapped = mapVoiceJevToDomAction(
+      { on: true, focus: "origin_zip", primarySlot: "origin_zip", touchedSlots: ["origin_zip"], parseConfidence: 0.8 },
+      [
+        { id: "continue-no-zip", kind: "click", decoy: true, label: "Continue without ZIP" },
+        { id: "origin-zip", kind: "fill", field: "origin_zip", current: "" },
+        { id: "continue-origin", kind: "click", label: "Continue" },
+      ],
+      sheet,
+      { status: "collecting", values: {} },
+    );
+    expect(mapped.act).toBe(true);
+    expect(mapped.actionId).toBe("origin-zip");
+    expect(mapped.gateBlocked).toBe(false);
+  });
+
+  it("does not clarify-stop when Continue is a safe listed advance", () => {
+    const mapped = mapVoiceJevToDomAction(
+      { on: true, needsClarify: true, focus: "dest_zip", parseConfidence: 0.2, gateOverride: null },
+      [
+        { id: "dest-zip", kind: "fill", field: "dest_zip", current: "30030" },
+        { id: "continue-dest", kind: "click", label: "Continue" },
+      ],
+      sheet,
+      {
+        status: "collecting",
+        values: { dest_zip: "30030", origin_zip: "78721" },
+      },
+    );
+    expect(mapped.act).toBe(true);
+    expect(mapped.actionId).toBe("continue-dest");
   });
 
   it("fails the scorecard when sample values overwrite the sheet", () => {

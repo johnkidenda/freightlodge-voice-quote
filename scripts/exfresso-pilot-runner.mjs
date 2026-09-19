@@ -26,9 +26,15 @@ import {
   formatScorecardRow,
   isOffTargetAction,
   isQuotedSuccess,
+  mapVoiceJevToDomAction,
   pickHeuristicAction,
   sheetValueForField,
 } from "../src/lib/exfresso-pilot-core.js";
+import { evaluateDomAction } from "../token-proxy/src/jev-action.js";
+import { usageCostUsd } from "../src/lib/jev-action-core.js";
+
+const LIVE_VOICE_JEV =
+  process.env.JEV_VOICE_URL || "https://opens-trio-tune-disciplines.trycloudflare.com/jev";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const LIVE_PAGES = "https://johnkidenda.github.io/freightlodge-voice-quote/exfresso-pilot/";
@@ -100,10 +106,68 @@ function serveLocalForm() {
 }
 
 async function callJevAction(jevUrl, payload) {
-  const res = await fetch(jevUrl, {
+  const key = process.env.TYPESAFE_API_KEY;
+  if (key) {
+    return evaluateDomAction({
+      apiKey: key,
+      sheet: payload.sheet,
+      candidates: payload.candidates,
+      step: payload.step,
+      status: payload.status,
+      filled: payload.filled,
+    });
+  }
+  try {
+    const res = await fetch(jevUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(payload),
+    });
+    let data = {};
+    try {
+      data = await res.json();
+    } catch {
+      data = {};
+    }
+    if (res.ok && data?.decision && ("gateBlocked" in data.decision || "actionId" in data.decision) && !data.token) {
+      return data;
+    }
+  } catch {
+    /* live stub may not have /jev-action yet */
+  }
+  return callVoiceJevMapped(jevUrl, payload);
+}
+
+function voiceJevUrl(jevUrl) {
+  try {
+    const u = new URL(jevUrl);
+    if (u.pathname.endsWith("/jev-action")) {
+      u.pathname = u.pathname.replace(/\/jev-action$/, "/jev");
+      return u.toString();
+    }
+  } catch {
+    /* ignore */
+  }
+  return LIVE_VOICE_JEV;
+}
+
+async function callVoiceJevMapped(jevUrl, payload) {
+  const url = voiceJevUrl(jevUrl);
+  const ids = (payload.candidates || []).map((c) => c.id).join(", ");
+  const utterance = [
+    `Computer-use form step ${payload.step || "unknown"}.`,
+    `Visible candidate ids: ${ids}.`,
+    `Filled snapshot: ${JSON.stringify(payload.filled || {})}.`,
+    "Update the next missing quote-sheet field from the sheet. Do not invent ZIP, weight, pieces, date, or email.",
+  ].join(" ");
+  const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      utterance,
+      sheet: payload.sheet || {},
+      awaiting: payload.step || null,
+    }),
   });
   let data = {};
   try {
@@ -111,13 +175,25 @@ async function callJevAction(jevUrl, payload) {
   } catch {
     data = {};
   }
-  if (!res.ok) {
-    const err = new Error(data.error || `jev-action ${res.status}`);
+  if (!res.ok || data?.jev !== "on") {
+    const err = new Error(data.error || `voice jev ${res.status}`);
     err.status = res.status;
     err.body = data;
     throw err;
   }
-  return data;
+  const mapped = mapVoiceJevToDomAction(data.decision, payload.candidates, payload.sheet, {
+    status: payload.status,
+    values: payload.filled,
+  });
+  return {
+    ok: true,
+    jev: "on",
+    model: data.model || "jev-latest",
+    decision: mapped,
+    usage: data.usage || null,
+    cost_usd: usageCostUsd(data.usage),
+    via: "voice-jev-map",
+  };
 }
 
 async function runOnce({ page, url, arm, sheet, jevUrl }) {
@@ -155,8 +231,9 @@ async function runOnce({ page, url, arm, sheet, jevUrl }) {
       card.jev_calls += 1;
       card.cost_usd += Number(result.cost_usd) || 0;
       const decision = result.decision || {};
-      if (Number.isFinite(Number(decision.confidence))) {
-        card.jev_confidences.push(Number(decision.confidence));
+      const conf = Number(decision.confidence ?? result.answers?.next_action?.confidence ?? result.answers?.primary_slot?.confidence);
+      if (Number.isFinite(conf) && conf > 0) {
+        card.jev_confidences.push(conf);
       }
       log.push({
         step: snap.step,

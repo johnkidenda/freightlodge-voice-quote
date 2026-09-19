@@ -147,6 +147,100 @@ export function isOffTargetAction(candidate, sheet) {
   return false;
 }
 
+export const SLOT_TO_FIELD = Object.freeze({
+  origin_city: "origin_city",
+  origin_zip: "origin_zip",
+  dest_city: "dest_city",
+  dest_zip: "dest_zip",
+  weight: "weight",
+  pieces: "pieces",
+  pickup_date: "pickup_date",
+  email: "email",
+});
+
+/**
+ * Map a voice-Jev decision onto listed DOM candidates only.
+ * Used when /jev-action is not on the live stub yet. Never invents an id.
+ */
+export function mapVoiceJevToDomAction(decision, candidates, sheet, snapshot = {}) {
+  const list = Array.isArray(candidates) ? candidates.filter((c) => c && c.id) : [];
+  const conf = Number(decision?.parseConfidence ?? decision?.confidence);
+  const listed = (id) => list.find((c) => c.id === id) || null;
+
+  const slots = [];
+  const primary = decision?.focus || decision?.primarySlot;
+  if (primary) slots.push(primary);
+  for (const id of decision?.touchedSlots || []) {
+    if (!slots.includes(id)) slots.push(id);
+  }
+
+  for (const slot of slots) {
+    if (slot === "accessorials") {
+      const pick = pickHeuristicAction(
+        list.filter((c) => ACCESSORIAL_IDS.includes(c.id) || ACCESSORIAL_IDS.includes(c.field)),
+        sheet,
+        snapshot,
+      );
+      if (pick.actionId && listed(pick.actionId)) {
+        return {
+          act: true,
+          actionId: pick.actionId,
+          choice: pick.actionId,
+          confidence: Number.isFinite(conf) ? conf : 0.6,
+          gateBlocked: false,
+          reason: "voice-jev-accessorial",
+        };
+      }
+      continue;
+    }
+    const field = SLOT_TO_FIELD[slot];
+    if (!field) continue;
+    const candidate = list.find((c) => c.field === field && (c.kind === "fill" || c.role === "textbox"));
+    if (!candidate) continue;
+    const want = sheetValueForField(sheet, field);
+    if (want == null) continue;
+    if (String(candidate.current || "").trim() === String(want)) continue;
+    return {
+      act: true,
+      actionId: candidate.id,
+      choice: candidate.id,
+      confidence: Number.isFinite(conf) ? conf : 0.6,
+      gateBlocked: false,
+      reason: `voice-jev-${slot}`,
+    };
+  }
+
+  const fallback = pickHeuristicAction(list, sheet, snapshot);
+  if (fallback.actionId && listed(fallback.actionId)) {
+    return {
+      act: true,
+      actionId: fallback.actionId,
+      choice: fallback.actionId,
+      confidence: Number.isFinite(conf) ? conf : 0.6,
+      gateBlocked: false,
+      reason: decision?.needsClarify ? "voice-jev-override-advance" : "voice-jev-advance",
+    };
+  }
+  if (decision?.needsClarify && !decision?.gateOverride) {
+    return {
+      act: false,
+      actionId: null,
+      choice: "clarify",
+      confidence: Number.isFinite(conf) ? conf : null,
+      gateBlocked: true,
+      reason: "voice-jev-clarify",
+    };
+  }
+  return {
+    act: false,
+    actionId: null,
+    choice: "stop",
+    confidence: Number.isFinite(conf) ? conf : null,
+    gateBlocked: true,
+    reason: "voice-jev-stop",
+  };
+}
+
 export function pickHeuristicAction(candidates, sheet, snapshot = {}) {
   const list = Array.isArray(candidates) ? candidates.filter((c) => c && c.id) : [];
   if (!list.length) {
@@ -184,15 +278,20 @@ export function pickHeuristicAction(candidates, sheet, snapshot = {}) {
     return { actionId: toggle.id, reason: "toggle-accessorial", candidate: toggle };
   }
 
-  const byId = (id) => list.find((c) => c.id === id);
-  if (status === "review" && byId("get-rates")) {
-    return { actionId: "get-rates", reason: "submit-review", candidate: byId("get-rates") };
+  const continueBtn = list.find(
+    (c) => !c.decoy && (c.id === "continue" || /^continue-(origin|dest|freight|pickup|contact)$/.test(c.id)),
+  );
+  const getRates = list.find(
+    (c) => c.id === "get-rates" || c.id === "get-rates-review" || c.id === "get-rates-contact",
+  );
+  if (status === "review" && getRates) {
+    return { actionId: getRates.id, reason: "submit-review", candidate: getRates };
   }
-  if (byId("continue")) {
-    return { actionId: "continue", reason: "advance", candidate: byId("continue") };
+  if (continueBtn) {
+    return { actionId: continueBtn.id, reason: "advance", candidate: continueBtn };
   }
-  if (byId("get-rates") && fieldAccuracy(filled, sheet).correct === REQUIRED_SCORE_FIELDS.length) {
-    return { actionId: "get-rates", reason: "submit-complete", candidate: byId("get-rates") };
+  if (getRates && fieldAccuracy(filled, sheet).correct === REQUIRED_SCORE_FIELDS.length) {
+    return { actionId: getRates.id, reason: "submit-complete", candidate: getRates };
   }
 
   return { actionId: null, reason: "stuck", candidate: null };

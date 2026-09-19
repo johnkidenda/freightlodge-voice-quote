@@ -87,8 +87,19 @@ Worker path after deploy: `{VITE_STT_TOKEN_URL}/jev-action` (same origin as `/je
 - Pickup date 2026-09-22 (sheet placeholder; transcript was awaiting email)
 - Email `qa@freightlodge.com`
 
-## A/B scorecard
+## A/B scorecard (sheet 93ce7a5d, form v0.25, n=3)
 
-See the runner stdout table and `docs/exfresso-pilot-ab.json` after a run.
+Same local form HTML both arms. Jev arm called live TypeSafe (`jev-1.13.0`) through the existing `/jev` tunnel because the already-running stub does not have `POST /jev-action` yet. Candidates stayed listed-only; no invented ids. Heuristic arm is a script picker (no TypeSafe, $0).
 
-Cost: TypeSafe published input price $0.042 per million tokens (output free). Heuristic arm is $0. Computer-use/box compute is reported as `cu_steps`, not a dollar rate.
+Arm | success | wall_s | cost_usd | steps | wrong | clarifies | field_acc | notes
+--- | --- | --- | --- | --- | --- | --- | --- | ---
+jev | yes | 7.095 | 0.001692 | 18 | 0 | 0 | 100% | n=3; 3/3; avg_conf=0.261; jev_calls=18; gate_blocks=0; cu_steps=18
+heuristic | yes | 0.052 | 0.000000 | 18 | 0 | 0 | 100% | n=3; 3/3; cu_steps=18
+
+Raw JSON: [`docs/exfresso-pilot-ab.json`](exfresso-pilot-ab.json).
+
+Cost: TypeSafe published input price $0.042 per million tokens (output free). Computer-use/box compute is `cu_steps` (18 clicks/fills), not a dollar rate.
+
+### Read
+
+Jev did not improve success or field accuracy on this instrumented form (both arms 3/3, 100%, 0 wrong). It added about 7s and $0.0017 per run (18 Choice calls). A stricter first policy that honored voice `needs_clarify` as a hard stop failed 3/3 after the lane ZIPs (field_acc 28.6%) until Continue was allowed when the sheet already had the next value. For real Exfresso, keep Jev as a low-confidence gate on ambiguous labels (Continue vs Get rates, Inside vs Inside delivery). Do not pause when the sheet already has the next value and a listed Continue exists. Redeploy the Worker so native `POST /jev-action` feeds DOM candidates directly.
