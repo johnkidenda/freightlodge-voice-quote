@@ -7,6 +7,7 @@ import {
   isQuotedSuccess,
   mapVoiceJevToDomAction,
   pickHeuristicAction,
+  pickHybridAction,
   sheetValueForField,
 } from "../src/lib/exfresso-pilot-core.js";
 
@@ -153,6 +154,62 @@ describe("heuristic picker (no TypeSafe)", () => {
     );
     expect(mapped.act).toBe(true);
     expect(mapped.actionId).toBe("continue-dest");
+  });
+
+  it("hybrid script-fills mapped ZIP and does not ask Jev", () => {
+    const pick = pickHybridAction(
+      [
+        { id: "continue-no-zip", kind: "click", role: "button", label: "Continue without ZIP", decoy: true },
+        { id: "origin-zip", kind: "fill", role: "textbox", field: "origin_zip", current: "" },
+        { id: "continue-origin", kind: "click", role: "button", label: "Continue" },
+      ],
+      sheet,
+      { status: "collecting", values: {} },
+    );
+    expect(pick.askJev).toBe(false);
+    expect(pick.actionId).toBe("origin-zip");
+  });
+
+  it("hybrid asks Jev only on Continue vs Get rates and similar forks", () => {
+    const fork = pickHybridAction(
+      [
+        { id: "get-rates-sample", kind: "click", label: "Get rates (sample)", decoy: true },
+        { id: "continue-contact", kind: "click", label: "Continue" },
+        { id: "get-rates-contact", kind: "click", label: "Get rates" },
+      ],
+      sheet,
+      {
+        status: "collecting",
+        values: {
+          origin_zip: "78721",
+          dest_zip: "30030",
+          weight: "1000",
+          pieces: "3",
+          pickup_date: "2026-09-22",
+          accessorials: ["inside_pickup", "inside_delivery"],
+          email: "qa@freightlodge.com",
+        },
+      },
+    );
+    expect(fork.askJev).toBe(true);
+    expect(fork.jevCandidates.map((c) => c.id)).toEqual([
+      "get-rates-sample",
+      "continue-contact",
+      "get-rates-contact",
+    ]);
+
+    const inside = pickHybridAction(
+      [
+        { id: "inside", kind: "check", field: "inside", checked: false, decoy: true, label: "Inside" },
+        { id: "inside_pickup", kind: "check", field: "inside_pickup", checked: false, label: "Inside pickup" },
+        { id: "continue-pickup", kind: "click", label: "Continue" },
+      ],
+      sheet,
+      { status: "collecting", values: { accessorials: [] } },
+    );
+    expect(inside.askJev).toBe(true);
+    expect(inside.actionId).toBe("inside_pickup");
+    expect(inside.jevCandidates.map((c) => c.id)).toEqual(["inside", "inside_pickup"]);
   });
 
   it("fails the scorecard when sample values overwrite the sheet", () => {

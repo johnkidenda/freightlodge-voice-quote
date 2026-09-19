@@ -119,7 +119,7 @@
         <h1>Exfresso Quote (pilot form)</h1>
         <p>Fake multi-step portal for Jev Choice plus computer-use. Not a live Exfresso login.</p>
       </div>
-      <span class="chip" id="pilot-version">Exfresso pilot v0.25</span>
+      <span class="chip" id="pilot-version">Exfresso pilot v0.26</span>
     </header>
     <main>
       <p class="banner">
@@ -250,8 +250,8 @@
     </main>
     <footer>
       <p>
-        <span id="pilot-foot-version">Exfresso pilot v0.25</span>
-        · VTQ app <span id="vtq-version">v0.25</span>
+        <span id="pilot-foot-version">Exfresso pilot v0.26</span>
+        · VTQ app <span id="vtq-version">v0.26</span>
         · <a href="../">Back to voice quote</a>
         · Form version is locked for A/B (same HTML for both arms).
       </p>
@@ -480,8 +480,8 @@
       function snapshot() {
         readDomIntoState();
         return {
-          version: "0.25",
-          label: "Exfresso pilot v0.25",
+          version: "0.26",
+          label: "Exfresso pilot v0.26",
           step: state.step,
           status: state.status,
           values: { ...state.values, accessorials: [...state.values.accessorials] },
@@ -576,7 +576,7 @@
       });
 
       window.__EXFRESSO_PILOT__ = {
-        version: "0.25",
+        version: "0.26",
         snapshot,
         candidates,
         applyAction,
