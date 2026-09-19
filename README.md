@@ -21,9 +21,9 @@ npm run dev
 
 Open the printed localhost URL (Chrome or Safari). Hold the mic button to talk, or type. Mic → text is **Web Speech only** (no Cartesia STT). No API keys required for dictation.
 
-**Conversational mode** (separate toggle) rewrites agent bubbles into short customer-service copy and speaks them with the browser `speechSynthesis` API. Mode off = formal prompts + silent. There is no Cartesia TTS toggle or latency chip in the UI. **Never** put `CARTESIA_API_KEY` in `VITE_*` or the Pages bundle.
+**Conversational mode** (separate toggle) rewrites agent bubbles into short customer-service copy and speaks them with the browser `speechSynthesis` API. Mode off = formal prompts + silent. There is no Cartesia TTS toggle, latency chip, or STT mode badge in the UI. **Never** put `CARTESIA_API_KEY` in `VITE_*` or the Pages bundle.
 
-**App version** is `v0.XX` where XX is `0.01` × (merged change-sets including the current ship). Source of truth: [`VERSION`](VERSION). This ship is **v0.20** (19 merged PRs + this one). Future PRs that do not bump `VERSION` are incremented by CI (`.github/workflows/version-on-pr.yml`).
+**App version** is `v0.XX` where XX is `0.01` × (merged change-sets including the current ship). Source of truth: [`VERSION`](VERSION). This ship is **v0.21** (20 merged PRs + this one). Future PRs that do not bump `VERSION` are incremented by CI (`.github/workflows/version-on-pr.yml`).
 
 `npm run preview` serves the production build plus the same local API stubs.
 
@@ -162,7 +162,7 @@ npm test
 
 - Hold-and-dump: one utterance parks weight + commodity + cities while awaiting origin ZIP
 - Conversational copy + browser `speechSynthesis`; Web Speech only for STT
-- Visible `VERSION` (`v0.20` this ship) baked into the header/footer
+- Visible `VERSION` (`v0.21` this ship) baked into the header/footer
 - Completeness rules for `ready_for_quote`
 - Never-invent: cities do not become ZIPs; “standard class” / “a few hundred pounds” stay `null`
 - Out of scope does not produce `quote_result`

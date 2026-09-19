@@ -47,7 +47,6 @@ export function mountApp(root) {
     input: root.querySelector("#typed"),
     hold: root.querySelector("#hold"),
     holdHint: root.querySelector("#hold-hint"),
-    sttBadge: root.querySelector("#stt-badge"),
     conversational: root.querySelector("#conversational"),
     convoAudio: root.querySelector("#convo-audio"),
     ttsWave: root.querySelector("#tts-wave"),
@@ -227,9 +226,6 @@ function layout(conversational) {
               <span></span><span></span><span></span><span></span>
             </span>
           </div>
-          <p class="stt-badge-row">
-            <span id="stt-badge" class="stt-badge">${sttBadgeText(conversational)}</span>
-          </p>
           <button type="button" id="hold" class="hold ${speechOk ? "" : "is-disabled"}" aria-pressed="false">
             <span class="hold-dot"></span>
             <span class="hold-label">Hold to talk</span>
@@ -494,9 +490,6 @@ function renderChrome(els, state) {
       label.textContent = state.hold?.mode === "toggle" ? "Tap to talk" : "Hold to talk";
     }
   }
-  if (els.sttBadge) {
-    els.sttBadge.textContent = sttBadgeText(state.conversational);
-  }
   if (els.conversational) {
     els.conversational.classList.toggle("is-active", state.conversational);
     els.conversational.setAttribute("aria-pressed", state.conversational ? "true" : "false");
@@ -550,10 +543,6 @@ function renderTtsWave(els, state) {
   const show = Boolean(state.conversational && state.ttsSpeaking);
   els.ttsWave.hidden = !show;
   els.ttsWave.setAttribute("aria-hidden", show ? "false" : "true");
-}
-
-function sttBadgeText(conversational) {
-  return conversational ? "STT: Web Speech · Conversational" : "STT: Web Speech";
 }
 
 function defaultHoldHint(supported, mode) {

@@ -125,8 +125,16 @@ describe("conversational TTS wiring", () => {
     const css = readFileSync("src/style.css", "utf8");
     expect(css).toMatch(/@keyframes tts-wave/);
     expect(css).toMatch(/\.tts-wave\[hidden\]/);
+    expect(css).not.toMatch(/\.stt-badge/);
+    expect(css).not.toMatch(/\.stt-toggle/);
+    expect(css).not.toMatch(/\.stt-opt/);
     expect(app).not.toContain("data-stt-provider");
     expect(app).not.toContain("stt-toggle");
+    expect(app).not.toContain("stt-badge");
+    expect(app).not.toContain("sttBadge");
+    expect(app).not.toContain("sttBadgeText");
+    expect(app).not.toContain("STT: Web Speech");
+    expect(app).not.toContain("STT: Cartesia");
     expect(app).not.toMatch(/CARTESIA_API_KEY\s*=/);
   });
 
