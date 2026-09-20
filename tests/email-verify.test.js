@@ -14,7 +14,8 @@ import {
   startEmailVerification,
   timingSafeEqual,
 } from "../token-proxy/src/email-verify.js";
-import { emailQuote, formatQuoteEmail, formatQuoteEmailHtml, mailtoHref } from "../src/lib/email.js";
+import { emailQuote, EMAIL_LOGO_CREAM, formatQuoteEmail, formatQuoteEmailHtml, LOGO_URL, mailtoHref } from "../src/lib/email.js";
+import { EMAIL_LOGO_CREAM as BAKED_CREAM, EMAIL_LOGO_PAD } from "../scripts/bake-email-logo.mjs";
 import { handleUtterance } from "../src/lib/dialog.js";
 import {
   confirmEmailVerify,
@@ -305,7 +306,29 @@ describe("formatQuoteEmailHtml mirrors the quote card", () => {
     expect(html).toContain("1200 lb");
     expect(html).toContain("2026-09-18");
     expect(html).toMatch(/#f4efe6|#fffdf8|#1b2a4a/);
+    expect(html).toContain(EMAIL_LOGO_CREAM);
+    expect(html).toContain(`bgcolor="${EMAIL_LOGO_CREAM}"`);
+    expect(html).toContain("logo-b-email.png");
+    expect(html).not.toContain("logo-b.png");
+    expect(html).not.toMatch(/prefers-color-scheme/);
+    expect(LOGO_URL).toMatch(/logo-b-email\.png$/);
     expect(html).not.toContain("<script");
+  });
+
+  it("bakes the wordmark onto an opaque cream plate (no alpha for Gmail dark mode)", () => {
+    expect(EMAIL_LOGO_CREAM.toLowerCase()).toBe("#f5f0e8");
+    expect(BAKED_CREAM).toEqual([0xf5, 0xf0, 0xe8]);
+    expect(EMAIL_LOGO_PAD).toBeGreaterThan(0);
+    const data = readFileSync("public/assets/logo-b-email.png");
+    expect(data.subarray(0, 8).toString("binary")).toBe("\x89PNG\r\n\x1a\n");
+    const bitDepth = data[24];
+    const colorType = data[25];
+    expect(bitDepth).toBe(8);
+    expect(colorType).toBe(2);
+    const width = data.readUInt32BE(16);
+    const height = data.readUInt32BE(20);
+    expect(width).toBe(640 + EMAIL_LOGO_PAD * 2);
+    expect(height).toBe(253 + EMAIL_LOGO_PAD * 2);
   });
 
   it("mirrors error and out-of-scope copy without inventing a rate", () => {

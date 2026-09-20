@@ -3,7 +3,9 @@ import { emailQuoteSendUrl } from "./email-verify-client.js";
 export const MAIL_FROM = "john@freightlodge.com";
 export const EMAIL_PATH = "/api/email-quote";
 
-const LOGO_URL = "https://johnkidenda.github.io/freightlodge-voice-quote/assets/logo-b.png";
+/** Opaque cream plate — Gmail dark mode inverts HTML, not image pixels. */
+export const EMAIL_LOGO_CREAM = "#F5F0E8";
+export const LOGO_URL = "https://johnkidenda.github.io/freightlodge-voice-quote/assets/logo-b-email.png";
 
 function escapeHtml(s) {
   return String(s ?? "")
@@ -169,7 +171,13 @@ export function formatQuoteEmailHtml(sheet) {
         <table role="presentation" width="560" cellspacing="0" cellpadding="0" style="max-width:560px;width:100%;">
           <tr>
             <td style="padding:8px 8px 18px;">
-              <img src="${LOGO_URL}" width="120" alt="Freight Lodge" style="display:block;border:0;width:120px;height:auto;" />
+              <table role="presentation" cellspacing="0" cellpadding="0" style="border-collapse:collapse;">
+                <tr>
+                  <td bgcolor="${EMAIL_LOGO_CREAM}" style="background:${EMAIL_LOGO_CREAM};background-color:${EMAIL_LOGO_CREAM};padding:12px 14px;">
+                    <img src="${LOGO_URL}" width="120" alt="Freight Lodge" style="display:block;border:0;outline:none;width:120px;height:auto;" />
+                  </td>
+                </tr>
+              </table>
               <p style="margin:10px 0 0;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#9a6f1d;font-weight:700;">Freight Lodge</p>
               <p style="margin:2px 0 0;font-family:Georgia,'Times New Roman',serif;font-size:22px;color:#1b2a4a;">Voice to quote</p>
             </td>

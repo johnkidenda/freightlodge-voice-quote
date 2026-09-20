@@ -1,5 +1,5 @@
-// v11: restore quote-then-SMTP (no OTP gate); HTML quote email.
-const CACHE = "freightlodge-quote-v11";
+// v12: hide sticky composer + tip when Quoted so the quote card is tappable.
+const CACHE = "freightlodge-quote-v12";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
