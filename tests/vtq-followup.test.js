@@ -124,7 +124,9 @@ describe("email ask recommends typing", () => {
     const css = readFileSync("src/style.css", "utf8");
     expect(app).toContain("is-email-ask");
     expect(app).toContain("Type the email address…");
+    expect(app).toContain("Type the 6-digit code…");
     expect(css).toMatch(/\.composer\.is-email-ask/);
+    expect(css).toMatch(/\.composer\.is-code-ask/);
   });
 });
 

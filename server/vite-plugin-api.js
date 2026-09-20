@@ -3,6 +3,8 @@ import { MAIL_FROM, formatQuoteEmail } from "../src/lib/email.js";
 import { mintCartesiaToken, synthesizeCartesiaTts } from "../token-proxy/src/mint.js";
 import { evaluateUtteranceJev } from "../token-proxy/src/jev.js";
 import { evaluateDomAction } from "../token-proxy/src/jev-action.js";
+import { dispatchEmailApi, isEmailApiPath } from "../token-proxy/src/email-verify.js";
+import { sendSmtpMail } from "../token-proxy/src/smtp-send.js";
 
 function readJson(req) {
   return new Promise((resolve, reject) => {
@@ -38,6 +40,9 @@ async function handler(req, res, next) {
     req.method === "OPTIONS" &&
     (path === "/api/quote-handoff" ||
       path === "/api/email-quote" ||
+      path === "/api/email/quote" ||
+      path === "/api/email/verify/start" ||
+      path === "/api/email/verify/confirm" ||
       path === "/api/stt-token" ||
       path === "/api/tts" ||
       path === "/api/jev" ||
@@ -167,23 +172,26 @@ async function handler(req, res, next) {
     return;
   }
 
-  if (req.method === "POST" && path === "/api/email-quote") {
+  if (req.method === "POST" && isEmailApiPath(path)) {
     try {
       const body = await readJson(req);
-      const sheet = body.quote_sheet || {};
-      const formatted = formatQuoteEmail(sheet);
-      const to = body.to || sheet.contact?.email;
-      const payload = {
-        ok: true,
-        mode: "stub",
-        sent: false,
-        from: body.from || MAIL_FROM,
-        to,
-        subject: body.subject || formatted.subject,
-        note: `Stub only — logged, not sent. Plug Hostinger SMTP here (smtp.hostinger.com:465, user ${MAIL_FROM}).`,
-      };
-      console.log("[email-quote stub]", JSON.stringify({ ...payload, body: body.body || formatted.body }, null, 2));
-      send(res, 200, payload);
+      if ((path === "/api/email-quote" || path === "/api/email/quote") && body.quote_sheet && !body.body) {
+        const formatted = formatQuoteEmail(body.quote_sheet);
+        body.subject = body.subject || formatted.subject;
+        body.body = formatted.body;
+        body.to = body.to || body.quote_sheet.contact?.email;
+        body.from = body.from || MAIL_FROM;
+      }
+      const ip =
+        req.headers["x-forwarded-for"]?.toString().split(",")[0].trim() ||
+        req.socket?.remoteAddress ||
+        "local";
+      const result = await dispatchEmailApi(path, body, {
+        env: process.env,
+        ip,
+        sendMail: process.env.SMTP_PASS ? (msg) => sendSmtpMail(msg, process.env) : undefined,
+      });
+      send(res, result.status, result.body);
     } catch (err) {
       send(res, 400, { ok: false, error: String(err.message || err) });
     }

@@ -1,3 +1,5 @@
+import { emailQuoteSendUrl } from "./email-verify-client.js";
+
 export const MAIL_FROM = "john@freightlodge.com";
 export const EMAIL_PATH = "/api/email-quote";
 
@@ -14,9 +16,7 @@ export function formatQuoteEmail(sheet) {
     .filter(Boolean)
     .join(", ");
 
-  const lines = [
-    "Freight Lodge quote",
-    "",
+  const quoteBlock =
     sheet.status === "out_of_scope"
       ? `Out of scope: ${sheet.out_of_scope_reason || "not a domestic LTL lane."}`
       : sheet.status === "error"
@@ -28,26 +28,29 @@ export function formatQuoteEmail(sheet) {
             `Total: ${typeof q.total_usd === "number" ? `$${q.total_usd.toFixed(2)}` : "—"}`,
             `Transit: ${q.transit_days_min ?? "—"}–${q.transit_days_max ?? "—"} days`,
             q.raw_summary || "",
-          ].join("\n"),
-    "",
-    `Lane: ${origin || "—"} → ${dest || "—"}`,
-    `Pieces: ${sheet.freight?.pieces ?? "—"}`,
-    `Weight: ${sheet.freight?.total_weight_lbs ?? "—"} lb`,
-    `Commodity: ${sheet.freight?.commodity || "—"}`,
-    `Pickup: ${sheet.pickup?.date || "—"}`,
-    `Request: ${sheet.quote_request_id}`,
-    "",
-    "This MVP stops at quote — no book or pay.",
-    `Production mail will send from ${MAIL_FROM}.`,
-  ];
+          ].join("\n");
+
   return {
-    subject: q.quote_id
-      ? `Freight Lodge quote ${q.quote_id}`
-      : "Freight Lodge quote",
-    body: lines.filter((l) => l !== undefined).join("\n"),
+    subject: q.quote_id ? `Freight Lodge quote ${q.quote_id}` : "Freight Lodge quote",
+    body: [
+      "Freight Lodge quote",
+      "",
+      quoteBlock,
+      "",
+      `Lane: ${origin || "—"} → ${dest || "—"}`,
+      `Pieces: ${sheet.freight?.pieces ?? "—"}`,
+      `Weight: ${sheet.freight?.total_weight_lbs ?? "—"} lb`,
+      `Commodity: ${sheet.freight?.commodity || "—"}`,
+      `Pickup: ${sheet.pickup?.date || "—"}`,
+      `Request: ${sheet.quote_request_id}`,
+      "",
+      "This MVP stops at quote — no book or pay.",
+      `Sent from ${MAIL_FROM}.`,
+    ].join("\n"),
   };
 }
 
+/** Leftover helper for tests/docs. Quote send never uses this as a success path. */
 export function mailtoHref(sheet) {
   const to = sheet.contact?.email || "";
   const { subject, body } = formatQuoteEmail(sheet);
@@ -55,36 +58,37 @@ export function mailtoHref(sheet) {
   return `mailto:${encodeURIComponent(to)}?${qs.toString()}`;
 }
 
-export function emailUrl(apiBase = "") {
+export function emailUrl(apiBase = "", env) {
   const override =
     globalThis.FREIGHT_OPS_EMAIL_URL ||
     (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_EMAIL_URL);
   if (override) return override;
-  return `${apiBase.replace(/\/$/, "")}${EMAIL_PATH}`;
+  return emailQuoteSendUrl(apiBase, env);
 }
 
 /**
- * Working MVP path: try POST /api/email-quote (dev server stub logs + returns
- * success). Always also return a mailto fallback so GitHub Pages / phones work
- * with zero secrets. Production: swap the stub for Hostinger SMTP.
+ * Server-send the quote from john@freightlodge.com.
+ * Never treats mailto as success. On failure the caller copies `body`.
  */
-export async function emailQuote(sheet, { fetchFn, apiBase } = {}) {
+export async function emailQuote(sheet, { fetchFn, apiBase, env } = {}) {
   const to = sheet.contact?.email;
   const { subject, body } = formatQuoteEmail(sheet);
-  const mailto = mailtoHref(sheet);
-  let stub = {
-    ok: true,
-    mode: "mailto",
+  const fail = (error) => ({
+    ok: false,
     sent: false,
+    mode: "error",
     from: MAIL_FROM,
     to,
     subject,
-    mailto,
-    note: `Demo did not send SMTP. Production will send from ${MAIL_FROM} via Hostinger (or other) SMTP.`,
-  };
+    body,
+    error,
+    note: error,
+  });
+
+  if (!to) return fail("Need a confirmed email on the sheet.");
 
   try {
-    const res = await (fetchFn || fetch)(emailUrl(apiBase), {
+    const res = await (fetchFn || fetch)(emailUrl(apiBase, env), {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({
@@ -95,13 +99,26 @@ export async function emailQuote(sheet, { fetchFn, apiBase } = {}) {
         quote_sheet: sheet,
       }),
     });
-    if (res.ok) {
-      const data = await res.json();
-      stub = { ...stub, ...data, mailto, from: MAIL_FROM, to };
+    let data = {};
+    try {
+      data = await res.json();
+    } catch {
+      data = {};
     }
+    if (res.ok && data.ok && data.sent) {
+      return {
+        ok: true,
+        sent: true,
+        mode: data.mode || "smtp",
+        from: data.from || MAIL_FROM,
+        to: data.to || to,
+        subject: data.subject || subject,
+        body,
+        note: `Sent to ${data.to || to} from ${data.from || MAIL_FROM}.`,
+      };
+    }
+    return fail(data.error || "Could not send the quote email.");
   } catch {
-    // Pages / offline — mailto is enough.
+    return fail("Could not send the quote email.");
   }
-
-  return stub;
 }

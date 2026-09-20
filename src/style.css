@@ -259,11 +259,19 @@ button, input { font: inherit; }
 }
 .convo-speaker { display: block; }
 .voice-engine { display: none; }
-.composer.is-email-ask .input-row input {
+.composer.is-email-ask .input-row input,
+.composer.is-code-ask .input-row input {
   border-color: var(--gold);
   box-shadow: 0 0 0 3px rgba(199, 154, 60, 0.22);
   background: #fffdf6;
 }
+.verify-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+.verify-tools[hidden] { display: none; }
 .tts-wave {
   display: inline-flex;
   align-items: flex-end;

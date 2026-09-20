@@ -1759,17 +1759,21 @@ function extractAccessorials(raw, extracted, awaiting) {
   if (found.length) extracted.pickup.accessorials = found;
 }
 
-function extractContact(raw, extracted, awaiting) {
+export function extractContactEmail(text, awaiting) {
+  const raw = String(text || "").trim();
   const email = raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-  if (email) extracted.contact.email = email[0];
+  if (email) return email[0];
+  if (awaiting === "email" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) return raw;
+  return "";
+}
+
+function extractContact(raw, extracted, awaiting) {
+  const email = extractContactEmail(raw, awaiting);
+  if (email) extracted.contact.email = email;
   const phone = raw.match(/\b(?:\+1[-.\s]?)?(?:\(?\d{3}\)?[-.\s])\d{3}[-.\s]\d{4}\b/);
   if (phone) extracted.contact.phone = phone[0];
   const name = raw.match(/\b(?:my name is|this is|name[:\s]+)\s*([A-Za-z][A-Za-z .'-]{1,40})/i);
   if (name) extracted.contact.name = name[1].trim();
-  if (!extracted.contact.email && awaiting === "email") {
-    const maybe = raw.trim();
-    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(maybe)) extracted.contact.email = maybe;
-  }
 }
 
 function extractHazmat(raw, extracted) {
