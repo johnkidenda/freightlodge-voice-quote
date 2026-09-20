@@ -56,6 +56,8 @@ export function mountApp(root) {
     convoAudio: root.querySelector("#convo-audio"),
     ttsWave: root.querySelector("#tts-wave"),
     quote: root.querySelector("#quote-card"),
+    chatCol: root.querySelector(".chat-col"),
+    tip: root.querySelector("#voice-tip"),
     status: root.querySelector("#status-pill"),
     sample: root.querySelector("#sample"),
     sendTranscript: root.querySelector("#send-transcript"),
@@ -210,7 +212,7 @@ function layout(conversational) {
 
     <main class="stage">
       <section class="chat-col">
-        <p class="voice-tip">Press and hold the button below to say what you want to ship. We’ll walk you through the details needed for a quote.</p>
+        <p id="voice-tip" class="voice-tip">Press and hold the button below to say what you want to ship. We’ll walk you through the details needed for a quote.</p>
         <div id="thread" class="thread" aria-live="polite"></div>
         <div id="quote-card"></div>
         <form id="composer" class="composer">
@@ -510,10 +512,23 @@ function render(els, state) {
   els.quote.innerHTML = quoteCard(state.session.sheet, state.emailNote);
 }
 
+export function applyQuotedLayout(els, sheetStatus) {
+  const quoted = sheetStatus === "quoted";
+  els.chatCol?.classList.toggle("is-quoted", quoted);
+  if (els.form) {
+    els.form.hidden = quoted;
+    els.form.setAttribute("aria-hidden", quoted ? "true" : "false");
+  }
+  if (els.tip) {
+    els.tip.hidden = quoted;
+  }
+}
+
 function renderChrome(els, state) {
   const status = state.finishing ? "finishing" : state.listening ? "listening" : state.session.sheet.status;
   els.status.textContent = status.replaceAll("_", " ");
   els.status.dataset.status = status;
+  applyQuotedLayout(els, state.session.sheet.status);
   els.hold.classList.toggle("hot", state.listening && !state.finishing);
   els.hold.classList.toggle("finishing", state.finishing);
   const label = els.hold.querySelector(".hold-label");
