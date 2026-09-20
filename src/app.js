@@ -2,18 +2,6 @@ import { createSession, handleUtterance, openingMessage } from "./lib/dialog.js"
 import { progressItems } from "./lib/completeness.js";
 import { requestQuote } from "./lib/handoff.js";
 import { emailQuote, MAIL_FROM } from "./lib/email.js";
-import {
-  VERIFY_CODE_COOLDOWN_MS,
-  confirmEmailVerify,
-  extractContactEmail,
-  holdUnverifiedEmail,
-  looksLikeVerifyCode,
-  startEmailVerify,
-  verifyExpiredCopy,
-  verifyFailCopy,
-  verifySendFailCopy,
-  verifyStartCopy,
-} from "./lib/email-verify-client.js";
 import { createSpeechSession, providerSupported } from "./lib/speech-session.js";
 import { STT_PROVIDER_IDS, getSttProvider } from "./lib/stt-providers.js";
 import {
@@ -51,8 +39,6 @@ export function mountApp(root) {
     interim: "",
     busy: false,
     emailNote: null,
-    emailChallenge: null,
-    emailVerified: false,
     hold: null,
     conversational: loadConversationalMode(typeof localStorage !== "undefined" ? localStorage : null),
     ttsSpeaking: false,
@@ -74,8 +60,6 @@ export function mountApp(root) {
     sample: root.querySelector("#sample"),
     sendTranscript: root.querySelector("#send-transcript"),
     sendNote: root.querySelector("#send-note"),
-    verifyTools: root.querySelector("#verify-tools"),
-    resendCode: root.querySelector("#resend-code"),
     reset: root.querySelector("#reset"),
     drawer: root.querySelector("#sheet-drawer"),
     toggleSheet: root.querySelector("#toggle-sheet"),
@@ -188,8 +172,6 @@ export function mountApp(root) {
     ];
     stopAgentSpeech();
     state.emailNote = null;
-    state.emailChallenge = null;
-    state.emailVerified = false;
     state.interim = "";
     render(els, state);
   });
@@ -202,8 +184,6 @@ export function mountApp(root) {
   root.addEventListener("click", (e) => {
     const quoteBtn = e.target.closest("[data-email-quote]");
     if (quoteBtn) void sendEmail(els, state);
-    const resendBtn = e.target.closest("[data-resend-code]");
-    if (resendBtn) void resendEmailCode(els, state);
   });
 
   render(els, state);
@@ -258,9 +238,6 @@ function layout(conversational) {
           <p id="hold-hint" class="hint">${defaultHoldHint(speechOk)}</p>
           <button type="button" id="send-transcript" class="send-transcript">Send transcript</button>
           <p id="send-note" class="send-note" hidden></p>
-          <div id="verify-tools" class="verify-tools" hidden>
-            <button type="button" id="resend-code" class="chip" data-resend-code>Resend code</button>
-          </div>
         </form>
       </section>
 
@@ -347,121 +324,10 @@ function speakOrStop(state, reply) {
   else stopAgentSpeech();
 }
 
-async function startEmailVerifyFlow(els, state, email) {
-  state.busy = true;
-  render(els, state);
-  const result = await startEmailVerify(email, { apiBase: pageApiBase() });
-  state.busy = false;
-  if (!result.ok) {
-    state.emailChallenge = null;
-    const reply = result.error?.includes("wait")
-      ? result.error
-      : verifySendFailCopy(email);
-    push(state, "assistant", reply);
-    render(els, state);
-    speakOrStop(state, reply);
-    return false;
-  }
-  state.emailChallenge = {
-    email: result.email || email,
-    challengeId: result.challenge_id,
-    expiresIn: result.expires_in,
-    sentAt: Date.now(),
-    resendAfter: Date.now() + VERIFY_CODE_COOLDOWN_MS,
-  };
-  state.session.awaiting = "email";
-  const reply = verifyStartCopy(state.emailChallenge.email, state.conversational);
-  push(state, "assistant", reply);
-  render(els, state);
-  speakOrStop(state, reply);
-  return true;
-}
-
-async function confirmEmailVerifyFlow(els, state, rawCode) {
-  const challenge = state.emailChallenge;
-  if (!challenge) return;
-  state.busy = true;
-  render(els, state);
-  const result = await confirmEmailVerify(challenge.email, challenge.challengeId, rawCode, {
-    apiBase: pageApiBase(),
-  });
-  state.busy = false;
-  if (!result.ok || !result.verified) {
-    const reply = /expir/i.test(result.error || "") ? verifyExpiredCopy() : verifyFailCopy();
-    if (/expir/i.test(result.error || "")) state.emailChallenge = null;
-    push(state, "assistant", reply);
-    render(els, state);
-    speakOrStop(state, reply);
-    return;
-  }
-  const verifiedEmail = result.email || challenge.email;
-  state.emailChallenge = null;
-  state.emailVerified = true;
-  await finishVerifiedEmail(els, state, verifiedEmail);
-}
-
-async function finishVerifiedEmail(els, state, email) {
-  const jev = await fetchJevDecision({
-    utterance: email,
-    sheet: state.session.sheet,
-    recentReplies: recentAssistantReplies(state.messages, 3),
-    awaiting: "email",
-    askedAccessorials: state.session.askedAccessorials,
-  });
-  const result = handleUtterance(state.session, email, { jev });
-  state.session = result.session;
-  const reply = presentAgentReply(result, state.conversational);
-  push(state, "assistant", reply);
-  render(els, state);
-  speakOrStop(state, reply);
-  if (result.outOfScope) return;
-  if (result.ready) await runHandoff(els, state);
-}
-
-async function resendEmailCode(els, state) {
-  const challenge = state.emailChallenge;
-  if (!challenge || state.busy) return;
-  if (Date.now() < (challenge.resendAfter || 0)) {
-    const wait = Math.ceil(((challenge.resendAfter || 0) - Date.now()) / 1000);
-    const reply = `I can resend in ${wait} second${wait === 1 ? "" : "s"}.`;
-    push(state, "assistant", reply);
-    render(els, state);
-    return;
-  }
-  await startEmailVerifyFlow(els, state, challenge.email);
-}
-
 async function acceptUserText(els, state, text) {
   if (state.busy) return;
   push(state, "user", text);
   render(els, state);
-
-  const typedEmail = extractContactEmail(text, state.session.awaiting === "email" || state.emailChallenge ? "email" : null);
-
-  if (state.emailChallenge) {
-    if (typedEmail && typedEmail.toLowerCase() !== state.emailChallenge.email.toLowerCase()) {
-      await startEmailVerifyFlow(els, state, typedEmail);
-      return;
-    }
-    if (looksLikeVerifyCode(text)) {
-      await confirmEmailVerifyFlow(els, state, text);
-      return;
-    }
-    if (typedEmail) {
-      await startEmailVerifyFlow(els, state, typedEmail);
-      return;
-    }
-    const reply = "Type the 6-digit code I emailed you — or a different address.";
-    push(state, "assistant", reply);
-    render(els, state);
-    speakOrStop(state, reply);
-    return;
-  }
-
-  if (typedEmail && state.session.awaiting === "email" && !state.emailVerified) {
-    await startEmailVerifyFlow(els, state, typedEmail);
-    return;
-  }
 
   const jev = await fetchJevDecision({
     utterance: text,
@@ -471,13 +337,6 @@ async function acceptUserText(els, state, text) {
     askedAccessorials: state.session.askedAccessorials,
   });
   const result = handleUtterance(state.session, text, { jev });
-  const dumpedEmail = result.extracted?.contact?.email;
-  if (dumpedEmail && !state.emailVerified) {
-    state.session = holdUnverifiedEmail(result.session);
-    await startEmailVerifyFlow(els, state, dumpedEmail);
-    return;
-  }
-
   state.session = result.session;
   const reply = presentAgentReply(result, state.conversational);
   push(state, "assistant", reply);
@@ -503,7 +362,14 @@ async function runHandoff(els, state) {
     });
     state.session.sheet = payload.quote_sheet;
     if (payload.quote_sheet.status === "quoted") {
-      push(state, "assistant", "Quote is back. No book or pay from this app — email it if you want a copy.");
+      const to = payload.quote_sheet.contact?.email;
+      push(
+        state,
+        "assistant",
+        to
+          ? `Quote is back. I can email it to ${to} from ${MAIL_FROM} — tap Email me this quote. No book or pay from this app.`
+          : "Quote is back. No book or pay from this app — email it if you want a copy.",
+      );
     } else if (payload.quote_sheet.status === "out_of_scope") {
       push(
         state,
@@ -662,25 +528,14 @@ function renderChrome(els, state) {
     els.conversational.classList.toggle("is-active", state.conversational);
     els.conversational.setAttribute("aria-pressed", state.conversational ? "true" : "false");
   }
-  const awaitingCode = Boolean(state.emailChallenge);
-  const awaitingEmail = !awaitingCode && state.session.awaiting === "email";
+  const awaitingEmail = state.session.awaiting === "email";
   els.form?.classList.toggle("is-email-ask", awaitingEmail);
-  els.form?.classList.toggle("is-code-ask", awaitingCode);
-  if (els.verifyTools) els.verifyTools.hidden = !awaitingCode;
-  if (els.resendCode) {
-    const wait = awaitingCode ? Math.max(0, (state.emailChallenge?.resendAfter || 0) - Date.now()) : 0;
-    els.resendCode.disabled = !awaitingCode || wait > 0 || state.busy;
-    els.resendCode.textContent = wait > 0 ? `Resend in ${Math.ceil(wait / 1000)}s` : "Resend code";
-  }
   if (els.input) {
-    els.input.placeholder = awaitingCode
-      ? "Type the 6-digit code…"
-      : awaitingEmail
-        ? "Type the email address…"
-        : "Type origin ZIP, dest ZIP, pieces…";
-    els.input.setAttribute("inputmode", awaitingCode ? "numeric" : awaitingEmail ? "email" : "text");
-    els.input.setAttribute("autocomplete", awaitingCode ? "one-time-code" : awaitingEmail ? "email" : "off");
-    if (awaitingCode) els.input.setAttribute("inputmode", "numeric");
+    els.input.placeholder = awaitingEmail
+      ? "Type the email address…"
+      : "Type origin ZIP, dest ZIP, pieces…";
+    els.input.setAttribute("inputmode", awaitingEmail ? "email" : "text");
+    els.input.setAttribute("autocomplete", awaitingEmail ? "email" : "off");
   }
   renderConvoAudio(els, state);
   renderTtsWave(els, state);

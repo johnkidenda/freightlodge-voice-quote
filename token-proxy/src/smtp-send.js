@@ -22,7 +22,7 @@ export function createSmtpTransport(env = process.env) {
   });
 }
 
-export async function sendSmtpMail({ to, from, subject, text }, env = process.env) {
+export async function sendSmtpMail({ to, from, subject, text, html }, env = process.env) {
   const cfg = smtpSettings(env);
   if (!cfg.pass) {
     const err = new Error("SMTP_PASS is not set");
@@ -36,6 +36,7 @@ export async function sendSmtpMail({ to, from, subject, text }, env = process.en
       to,
       subject,
       text,
+      ...(html ? { html } : {}),
     });
   } finally {
     transport.close?.();

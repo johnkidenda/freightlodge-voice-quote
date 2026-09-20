@@ -64,7 +64,7 @@ Set keys in the environment only. Listens on `http://127.0.0.1:8787` (`PORT` / `
 - `GET /jev-action` — `{ jev: "on"|"off", action: true }`
 - `POST /email/verify/start` — body `{ email }`. Sends a 6-digit code FROM `john@freightlodge.com`. Returns `{ ok, challenge_id, expires_in }` — never the code.
 - `POST /email/verify/confirm` — body `{ email, challenge_id, code }`. Success `{ ok, verified, email }`.
-- `POST /email/quote` — body `{ to, subject, body, quote_sheet? }`. SMTP send of the quote.
+- `POST /email/quote` — body `{ to, subject, body, html?, quote_sheet? }`. SMTP send of the quote (multipart text + HTML). Quote send does not require a prior verify challenge.
 
 Email routes do **not** need `CARTESIA_API_KEY`. They need `SMTP_PASS` (or `EMAIL_VERIFY_DEV_MODE=1` in local/test). In-memory challenge store is per process; a Worker needs a durable store later and cannot open `smtp.hostinger.com` (use this Node stub / tunnel for Pages).
 

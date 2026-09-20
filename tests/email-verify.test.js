@@ -14,7 +14,8 @@ import {
   startEmailVerification,
   timingSafeEqual,
 } from "../token-proxy/src/email-verify.js";
-import { emailQuote, formatQuoteEmail, mailtoHref } from "../src/lib/email.js";
+import { emailQuote, formatQuoteEmail, formatQuoteEmailHtml, mailtoHref } from "../src/lib/email.js";
+import { handleUtterance } from "../src/lib/dialog.js";
 import {
   confirmEmailVerify,
   emailQuoteSendUrl,
@@ -194,10 +195,16 @@ describe("verify code hash / expiry / attempts", () => {
 });
 
 describe("quote email send — no mailto success", () => {
-  it("emailQuote reports SMTP success without a mailto field", async () => {
+  it("emailQuote reports SMTP success without a mailto field and posts HTML", async () => {
     const sheet = {
       status: "quoted",
       quote_request_id: "q1",
+      lanes: {
+        origin: { city: "Chicago", state: "IL", postal_code: "60601" },
+        destination: { city: "Dallas", state: "TX", postal_code: "75201" },
+      },
+      freight: { pieces: 3, total_weight_lbs: 1200, commodity: "auto parts" },
+      pickup: { date: "2026-09-18" },
       contact: { email: "shipper@example.com" },
       quote_result: { quote_id: "R1", carrier: "X", total_usd: 10, transit_days_min: 2, transit_days_max: 4 },
     };
@@ -209,6 +216,9 @@ describe("quote email send — no mailto success", () => {
         const payload = JSON.parse(init.body);
         expect(payload.to).toBe("shipper@example.com");
         expect(payload.from).toBe("john@freightlodge.com");
+        expect(payload.html).toContain("Freight Lodge");
+        expect(payload.html).toContain("$10.00");
+        expect(payload.html).toMatch(/60601/);
         return {
           ok: true,
           json: async () => ({ ok: true, sent: true, mode: "smtp", to: payload.to, from: payload.from }),
@@ -219,6 +229,7 @@ describe("quote email send — no mailto success", () => {
     expect(result.sent).toBe(true);
     expect(result.mailto).toBeUndefined();
     expect(result.mode).toBe("smtp");
+    expect(result.html).toContain("<!DOCTYPE html>");
   });
 
   it("emailQuote failure returns the quote body and no mailto", async () => {
@@ -240,12 +251,14 @@ describe("quote email send — no mailto success", () => {
     expect(result.error).toMatch(/could not send/i);
   });
 
-  it("sendQuoteEmail uses SMTP when sendMail is provided", async () => {
+  it("sendQuoteEmail uses SMTP multipart when html is provided", async () => {
     const sent = [];
+    const sheet = { status: "quoted", quote_request_id: "q3", quote_result: { quote_id: "R3", carrier: "Y", total_usd: 42 } };
     const result = await sendQuoteEmail({
       to: "shipper@example.com",
       subject: "Freight Lodge quote",
-      text: formatQuoteEmail({ status: "quoted", quote_request_id: "q3", quote_result: {} }).body,
+      text: formatQuoteEmail(sheet).body,
+      html: formatQuoteEmailHtml(sheet).html,
       env: { SMTP_PASS: "secret" },
       sendMail: async (msg) => sent.push(msg),
     });
@@ -253,7 +266,66 @@ describe("quote email send — no mailto success", () => {
     expect(result.body.sent).toBe(true);
     expect(result.body.mode).toBe("smtp");
     expect(sent[0].from).toBe("john@freightlodge.com");
+    expect(sent[0].html).toContain("Freight Lodge");
+    expect(sent[0].html).toContain("$42.00");
     expect(mailtoHref({ contact: { email: "x@y.com" } })).toMatch(/^mailto:/);
+  });
+});
+
+describe("formatQuoteEmailHtml mirrors the quote card", () => {
+  it("includes lane, freight, pickup, branding, and quoted totals", () => {
+    const { html, subject } = formatQuoteEmailHtml({
+      status: "quoted",
+      quote_request_id: "req-88",
+      lanes: {
+        origin: { city: "Chicago", state: "IL", postal_code: "60601" },
+        destination: { city: "Dallas", state: "TX", postal_code: "75201" },
+      },
+      freight: { pieces: 3, total_weight_lbs: 1200, commodity: "auto parts" },
+      pickup: { date: "2026-09-18" },
+      quote_result: {
+        quote_id: "EX-100",
+        carrier: "SAIA",
+        service: "LTL",
+        total_usd: 412.5,
+        transit_days_min: 2,
+        transit_days_max: 4,
+        raw_summary: "Lowest of 3 rates",
+      },
+    });
+    expect(subject).toBe("Freight Lodge quote EX-100");
+    expect(html).toContain("<!DOCTYPE html>");
+    expect(html).toContain("Freight Lodge");
+    expect(html).toContain("SAIA");
+    expect(html).toContain("$412.50");
+    expect(html).toContain("2–4 days");
+    expect(html).toContain("EX-100");
+    expect(html).toContain("Chicago, IL, 60601 → Dallas, TX, 75201");
+    expect(html).toContain("auto parts");
+    expect(html).toContain("1200 lb");
+    expect(html).toContain("2026-09-18");
+    expect(html).toMatch(/#f4efe6|#fffdf8|#1b2a4a/);
+    expect(html).not.toContain("<script");
+  });
+
+  it("mirrors error and out-of-scope copy without inventing a rate", () => {
+    const errored = formatQuoteEmailHtml({
+      status: "error",
+      quote_request_id: "q-err",
+      error_reason: "Exfresso login timeout",
+      quote_result: null,
+    });
+    expect(errored.html).toMatch(/Exfresso login timeout/);
+    expect(errored.html).not.toMatch(/\$\d/);
+
+    const oos = formatQuoteEmailHtml({
+      status: "out_of_scope",
+      quote_request_id: "q-oos",
+      out_of_scope_reason: "Hard international",
+      quote_result: null,
+    });
+    expect(oos.html).toMatch(/Hard international/);
+    expect(oos.html).not.toMatch(/\$\d/);
   });
 });
 
@@ -311,21 +383,43 @@ describe("client helpers", () => {
   });
 });
 
-describe("app no longer opens mailto for verify or quote email", () => {
-  it("sendEmail copies on failure and never assigns location.href for quote mail", () => {
+describe("quote path does not require a verify challenge", () => {
+  it("typing the sheet email completes the quote without a 6-digit code", () => {
+    const session = createSession({ id: "no-otp" });
+    session.sheet.lanes.origin.postal_code = "60601";
+    session.sheet.lanes.destination.postal_code = "75201";
+    session.sheet.freight.pieces = 3;
+    session.sheet.freight.total_weight_lbs = 1200;
+    session.sheet.freight.commodity = "auto parts";
+    session.sheet.pickup.date = "2026-09-18";
+    session.askedAccessorials = true;
+    session.awaiting = "email";
+    const result = handleUtterance(session, "shipper@example.com");
+    expect(result.ready).toBe(true);
+    expect(result.session.sheet.contact.email).toBe("shipper@example.com");
+    expect(result.session.awaiting).toBeNull();
+    expect(result.reply).not.toMatch(/6-digit|confirmation code|type it here/i);
+  });
+
+  it("app happy path never starts verify or assigns mailto for quote mail", () => {
     const app = readFileSync("src/app.js", "utf8");
-    expect(app).toContain("startEmailVerify");
-    expect(app).toContain("confirmEmailVerify");
-    expect(app).toContain("Type the 6-digit code…");
-    expect(app).toContain("data-resend-code");
+    expect(app).not.toContain("startEmailVerify");
+    expect(app).not.toContain("confirmEmailVerify");
+    expect(app).not.toContain("holdUnverifiedEmail");
+    expect(app).not.toContain("Type the 6-digit code");
+    expect(app).not.toContain("data-resend-code");
     expect(app).toContain("copyTextToClipboard(result.body");
+    expect(app).toContain("tap Email me this quote");
     const sendEmailFn = app.slice(app.indexOf("async function sendEmail"), app.indexOf("function push("));
     expect(sendEmailFn).not.toMatch(/location\.href/);
     expect(sendEmailFn).not.toMatch(/mailto/);
     expect(app).not.toMatch(/Demo opens a mailto/);
+    const acceptFn = app.slice(app.indexOf("async function acceptUserText"), app.indexOf("async function runHandoff"));
+    expect(acceptFn).not.toMatch(/verify|challenge|otp/i);
+    expect(acceptFn).toContain("handleUtterance");
   });
 
-  it("token-proxy and Vite expose the verify + quote routes", () => {
+  it("token-proxy and Vite still expose verify + quote routes for later", () => {
     const stub = readFileSync("token-proxy/local-stub.mjs", "utf8");
     const worker = readFileSync("token-proxy/src/index.js", "utf8");
     const vite = readFileSync("server/vite-plugin-api.js", "utf8");
@@ -333,7 +427,9 @@ describe("app no longer opens mailto for verify or quote email", () => {
     expect(stub).toContain("/email/verify/start");
     expect(worker).toContain("isEmailApiPath");
     expect(vite).toContain("/api/email/verify/start");
+    expect(vite).toContain("formatQuoteEmailHtml");
     expect(readme).toContain("POST /email/verify/start");
     expect(readme).toContain("SMTP_PASS");
+    expect(readme).toContain("html?");
   });
 });
