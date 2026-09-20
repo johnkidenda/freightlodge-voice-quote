@@ -9,7 +9,7 @@ import {
 } from "../src/lib/completeness.js";
 import { handleUtterance, createSession } from "../src/lib/dialog.js";
 import { pickLowestRate, simulateExfressoRunner } from "../src/lib/handoff.js";
-import { formatQuoteEmail } from "../src/lib/email.js";
+import { formatQuoteEmail, formatQuoteEmailHtml } from "../src/lib/email.js";
 
 function completeSheet(overrides = {}) {
   const sheet = emptySheet({ id: "test-sheet", now: "2026-09-16T12:00:00.000Z" });
@@ -176,5 +176,8 @@ describe("handoff stub", () => {
     oos.quote_result = null;
     expect(formatQuoteEmail(oos).body).toMatch(/Hard international/);
     expect(formatQuoteEmail(oos).body).not.toMatch(/\$\d/);
+    expect(formatQuoteEmailHtml(errored).html).toMatch(/Exfresso login timeout/);
+    expect(formatQuoteEmailHtml(oos).html).toMatch(/Hard international/);
+    expect(formatQuoteEmailHtml(oos).html).not.toMatch(/\$\d/);
   });
 });

@@ -1,5 +1,5 @@
 import { simulateExfressoRunner } from "../src/lib/handoff.js";
-import { MAIL_FROM, formatQuoteEmail } from "../src/lib/email.js";
+import { MAIL_FROM, formatQuoteEmail, formatQuoteEmailHtml } from "../src/lib/email.js";
 import { mintCartesiaToken, synthesizeCartesiaTts } from "../token-proxy/src/mint.js";
 import { evaluateUtteranceJev } from "../token-proxy/src/jev.js";
 import { evaluateDomAction } from "../token-proxy/src/jev-action.js";
@@ -175,10 +175,12 @@ async function handler(req, res, next) {
   if (req.method === "POST" && isEmailApiPath(path)) {
     try {
       const body = await readJson(req);
-      if ((path === "/api/email-quote" || path === "/api/email/quote") && body.quote_sheet && !body.body) {
+      if ((path === "/api/email-quote" || path === "/api/email/quote") && body.quote_sheet) {
         const formatted = formatQuoteEmail(body.quote_sheet);
+        const htmlFormatted = formatQuoteEmailHtml(body.quote_sheet);
         body.subject = body.subject || formatted.subject;
-        body.body = formatted.body;
+        body.body = body.body || formatted.body;
+        body.html = body.html || htmlFormatted.html;
         body.to = body.to || body.quote_sheet.contact?.email;
         body.from = body.from || MAIL_FROM;
       }

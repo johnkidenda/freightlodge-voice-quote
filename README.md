@@ -24,7 +24,7 @@ Open the printed localhost URL (Chrome or Safari). Hold the mic button to talk, 
 
 **Conversational mode** (separate toggle) rewrites agent bubbles into short customer-service copy and speaks them with the browser `speechSynthesis` API. Mode off = formal prompts + silent. There is no Cartesia TTS toggle, latency chip, or STT mode badge in the UI. **Never** put `CARTESIA_API_KEY` in `VITE_*` or the Pages bundle.
 
-**App version** is `v0.XX` where XX is `0.01` × (merged change-sets including the current ship). Source of truth: [`VERSION`](VERSION). This ship is **v0.27** (26 merged PRs + this one). Future PRs that do not bump `VERSION` are incremented by CI (`.github/workflows/version-on-pr.yml`).
+**App version** is `v0.XX` where XX is `0.01` × (merged change-sets including the current ship). Source of truth: [`VERSION`](VERSION). This ship is **v0.28** (27 merged PRs + this one). Future PRs that do not bump `VERSION` are incremented by CI (`.github/workflows/version-on-pr.yml`).
 
 `npm run preview` serves the production build plus the same local API stubs.
 
@@ -174,17 +174,13 @@ window.FREIGHT_OPS_HANDOFF_URL = "https://ops.example.com/api/quote-handoff";
 
 or build-time `VITE_HANDOFF_URL`.
 
-## Email confirmation + Email me this quote
+## Email me this quote (SMTP, no mailto)
 
-The contact email is confirmed **in-app** with a one-time code. The app never opens the device mail client for this path.
+The sheet collects contact email like any other slot (type the address — voice often mangles it). Completing the sheet runs the quote and shows the **quote card**. There is **no** 6-digit confirmation-code gate on this path.
 
-1. User types the address (voice often mangles emails).
-2. Client `POST {VITE_STT_TOKEN_URL origin}/email/verify/start` with `{ email }` (local Vite: `POST /api/email/verify/start`).
-3. Server generates a cryptographically random **6-digit** code, stores **only** `SHA-256(email|code|salt)` for **10 minutes**, single-use, max 5 attempts. In-memory is OK on the Node stub; a Worker isolate needs KV/D1 later.
-4. Plain-text mail FROM `john@freightlodge.com`, subject `Your Freight Lodge code`. The JSON response is `{ ok, challenge_id, expires_in }` — **never** the code.
-5. User types the code in the app → `POST /email/verify/confirm`. Only then is `sheet.contact.email` set.
+**Email me this quote** POSTs `{VITE_STT_TOKEN_URL origin}/email/quote` (local Vite: `POST /api/email-quote`) with text + HTML bodies that match the on-screen card. SMTP sends FROM `john@freightlodge.com` TO the sheet address. Success is an in-app note. Failure is an in-app error plus an optional clipboard copy of the text quote. This path never assigns `window.location.href` to a mailto.
 
-**Email me this quote** POSTs `{origin}/email/quote` (or `/api/email-quote` on Vite). On send failure the UI shows an error and copies the quote body. It does **not** assign `window.location.href` to a mailto.
+`POST /email/verify/start` and `/email/verify/confirm` stay on the token-proxy for later use. They are not on the quote happy path.
 
 GitHub Pages calls the same `VITE_STT_TOKEN_URL` origin as Jev (today a cloudflared tunnel to the Node stub). Put SMTP secrets on that process, not in `VITE_*`.
 
@@ -194,7 +190,7 @@ GitHub Pages calls the same `VITE_STT_TOKEN_URL` origin as Jev (today a cloudfla
 | `SMTP_PORT` | `465` (SSL) |
 | `SMTP_USER` / `MAIL_FROM` | `john@freightlodge.com` |
 | `SMTP_PASS` | mailbox password (server-side only) |
-| `EMAIL_VERIFY_DEV_MODE` | `1` in local/test only — logs the code server-side, still omits it from JSON |
+| `EMAIL_VERIFY_DEV_MODE` | `1` in local/test only — logs quote/verify sends server-side and skips SMTP |
 
 Production without `SMTP_PASS` → `503`. Cloudflare Worker source has the same routes but cannot open SMTP; use the Node stub for live send.
 
@@ -230,8 +226,8 @@ npm test
 
 - Hold-and-dump: one utterance parks weight + commodity + cities while awaiting origin ZIP
 - Conversational copy + browser `speechSynthesis`; Web Speech only for STT
-- Visible `VERSION` (`v0.27` this ship) baked into the header/footer
-- In-app email confirmation (6-digit SMTP code) and quote send without mailto
+- Visible `VERSION` (`v0.28` this ship) baked into the header/footer
+- Quote-card SMTP email (HTML + text) without mailto; no OTP gate on the quote path
 - Post-utterance Jev via `POST /jev` (fallback when the TypeSafe key is absent; `?jev=0` disables)
 - Completeness rules for `ready_for_quote`
 - Never-invent: cities do not become ZIPs; “standard class” / “a few hundred pounds” stay `null`

@@ -338,23 +338,27 @@ export async function confirmEmailVerification({
 }
 
 /**
- * SMTP send of a formatted quote. Body comes from the client (`formatQuoteEmail`).
+ * SMTP send of a formatted quote. Text + HTML come from the client
+ * (`formatQuoteEmail` / `formatQuoteEmailHtml`). Quote send does not
+ * require a prior verify challenge.
  */
 export async function sendQuoteEmail({
   to,
   subject,
   text,
+  html,
   env = {},
   sendMail,
 } = {}) {
   const smtp = smtpSettings(env);
   const dest = normalizeEmail(to);
   if (!isValidEmailAddress(dest)) {
-    return { status: 400, body: { ok: false, error: "Need a confirmed email on the sheet." } };
+    return { status: 400, body: { ok: false, error: "Need an email on the sheet." } };
   }
 
   const subj = String(subject || "Freight Lodge quote").trim() || "Freight Lodge quote";
   const bodyText = String(text || "").trim();
+  const bodyHtml = String(html || "").trim();
   const from = smtp.from;
   const dev = isDevVerifyMode(env);
 
@@ -378,7 +382,7 @@ export async function sendQuoteEmail({
   }
 
   if (dev && typeof sendMail !== "function") {
-    console.log("[email-quote] DEV — logged, not SMTP-sent", { to: dest, subject: subj });
+    console.log("[email-quote] DEV — logged, not SMTP-sent", { to: dest, subject: subj, html: Boolean(bodyHtml) });
     return {
       status: 200,
       body: { ok: true, mode: "dev", sent: true, from, to: dest, subject: subj, dev: true },
@@ -386,7 +390,13 @@ export async function sendQuoteEmail({
   }
 
   try {
-    await sendMail({ to: dest, from, subject: subj, text: bodyText });
+    await sendMail({
+      to: dest,
+      from,
+      subject: subj,
+      text: bodyText,
+      ...(bodyHtml ? { html: bodyHtml } : {}),
+    });
     return {
       status: 200,
       body: { ok: true, mode: "smtp", sent: true, from, to: dest, subject: subj },
@@ -431,6 +441,7 @@ export async function dispatchEmailApi(path, body, ctx = {}) {
       to: body?.to || body?.quote_sheet?.contact?.email,
       subject: body?.subject,
       text: body?.body,
+      html: body?.html,
     });
   }
   return { status: 404, body: { ok: false, error: "not found" } };

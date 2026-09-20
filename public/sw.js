@@ -1,5 +1,5 @@
-// v10: inside sticks, liftgate side-clarify, partial ZIP retain.
-const CACHE = "freightlodge-quote-v10";
+// v11: restore quote-then-SMTP (no OTP gate); HTML quote email.
+const CACHE = "freightlodge-quote-v11";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
