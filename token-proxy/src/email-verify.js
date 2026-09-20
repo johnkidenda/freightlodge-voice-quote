@@ -247,7 +247,7 @@ export async function startEmailVerification({
   if (dev) {
     store.devCodes.set(challengeId, code);
     store.lastDev = { email: normalized, challenge_id: challengeId, code };
-    console.log(`[email-verify] DEV code for ${normalized} (not in JSON)`);
+    console.log(`[email-verify] DEV code for ${normalized}: ${code} (not in JSON)`);
   }
 
   if (!dev) {
