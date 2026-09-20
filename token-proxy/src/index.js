@@ -1,6 +1,7 @@
 import { corsHeaders, mintCartesiaToken, synthesizeCartesiaTts } from "./mint.js";
 import { evaluateUtteranceJev } from "./jev.js";
 import { evaluateDomAction } from "./jev-action.js";
+import { dispatchEmailApi, isEmailApiPath } from "./email-verify.js";
 
 function json(body, status, origin) {
   return new Response(JSON.stringify(body), {
@@ -43,6 +44,7 @@ export default {
           service: "freightlodge-stt-token",
           tts: Boolean(apiKey),
           jev: Boolean(env?.TYPESAFE_API_KEY),
+          email: true,
         },
         200,
         origin,
@@ -101,6 +103,19 @@ export default {
         const status = err?.code === "JEV_UNCONFIGURED" ? 503 : err?.code === "JEV_EMPTY" ? 400 : 502;
         return json({ ok: false, jev: "off", error: message }, status, origin);
       }
+    }
+
+    if (isEmailApiPath(path)) {
+      if (request.method !== "POST") return json({ error: "method not allowed" }, 405, origin);
+      const body = await readJson(request);
+      const ip =
+        request.headers.get("CF-Connecting-IP") ||
+        request.headers.get("X-Forwarded-For")?.split(",")[0].trim() ||
+        "unknown";
+      // Worker isolates cannot open smtp.hostinger.com. Pages should call the
+      // Node local-stub (cloudflared) with SMTP_PASS. sendMail stays unset here.
+      const result = await dispatchEmailApi(path, body, { env: env || {}, ip });
+      return json(result.body, result.status, origin);
     }
 
     if (path === "/tts") {

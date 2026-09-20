@@ -62,10 +62,15 @@ Set keys in the environment only. Listens on `http://127.0.0.1:8787` (`PORT` / `
 - `GET /jev` — `{ jev: "on"|"off" }` without calling TypeSafe
 - `POST /jev-action` — TypeSafe Choice for one fake-Exfresso DOM step. Body: `{ sheet, candidates, step?, status?, filled? }`. Candidates only; do not invent ids.
 - `GET /jev-action` — `{ jev: "on"|"off", action: true }`
+- `POST /email/verify/start` — body `{ email }`. Sends a 6-digit code FROM `john@freightlodge.com`. Returns `{ ok, challenge_id, expires_in }` — never the code.
+- `POST /email/verify/confirm` — body `{ email, challenge_id, code }`. Success `{ ok, verified, email }`.
+- `POST /email/quote` — body `{ to, subject, body, quote_sheet? }`. SMTP send of the quote.
+
+Email routes do **not** need `CARTESIA_API_KEY`. They need `SMTP_PASS` (or `EMAIL_VERIFY_DEV_MODE=1` in local/test). In-memory challenge store is per process; a Worker needs a durable store later and cannot open `smtp.hostinger.com` (use this Node stub / tunnel for Pages).
 
 `/jev` and `/jev-action` work when `TYPESAFE_API_KEY` is set even if Cartesia is unset. Missing key → `503 { jev: "off" }`; the voice SPA falls back to heuristics. The computer-use runner pauses.
 
-`npm run dev` also serves `/api/stt-token`, `/api/tts`, `/api/jev`, and `/api/jev-action` from the server env — use `VITE_STT_TOKEN_URL=/api/stt-token`.
+`npm run dev` also serves `/api/stt-token`, `/api/tts`, `/api/jev`, `/api/jev-action`, `/api/email/verify/start`, `/api/email/verify/confirm`, and `/api/email-quote` from the server env — use `VITE_STT_TOKEN_URL=/api/stt-token`.
 
 ### Smoke (when the TypeSafe key is in the stub env)
 
@@ -101,6 +106,11 @@ Web Speech does **not** need this proxy. Conversational mode still rewrites repl
 | --- | --- | --- |
 | `CARTESIA_API_KEY` | Worker secret / local stub / Vite server env | Long-lived Cartesia key. **Never** `VITE_*`. |
 | `TYPESAFE_API_KEY` | Worker secret / local stub / Vite server env | TypeSafe Jev key. **Never** `VITE_*`. |
-| `VITE_STT_TOKEN_URL` | Pages build / `.env` for local | Public URL of this proxy. Safe to bake into the SPA. Client calls `{origin}/jev`. |
+| `VITE_STT_TOKEN_URL` | Pages build / `.env` for local | Public URL of this proxy. Safe to bake into the SPA. Client calls `{origin}/jev` and `{origin}/email/verify/*`. |
+| `SMTP_HOST` | Node stub / Vite server env | Default `smtp.hostinger.com`. **Never** `VITE_*`. |
+| `SMTP_PORT` | Node stub / Vite server env | Default `465`. |
+| `SMTP_USER` / `MAIL_FROM` | Node stub / Vite server env | Default `john@freightlodge.com`. |
+| `SMTP_PASS` | Node stub / Vite server env | Mailbox password. Required to send. **Never** `VITE_*`. |
+| `EMAIL_VERIFY_DEV_MODE` | Node stub / Vite server env | `1` logs the code server-side and skips SMTP. Tests read it via `peekDevChallenge`. Do not enable in production. |
 
 Token TTL is ~90s (clamped 60–120).

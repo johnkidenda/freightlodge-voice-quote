@@ -24,7 +24,7 @@ Open the printed localhost URL (Chrome or Safari). Hold the mic button to talk, 
 
 **Conversational mode** (separate toggle) rewrites agent bubbles into short customer-service copy and speaks them with the browser `speechSynthesis` API. Mode off = formal prompts + silent. There is no Cartesia TTS toggle, latency chip, or STT mode badge in the UI. **Never** put `CARTESIA_API_KEY` in `VITE_*` or the Pages bundle.
 
-**App version** is `v0.XX` where XX is `0.01` × (merged change-sets including the current ship). Source of truth: [`VERSION`](VERSION). This ship is **v0.26** (25 merged PRs + this one). Future PRs that do not bump `VERSION` are incremented by CI (`.github/workflows/version-on-pr.yml`).
+**App version** is `v0.XX` where XX is `0.01` × (merged change-sets including the current ship). Source of truth: [`VERSION`](VERSION). This ship is **v0.27** (26 merged PRs + this one). Future PRs that do not bump `VERSION` are incremented by CI (`.github/workflows/version-on-pr.yml`).
 
 `npm run preview` serves the production build plus the same local API stubs.
 
@@ -121,7 +121,7 @@ Use the URL `wrangler deploy` prints. Full copy-paste path: [`token-proxy/README
 1. Slot-fills origin/dest + ZIP, pieces, weight **or** L×W×H **or** NMFC class, commodity, pickup date, accessorials, contact email
 2. When the sheet is complete, `status` becomes `ready_for_quote`
 3. `POST /api/quote-handoff` (or the in-browser stub on GitHub Pages) simulates the Exfresso runner and returns `quote_result`
-4. Quote card + **Email me this quote** (mailto fallback + server stub)
+4. Quote card + **Email me this quote** (server SMTP from `john@freightlodge.com` — never mailto)
 5. **Send transcript** silently POSTs via FormSubmit AJAX to `john@freightlodge.com` (or `VITE_TRANSCRIPT_WEBHOOK_URL` if set). Activate-style replies are treated as failure. Mailto is last-resort only.
 
 ## Handoff contract (Freight Ops / Exfresso)
@@ -174,21 +174,29 @@ window.FREIGHT_OPS_HANDOFF_URL = "https://ops.example.com/api/quote-handoff";
 
 or build-time `VITE_HANDOFF_URL`.
 
-## Email me this quote
+## Email confirmation + Email me this quote
 
-Working MVP path (no secrets):
+The contact email is confirmed **in-app** with a one-time code. The app never opens the device mail client for this path.
 
-1. Client `POST /api/email-quote` — local Vite middleware **logs** the payload and returns `{ ok: true, mode: "stub", sent: false, from: "john@freightlodge.com" }`
-2. Always also opens a **`mailto:`** to the sheet’s contact email so a phone can send a copy from the user’s mail app
+1. User types the address (voice often mangles emails).
+2. Client `POST {VITE_STT_TOKEN_URL origin}/email/verify/start` with `{ email }` (local Vite: `POST /api/email/verify/start`).
+3. Server generates a cryptographically random **6-digit** code, stores **only** `SHA-256(email|code|salt)` for **10 minutes**, single-use, max 5 attempts. In-memory is OK on the Node stub; a Worker isolate needs KV/D1 later.
+4. Plain-text mail FROM `john@freightlodge.com`, subject `Your Freight Lodge code`. The JSON response is `{ ok, challenge_id, expires_in }` — **never** the code.
+5. User types the code in the app → `POST /email/verify/confirm`. Only then is `sheet.contact.email` set.
 
-Production (Hostinger or any SMTP): keep `POST /api/email-quote` and swap the stub for nodemailer (or Hostinger’s API) using env vars from `.env.example`:
+**Email me this quote** POSTs `{origin}/email/quote` (or `/api/email-quote` on Vite). On send failure the UI shows an error and copies the quote body. It does **not** assign `window.location.href` to a mailto.
+
+GitHub Pages calls the same `VITE_STT_TOKEN_URL` origin as Jev (today a cloudflared tunnel to the Node stub). Put SMTP secrets on that process, not in `VITE_*`.
 
 | Var | Typical Hostinger value |
 | --- | --- |
 | `SMTP_HOST` | `smtp.hostinger.com` |
-| `SMTP_PORT` | `465` (SSL) or `587` |
+| `SMTP_PORT` | `465` (SSL) |
 | `SMTP_USER` / `MAIL_FROM` | `john@freightlodge.com` |
 | `SMTP_PASS` | mailbox password (server-side only) |
+| `EMAIL_VERIFY_DEV_MODE` | `1` in local/test only — logs the code server-side, still omits it from JSON |
+
+Production without `SMTP_PASS` → `503`. Cloudflare Worker source has the same routes but cannot open SMTP; use the Node stub for live send.
 
 Do not put SMTP secrets in `VITE_*` or in the GitHub Pages bundle.
 
@@ -222,7 +230,8 @@ npm test
 
 - Hold-and-dump: one utterance parks weight + commodity + cities while awaiting origin ZIP
 - Conversational copy + browser `speechSynthesis`; Web Speech only for STT
-- Visible `VERSION` (`v0.26` this ship) baked into the header/footer
+- Visible `VERSION` (`v0.27` this ship) baked into the header/footer
+- In-app email confirmation (6-digit SMTP code) and quote send without mailto
 - Post-utterance Jev via `POST /jev` (fallback when the TypeSafe key is absent; `?jev=0` disables)
 - Completeness rules for `ready_for_quote`
 - Never-invent: cities do not become ZIPs; “standard class” / “a few hundred pounds” stay `null`

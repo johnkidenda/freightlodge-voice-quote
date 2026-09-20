@@ -10,11 +10,14 @@
  * Mint: POST /
  * TTS audio: POST /tts  (CARTESIA_API_KEY stays on this process)
  * Jev: POST /jev  (TYPESAFE_API_KEY stays on this process)
+ * Email: POST /email/verify/start|confirm and POST /email/quote (SMTP_PASS stays here)
  */
 import { createServer } from "node:http";
 import { corsHeaders, mintCartesiaToken, synthesizeCartesiaTts } from "./src/mint.js";
 import { evaluateUtteranceJev } from "./src/jev.js";
 import { evaluateDomAction } from "./src/jev-action.js";
+import { dispatchEmailApi, isEmailApiPath } from "./src/email-verify.js";
+import { sendSmtpMail } from "./src/smtp-send.js";
 
 const PORT = Number(process.env.PORT) || 8787;
 const HOST = process.env.HOST || "127.0.0.1";
@@ -65,6 +68,7 @@ const server = createServer(async (req, res) => {
         service: "freightlodge-stt-token",
         tts: Boolean(apiKey),
         jev: Boolean(typesafeKey),
+        email: true,
       },
       origin,
     );
@@ -98,6 +102,29 @@ const server = createServer(async (req, res) => {
     } catch (err) {
       const status = err?.code === "JEV_EMPTY" ? 400 : 502;
       send(res, status, { ok: false, jev: "off", error: String(err?.message || err) }, origin);
+    }
+    return;
+  }
+
+  if (isEmailApiPath(path)) {
+    if (req.method !== "POST") {
+      send(res, 405, { error: "method not allowed" }, origin);
+      return;
+    }
+    try {
+      const body = await readJson(req);
+      const ip =
+        req.headers["x-forwarded-for"]?.toString().split(",")[0].trim() ||
+        req.socket?.remoteAddress ||
+        "local";
+      const result = await dispatchEmailApi(path, body, {
+        env: process.env,
+        ip,
+        sendMail: process.env.SMTP_PASS ? (msg) => sendSmtpMail(msg, process.env) : undefined,
+      });
+      send(res, result.status, result.body, origin);
+    } catch (err) {
+      send(res, 400, { ok: false, error: String(err?.message || err) }, origin);
     }
     return;
   }
@@ -178,5 +205,6 @@ const server = createServer(async (req, res) => {
 server.listen(PORT, HOST, () => {
   console.log(`Cartesia token/TTS + Jev stub listening on http://${HOST}:${PORT}`);
   console.log("Mint: POST /   TTS: POST /tts   Jev: POST /jev   Jev-action: POST /jev-action");
-  console.log("CARTESIA_API_KEY and TYPESAFE_API_KEY stay on this process only.");
+  console.log("Email: POST /email/verify/start  POST /email/verify/confirm  POST /email/quote");
+  console.log("CARTESIA_API_KEY, TYPESAFE_API_KEY, and SMTP_PASS stay on this process only.");
 });
