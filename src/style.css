@@ -108,7 +108,7 @@ button, input { font: inherit; }
 
 .stage {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-items: stretch;
   flex: 1 1 auto;
@@ -330,32 +330,6 @@ button, input { font: inherit; }
   50% { transform: scale(1.25); }
 }
 
-.sheet-col { min-height: 0; overflow: auto; }
-.sheet-toggle { display: none; }
-.sheet-drawer {
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  padding: 14px;
-  box-shadow: var(--shadow);
-}
-.sheet-drawer h2 {
-  font-family: Fraunces, Georgia, serif;
-  margin: 0 0 4px;
-  font-size: 1.15rem;
-}
-.sheet-list { list-style: none; padding: 0; margin: 12px 0 0; }
-.sheet-list li {
-  display: flex;
-  gap: 8px;
-  padding: 8px 0;
-  border-top: 1px solid #eee6d8;
-}
-.sheet-list strong { display: block; font-size: 0.86rem; }
-.sheet-list em { font-style: normal; color: var(--muted); font-size: 0.82rem; }
-.sheet-list .tick { color: var(--line); }
-.sheet-list .done .tick { color: var(--ok); }
-
 .card {
   margin: 0 14px 12px;
   border-radius: 16px;
@@ -397,18 +371,6 @@ button, input { font: inherit; }
     min-height: 0;
     height: auto;
   }
-  .sheet-col { flex-shrink: 0; overflow: visible; }
-  .sheet-toggle {
-    display: block;
-    width: 100%;
-    border: 1px solid var(--line);
-    background: var(--paper);
-    border-radius: 12px;
-    padding: 10px;
-    font-weight: 700;
-  }
-  .sheet-drawer { display: none; margin-top: 8px; }
-  .sheet-drawer.open { display: block; max-height: 28vh; overflow-y: auto; }
 }
 
 @media (max-width: 420px) {

@@ -1,5 +1,4 @@
 import { createSession, handleUtterance, openingMessage } from "./lib/dialog.js";
-import { progressItems } from "./lib/completeness.js";
 import { requestQuote } from "./lib/handoff.js";
 import { emailQuote, MAIL_FROM } from "./lib/email.js";
 import { createSpeechSession, providerSupported } from "./lib/speech-session.js";
@@ -47,11 +46,9 @@ export function mountApp(root) {
   root.innerHTML = layout(state.conversational);
   const els = {
     thread: root.querySelector("#thread"),
-    sheet: root.querySelector("#sheet-list"),
     form: root.querySelector("#composer"),
     input: root.querySelector("#typed"),
     hold: root.querySelector("#hold"),
-    holdHint: root.querySelector("#hold-hint"),
     conversational: root.querySelector("#conversational"),
     convoAudio: root.querySelector("#convo-audio"),
     ttsWave: root.querySelector("#tts-wave"),
@@ -63,8 +60,6 @@ export function mountApp(root) {
     sendTranscript: root.querySelector("#send-transcript"),
     sendNote: root.querySelector("#send-note"),
     reset: root.querySelector("#reset"),
-    drawer: root.querySelector("#sheet-drawer"),
-    toggleSheet: root.querySelector("#toggle-sheet"),
   };
 
   const sessionRef = { current: null };
@@ -103,6 +98,11 @@ export function mountApp(root) {
         const trimmed = (text || "").trim();
         if (!trimmed || state.busy) return;
         void acceptUserText(els, state, trimmed);
+      },
+      onEmpty() {
+        if (state.busy) return;
+        push(state, "assistant", "I didn’t catch that. Say it again, or type it.");
+        render(els, state);
       },
     };
   }
@@ -178,11 +178,6 @@ export function mountApp(root) {
     render(els, state);
   });
 
-  els.toggleSheet.addEventListener("click", () => {
-    els.drawer.classList.toggle("open");
-    els.toggleSheet.setAttribute("aria-expanded", els.drawer.classList.contains("open") ? "true" : "false");
-  });
-
   root.addEventListener("click", (e) => {
     const quoteBtn = e.target.closest("[data-email-quote]");
     if (quoteBtn) void sendEmail(els, state);
@@ -237,20 +232,10 @@ function layout(conversational) {
             <span class="hold-dot"></span>
             <span class="hold-label">Hold to talk</span>
           </button>
-          <p id="hold-hint" class="hint">${defaultHoldHint(speechOk)}</p>
           <button type="button" id="send-transcript" class="send-transcript">Send transcript</button>
           <p id="send-note" class="send-note" hidden></p>
         </form>
       </section>
-
-      <aside class="sheet-col">
-        <button type="button" id="toggle-sheet" class="sheet-toggle" aria-expanded="false">Sheet progress</button>
-        <div id="sheet-drawer" class="sheet-drawer">
-          <h2>Quote sheet</h2>
-          <p class="muted">v1 · never invent ZIP / dims / weight / class</p>
-          <ol id="sheet-list" class="sheet-list"></ol>
-        </div>
-      </aside>
     </main>
 
     <footer class="powered-by">
@@ -493,22 +478,6 @@ function render(els, state) {
     .join("");
   els.thread.scrollTop = els.thread.scrollHeight;
 
-  const items = progressItems(state.session.sheet, {
-    askedAccessorials: state.session.askedAccessorials,
-  });
-  els.sheet.innerHTML = items
-    .map(
-      (item) => `
-      <li class="${item.done ? "done" : ""}">
-        <span class="tick">${item.done ? "●" : "○"}</span>
-        <span>
-          <strong>${escapeHtml(item.label)}</strong>
-          <em>${escapeHtml(item.value || "—")}</em>
-        </span>
-      </li>`,
-    )
-    .join("");
-
   els.quote.innerHTML = quoteCard(state.session.sheet, state.emailNote);
 }
 
@@ -554,15 +523,6 @@ function renderChrome(els, state) {
   }
   renderConvoAudio(els, state);
   renderTtsWave(els, state);
-  if (state.finishing) {
-    els.holdHint.textContent = state.interim ? state.interim : "Finishing…";
-  } else if (state.listening && state.interim) {
-    els.holdHint.textContent = state.interim;
-  } else if (state.hold?.supported) {
-    els.holdHint.textContent = defaultHoldHint(true, state.hold.mode);
-  } else {
-    els.holdHint.textContent = defaultHoldHint(false, state.hold?.mode);
-  }
 }
 
 function speakerIcon(on) {
@@ -592,16 +552,6 @@ function renderTtsWave(els, state) {
   const show = Boolean(state.conversational && state.ttsSpeaking);
   els.ttsWave.hidden = !show;
   els.ttsWave.setAttribute("aria-hidden", show ? "false" : "true");
-}
-
-function defaultHoldHint(supported, mode) {
-  if (!supported) {
-    return "Voice needs Chrome/Safari with mic permission. Type instead.";
-  }
-  if (mode === "toggle") {
-    return "Tap to record, tap again to send. I wait a beat after Stop so the last words aren’t cut off.";
-  }
-  return "Press and hold. Release — I wait a beat so the last words aren’t cut off.";
 }
 
 function quoteCard(sheet, emailNote) {

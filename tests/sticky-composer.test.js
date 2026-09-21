@@ -28,4 +28,18 @@ describe("sticky composer — hold stays on-screen", () => {
     expect(css).toMatch(/\.convo-audio/);
     expect(css).toMatch(/\.tts-wave\[hidden\]/);
   });
+
+  it("hides the collecting sheet panel and the caption under Hold to talk", () => {
+    const app = readFileSync("src/app.js", "utf8");
+    const css = readFileSync("src/style.css", "utf8");
+    expect(app).toContain('id="hold"');
+    expect(app).toContain('id="thread"');
+    expect(app).toContain("Hold to talk");
+    expect(app).not.toContain("Sheet progress");
+    expect(app).not.toContain('id="hold-hint"');
+    expect(app).not.toContain('id="sheet-list"');
+    expect(app).not.toContain('id="sheet-drawer"');
+    expect(css).not.toMatch(/\.sheet-drawer/);
+    expect(css).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+  });
 });
