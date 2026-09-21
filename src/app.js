@@ -220,6 +220,7 @@ function layout(conversational) {
             <button type="button" id="conversational" class="mode-toggle${conversational ? " is-active" : ""}" aria-pressed="${conversational ? "true" : "false"}">
               Conversational mode
             </button>
+            <button type="button" id="send-transcript" class="send-transcript">Send transcript</button>
             <button type="button" id="convo-audio" class="convo-audio" data-on="${conversational ? "true" : "false"}" aria-pressed="${conversational ? "true" : "false"}" title="${conversational ? "Turn conversational mode off" : "Turn conversational mode on"}" aria-label="${conversational ? "Turn conversational mode off" : "Turn conversational mode on"}">
               ${speakerIcon(conversational)}
             </button>
@@ -231,7 +232,6 @@ function layout(conversational) {
             <span class="hold-dot"></span>
             <span class="hold-label">Hold to talk</span>
           </button>
-          <button type="button" id="send-transcript" class="send-transcript">Send transcript</button>
           <p id="send-note" class="send-note" hidden></p>
         </form>
       </section>
