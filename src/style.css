@@ -211,6 +211,12 @@ button, input { font: inherit; }
   font-weight: 700;
   cursor: pointer;
 }
+.mode-row .mode-toggle,
+.mode-row .send-transcript {
+  align-self: center;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
 .send-transcript.sent, .qa-copy.copied {
   border-style: solid;
   background: #d9eddf;
@@ -237,8 +243,10 @@ button, input { font: inherit; }
 }
 .mode-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 8px 10px;
+  max-width: 100%;
 }
 .convo-audio {
   display: inline-flex;

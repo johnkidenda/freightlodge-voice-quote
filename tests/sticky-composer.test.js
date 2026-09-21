@@ -19,6 +19,23 @@ describe("sticky composer — hold stays on-screen", () => {
     expect(css).not.toMatch(/max-height:\s*calc\(100dvh - 390px\)/);
   });
 
+  it("puts Send transcript on the same row, immediately right of Conversational mode", () => {
+    const app = readFileSync("src/app.js", "utf8");
+    const css = readFileSync("src/style.css", "utf8");
+    const rowStart = app.indexOf('class="mode-row"');
+    const rowEnd = app.indexOf('id="hold"');
+    const row = app.slice(rowStart, rowEnd);
+    const modeAt = row.indexOf('id="conversational"');
+    const sendAt = row.indexOf('id="send-transcript"');
+    expect(modeAt).toBeGreaterThan(-1);
+    expect(sendAt).toBeGreaterThan(modeAt);
+    expect(row.indexOf('id="convo-audio"')).toBeGreaterThan(sendAt);
+    expect(app.indexOf('id="send-transcript"')).toBeLessThan(app.indexOf('id="hold"'));
+    expect(css).toMatch(/\.mode-row\s*\{[^}]*display:\s*flex/);
+    expect(css).toMatch(/\.mode-row\s*\{[^}]*flex-wrap:\s*wrap/);
+    expect(css).toMatch(/\.mode-row \.send-transcript\s*\{[^}]*white-space:\s*nowrap/);
+  });
+
   it("conversational icons sit next to the mode button", () => {
     const app = readFileSync("src/app.js", "utf8");
     const css = readFileSync("src/style.css", "utf8");

@@ -8,7 +8,7 @@ Live form (after this change is on `main` / GitHub Pages):
 
 Local copy: `public/exfresso-pilot/index.html` (also served from `npm run preview` at `/exfresso-pilot/`).
 
-Pilot UI label: **Exfresso pilot v0.26**. Shared app `VERSION` is **0.31**.
+Pilot UI label: **Exfresso pilot v0.26**. Shared app `VERSION` is **0.32**.
 
 The default runner arm is **hybrid**: script-fill mapped sheet fields (ZIP, weight, pieces, date, email). Jev Choice runs only when visible controls are an ambiguous fork (Continue vs Get rates, similar labels, optional decoys). Gate blocks only on those forks. `--arm jev` is the old every-step Choice. `--arm heuristic` never calls TypeSafe.
 
