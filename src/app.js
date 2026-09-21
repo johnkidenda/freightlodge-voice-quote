@@ -199,7 +199,6 @@ function layout(conversational) {
         </div>
       </div>
       <div class="top-actions">
-        <span id="app-version" class="version-chip" title="${escapeHtml(formatAppVersionTitle(getAppVersion(), getAppCommit()))}">${escapeHtml(formatAppVersionLabel(getAppVersion()))}</span>
         <span id="status-pill" class="pill">collecting</span>
         <button type="button" id="reset" class="textish">New sheet</button>
       </div>
