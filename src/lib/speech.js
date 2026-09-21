@@ -134,7 +134,14 @@ export function createTranscriptBuffer() {
     },
     applyResults(results) {
       if (!holding) return { preview: "", commit: null };
-      slots = normalizeRecognitionResults(results);
+      const next = normalizeRecognitionResults(results);
+      const hasText = next.some((row) => String(row.transcript || "").trim());
+      const kept =
+        Boolean(prior) || slots.some((row) => String(row.transcript || "").trim());
+      // Mobile stop() sometimes emits an empty final and drops the only
+      // hypothesis we had for a short phrase.
+      if (!hasText && kept) return snap();
+      slots = next;
       return snap();
     },
     onSpeechResult({ interim = "", finalText = "", results } = {}) {
@@ -159,12 +166,18 @@ export function createTranscriptBuffer() {
       prior = collapseProgressiveFinals([prior, rebuilt.finals, rebuilt.interim]);
       slots = [];
     },
+    /**
+     * Commit the best hypothesis, including interim text.
+     * Web Speech on mobile Safari/Chrome often never sets isFinal for a
+     * short answer ("one pallet") before stop()/onend, so finals-only
+     * release dropped the utterance and the sheet never advanced.
+     */
     release() {
-      const { finals } = snap();
+      const { preview } = snap();
       holding = false;
       slots = [];
       prior = "";
-      return finals;
+      return preview;
     },
     isHolding() {
       return holding;
@@ -175,12 +188,15 @@ export function createTranscriptBuffer() {
 export function createHoldToTalk({
   onPreview,
   onCommit,
+  onEmpty,
   onError,
   onStart,
   onEnd,
   onTailStart,
   Recognition,
   tailMs = RELEASE_TAIL_MS,
+  endFallbackMs = 500,
+  restartDelayMs = 120,
   schedule = (fn, ms) => setTimeout(fn, ms),
   unschedule = (id) => clearTimeout(id),
 } = {}) {
@@ -206,6 +222,37 @@ export function createHoldToTalk({
   let active = false;
   let phase = "idle";
   let tailTimer = null;
+  let settleTimer = null;
+  let restartTimer = null;
+  let settled = false;
+  let surfacedError = false;
+
+  function clearNamed(which) {
+    if (which === "tail" && tailTimer != null) {
+      unschedule(tailTimer);
+      tailTimer = null;
+    }
+    if (which === "settle" && settleTimer != null) {
+      unschedule(settleTimer);
+      settleTimer = null;
+    }
+    if (which === "restart" && restartTimer != null) {
+      unschedule(restartTimer);
+      restartTimer = null;
+    }
+  }
+
+  function detach(target) {
+    if (!target) return;
+    try {
+      target.onresult = null;
+      target.onerror = null;
+      target.onend = null;
+      target.onspeechend = null;
+    } catch {
+      /* ignore */
+    }
+  }
 
   function attachHandlers() {
     rec.lang = "en-US";
@@ -224,50 +271,67 @@ export function createHoldToTalk({
     };
     rec.onerror = (e) => {
       if (e.error === "aborted" || e.error === "no-speech") return;
+      surfacedError = true;
       onError?.(e);
     };
     rec.onend = () => {
       active = false;
       if (phase === "holding" || phase === "tailing") {
         buffer.checkpoint();
-        tryStart();
+        // Keep listening only while the user is still holding. During the
+        // release tail, a fresh session can append a second copy of a short
+        // phrase. The tail timer commits what we already sealed.
+        if (phase !== "holding") return;
+        clearNamed("restart");
+        restartTimer = schedule(() => {
+          restartTimer = null;
+          if (phase !== "holding") return;
+          tryStart({ automatic: true });
+        }, restartDelayMs);
         return;
       }
       commitNow();
     };
   }
 
-  function tryStart() {
+  function tryStart({ automatic = false } = {}) {
     rec = new Ctor();
     attachHandlers();
     try {
       rec.start();
       active = true;
     } catch (err) {
+      // iOS throws if start() runs inside onend. The delayed restart retries.
+      // Don't surface that as a chat error while the user is still holding.
+      if (automatic) return;
+      surfacedError = true;
       onError?.(err);
     }
   }
 
-  function clearTail() {
-    if (tailTimer != null) {
-      unschedule(tailTimer);
-      tailTimer = null;
-    }
-  }
-
   function commitNow() {
+    if (settled) return;
+    settled = true;
+    clearNamed("tail");
+    clearNamed("settle");
+    clearNamed("restart");
     const text = buffer.release();
     phase = "idle";
+    const ending = rec;
     rec = null;
     active = false;
+    detach(ending);
     onEnd?.();
     if (text) onCommit?.(text);
+    else if (!surfacedError) onEmpty?.();
   }
 
   function finalizeStop() {
-    clearTail();
+    clearNamed("tail");
     if (phase !== "holding" && phase !== "tailing") return;
+    buffer.checkpoint();
     phase = "idle";
+    clearNamed("restart");
     if (!rec) {
       commitNow();
       return;
@@ -276,17 +340,29 @@ export function createHoldToTalk({
       rec.stop();
     } catch {
       commitNow();
+      return;
+    }
+    // Mobile Safari often never fires onend after stop().
+    if (!settled) {
+      clearNamed("settle");
+      settleTimer = schedule(() => {
+        settleTimer = null;
+        commitNow();
+      }, endFallbackMs);
     }
   }
 
   function start() {
     if (phase === "holding") return;
     if (phase === "tailing") {
-      clearTail();
+      clearNamed("tail");
+      clearNamed("settle");
       phase = "holding";
       onStart?.();
       return;
     }
+    settled = false;
+    surfacedError = false;
     phase = "holding";
     buffer.start();
     onStart?.();
@@ -304,17 +380,22 @@ export function createHoldToTalk({
   }
 
   function abort() {
-    clearTail();
+    clearNamed("tail");
+    clearNamed("settle");
+    clearNamed("restart");
+    settled = true;
     phase = "idle";
     buffer.release();
-    if (!rec) return;
+    const ending = rec;
+    rec = null;
+    active = false;
+    detach(ending);
+    if (!ending) return;
     try {
-      rec.abort();
+      ending.abort();
     } catch {
       /* ignore */
     }
-    rec = null;
-    active = false;
   }
 
   return {

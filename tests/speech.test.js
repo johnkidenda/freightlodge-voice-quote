@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createSession, handleUtterance } from "../src/lib/dialog.js";
 import {
   RELEASE_TAIL_MS,
   collapseProgressiveFinals,
@@ -121,6 +122,7 @@ function fakeRecognition() {
   };
   Recognition.prototype.stop = function stop() {
     this.stopped = true;
+    if (this.suppressEnd) return;
     this.onend?.();
   };
   Recognition.prototype.abort = function abort() {
@@ -210,6 +212,156 @@ describe("release tail keeps listening before commit", () => {
     expect(commits).toEqual([]);
     timers[0].fn();
     expect(commits).toEqual(["three pieces"]);
+  });
+});
+
+/**
+ * Smoke (phone, after the pieces prompt "How many pieces or pallets?"):
+ * 1. Tap or hold, say "one pallet", release. User bubble shows that text.
+ *    Pieces on the sheet becomes 1 and the agent asks the next missing field.
+ * 2. Repeat with "1 pallet" (new sheet or a fresh pieces ask). Same result.
+ * 3. If the mic hears nothing, the agent says to say it again or type it.
+ */
+describe("short mobile answers are not dropped", () => {
+  it("releases an interim-only phrase instead of discarding it", () => {
+    const buf = createTranscriptBuffer();
+    buf.start();
+    buf.applyResults([{ transcript: "one pallet", isFinal: false }]);
+    expect(buf.release()).toBe("one pallet");
+  });
+
+  it("keeps the phrase when a later result is an empty final", () => {
+    const buf = createTranscriptBuffer();
+    buf.start();
+    buf.applyResults([{ transcript: "one pallet", isFinal: false }]);
+    buf.applyResults([{ transcript: "", isFinal: true }]);
+    expect(buf.release()).toBe("one pallet");
+  });
+
+  it("commits one pallet when stop ends the recognizer without a final", () => {
+    const { Recognition, instances } = fakeRecognition();
+    const timers = [];
+    const commits = [];
+    const talk = createHoldToTalk({
+      Recognition,
+      onCommit: (text) => commits.push(text),
+      schedule: (fn, ms) => {
+        const id = timers.length + 1;
+        timers.push({ id, fn, ms });
+        return id;
+      },
+      unschedule: (id) => {
+        const i = timers.findIndex((t) => t.id === id);
+        if (i >= 0) timers.splice(i, 1);
+      },
+    });
+    talk.start();
+    instances[0].emit([{ transcript: "one pallet", isFinal: false }]);
+    talk.stop();
+    expect(commits).toEqual([]);
+    timers[0].fn();
+    expect(commits).toEqual(["one pallet"]);
+  });
+
+  it("commits the sealed phrase when stop never fires onend", () => {
+    const { Recognition, instances } = fakeRecognition();
+    const timers = [];
+    const commits = [];
+    const talk = createHoldToTalk({
+      Recognition,
+      endFallbackMs: 500,
+      onCommit: (text) => commits.push(text),
+      schedule: (fn, ms) => {
+        const id = timers.length + 1;
+        timers.push({ id, fn, ms });
+        return id;
+      },
+      unschedule: (id) => {
+        const i = timers.findIndex((t) => t.id === id);
+        if (i >= 0) timers.splice(i, 1);
+      },
+    });
+    talk.start();
+    instances[0].emit([{ transcript: "1 pallet", isFinal: false }]);
+    instances[0].suppressEnd = true;
+    talk.stop();
+    timers[0].fn();
+    expect(commits).toEqual([]);
+    const fallback = timers.find((t) => t.ms === 500);
+    expect(fallback).toBeTruthy();
+    fallback.fn();
+    expect(commits).toEqual(["1 pallet"]);
+  });
+
+  it("asks for a retry when the listen ends with no words", () => {
+    const { Recognition } = fakeRecognition();
+    const timers = [];
+    const empties = [];
+    const commits = [];
+    const talk = createHoldToTalk({
+      Recognition,
+      onCommit: (text) => commits.push(text),
+      onEmpty: () => empties.push("empty"),
+      schedule: (fn, ms) => {
+        const id = timers.length + 1;
+        timers.push({ id, fn, ms });
+        return id;
+      },
+      unschedule: (id) => {
+        const i = timers.findIndex((t) => t.id === id);
+        if (i >= 0) timers.splice(i, 1);
+      },
+    });
+    talk.start();
+    talk.stop();
+    timers[0].fn();
+    expect(commits).toEqual([]);
+    expect(empties).toEqual(["empty"]);
+  });
+});
+
+describe("pieces prompt accepts a short pallet count", () => {
+  function piecesSession() {
+    const session = createSession({ id: "one-pallet" });
+    session.sheet.lanes.origin.postal_code = "78731";
+    session.sheet.lanes.origin.state = "TX";
+    session.sheet.lanes.destination.postal_code = "60101";
+    session.sheet.lanes.destination.state = "IL";
+    session.sheet.freight.total_weight_lbs = 100;
+    session.sheet.freight.commodity = "clay pots";
+    session.awaiting = "pieces";
+    return session;
+  }
+
+  it.each(["one pallet", "1 pallet", "a pallet"])("parks 1 piece from %s and advances", (text) => {
+    const result = handleUtterance(piecesSession(), text);
+    expect(result.session.sheet.freight.pieces).toBe(1);
+    expect(result.session.awaiting).not.toBe("pieces");
+    expect(result.session.sheet.freight.commodity).toBe("clay pots");
+    expect(result.session.sheet.freight.total_weight_lbs).toBe(100);
+    expect(result.session.sheet.lanes.origin.postal_code).toBe("78731");
+    expect(result.session.sheet.lanes.destination.postal_code).toBe("60101");
+  });
+
+  it("still advances when Jev marks the short answer low-parse", () => {
+    const result = handleUtterance(piecesSession(), "one pallet", {
+      jev: {
+        on: true,
+        needsClarify: true,
+        lowParse: true,
+        parseScore: 0.2,
+        clarifyNoul: 0.9,
+        ready: false,
+        readyNoul: 0.1,
+        touchedSlots: ["pieces"],
+        primarySlot: "pieces",
+        focus: "pieces",
+      },
+    });
+    expect(result.session.sheet.freight.pieces).toBe(1);
+    expect(result.session.awaiting).not.toBe("pieces");
+    expect(result.jev.needsClarify).toBe(false);
+    expect(result.jev.gateOverride).toBe("min-fields");
   });
 });
 
