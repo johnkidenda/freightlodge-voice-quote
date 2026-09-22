@@ -217,16 +217,18 @@ function layout(conversational) {
             <button type="submit" class="send">Send</button>
           </div>
           <div class="mode-row">
-            <button type="button" id="conversational" class="mode-toggle${conversational ? " is-active" : ""}" aria-pressed="${conversational ? "true" : "false"}">
-              Conversational mode
-            </button>
+            <div class="mode-cluster">
+              <button type="button" id="conversational" class="mode-toggle${conversational ? " is-active" : ""}" aria-pressed="${conversational ? "true" : "false"}">
+                Conversational mode
+              </button>
+              <button type="button" id="convo-audio" class="convo-audio" data-on="${conversational ? "true" : "false"}" aria-pressed="${conversational ? "true" : "false"}" title="${conversational ? "Turn conversational mode off" : "Turn conversational mode on"}" aria-label="${conversational ? "Turn conversational mode off" : "Turn conversational mode on"}">
+                ${speakerIcon(conversational)}
+              </button>
+              <span id="tts-wave" class="tts-wave" hidden aria-hidden="true" title="Speaking">
+                <span></span><span></span><span></span><span></span>
+              </span>
+            </div>
             <button type="button" id="send-transcript" class="send-transcript">Send transcript</button>
-            <button type="button" id="convo-audio" class="convo-audio" data-on="${conversational ? "true" : "false"}" aria-pressed="${conversational ? "true" : "false"}" title="${conversational ? "Turn conversational mode off" : "Turn conversational mode on"}" aria-label="${conversational ? "Turn conversational mode off" : "Turn conversational mode on"}">
-              ${speakerIcon(conversational)}
-            </button>
-            <span id="tts-wave" class="tts-wave" hidden aria-hidden="true" title="Speaking">
-              <span></span><span></span><span></span><span></span>
-            </span>
           </div>
           <button type="button" id="hold" class="hold ${speechOk ? "" : "is-disabled"}" aria-pressed="false">
             <span class="hold-dot"></span>

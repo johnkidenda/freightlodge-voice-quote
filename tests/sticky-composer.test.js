@@ -19,21 +19,28 @@ describe("sticky composer — hold stays on-screen", () => {
     expect(css).not.toMatch(/max-height:\s*calc\(100dvh - 390px\)/);
   });
 
-  it("puts Send transcript on the same row, immediately right of Conversational mode", () => {
+  it("puts mode and speaker together, with Send transcript on the right", () => {
     const app = readFileSync("src/app.js", "utf8");
     const css = readFileSync("src/style.css", "utf8");
     const rowStart = app.indexOf('class="mode-row"');
     const rowEnd = app.indexOf('id="hold"');
     const row = app.slice(rowStart, rowEnd);
     const modeAt = row.indexOf('id="conversational"');
+    const audioAt = row.indexOf('id="convo-audio"');
     const sendAt = row.indexOf('id="send-transcript"');
-    expect(modeAt).toBeGreaterThan(-1);
-    expect(sendAt).toBeGreaterThan(modeAt);
-    expect(row.indexOf('id="convo-audio"')).toBeGreaterThan(sendAt);
+    const clusterAt = row.indexOf('class="mode-cluster"');
+    expect(clusterAt).toBeGreaterThan(-1);
+    expect(modeAt).toBeGreaterThan(clusterAt);
+    expect(audioAt).toBeGreaterThan(modeAt);
+    expect(sendAt).toBeGreaterThan(audioAt);
+    expect(row.indexOf("</div>", audioAt)).toBeLessThan(sendAt);
     expect(app.indexOf('id="send-transcript"')).toBeLessThan(app.indexOf('id="hold"'));
     expect(css).toMatch(/\.mode-row\s*\{[^}]*display:\s*flex/);
     expect(css).toMatch(/\.mode-row\s*\{[^}]*flex-wrap:\s*wrap/);
+    expect(css).toMatch(/\.mode-row\s*\{[^}]*justify-content:\s*space-between/);
+    expect(css).toMatch(/\.mode-cluster\s*\{[^}]*flex-wrap:\s*nowrap/);
     expect(css).toMatch(/\.mode-row \.send-transcript\s*\{[^}]*white-space:\s*nowrap/);
+    expect(css).toMatch(/\.mode-row \.send-transcript\s*\{[^}]*margin-left:\s*auto/);
   });
 
   it("conversational icons sit next to the mode button", () => {
