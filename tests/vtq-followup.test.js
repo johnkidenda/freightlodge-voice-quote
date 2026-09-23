@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { readClientUi } from "./client-ui.js";
 import { extractSlots, takePlace } from "../src/lib/extract.js";
 import { createSession, handleUtterance, PROMPTS } from "../src/lib/dialog.js";
 import { composeConversationalReply, presentAgentReply } from "../src/lib/conversational.js";
@@ -120,7 +121,7 @@ describe("email ask recommends typing", () => {
   });
 
   it("composer highlights the typed field when awaiting email", () => {
-    const app = readFileSync("src/app.js", "utf8");
+    const app = readClientUi();
     const css = readFileSync("src/style.css", "utf8");
     expect(app).toContain("is-email-ask");
     expect(app).toContain("Type the email address…");

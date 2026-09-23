@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { readClientUi } from "./client-ui.js";
 
 describe("sticky composer — hold stays on-screen", () => {
   it("phone column scrolls only the thread; header + composer stay put", () => {
@@ -20,7 +21,7 @@ describe("sticky composer — hold stays on-screen", () => {
   });
 
   it("puts mode and speaker together, with Send transcript on the right", () => {
-    const app = readFileSync("src/app.js", "utf8");
+    const app = readClientUi();
     const css = readFileSync("src/style.css", "utf8");
     const rowStart = app.indexOf('class="mode-row"');
     const rowEnd = app.indexOf('id="hold"');
@@ -44,7 +45,7 @@ describe("sticky composer — hold stays on-screen", () => {
   });
 
   it("conversational icons sit next to the mode button", () => {
-    const app = readFileSync("src/app.js", "utf8");
+    const app = readClientUi();
     const css = readFileSync("src/style.css", "utf8");
     expect(app).toContain("id=\"convo-audio\"");
     expect(app).toContain("speakerIcon");
@@ -54,7 +55,7 @@ describe("sticky composer — hold stays on-screen", () => {
   });
 
   it("hides the collecting sheet panel and the caption under Hold to talk", () => {
-    const app = readFileSync("src/app.js", "utf8");
+    const app = readClientUi();
     const css = readFileSync("src/style.css", "utf8");
     expect(app).toContain('id="hold"');
     expect(app).toContain('id="thread"');

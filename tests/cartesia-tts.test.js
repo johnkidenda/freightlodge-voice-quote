@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
+import { readClientUi } from "./client-ui.js";
 import {
   buildCartesiaTtsBody,
   CARTESIA_TTS_MODEL,
@@ -130,7 +131,7 @@ describe("client TTS helper", () => {
   });
 
   it("client sources omit CARTESIA_API_KEY and Cartesia STT sockets", () => {
-    const app = readFileSync("src/app.js", "utf8");
+    const app = readClientUi();
     const tts = readFileSync("src/lib/cartesia-tts.js", "utf8");
     expect(app).not.toMatch(/CARTESIA_API_KEY\s*=/);
     expect(tts).not.toMatch(/CARTESIA_API_KEY\s*=/);

@@ -6,7 +6,13 @@ import { CONVERSATIONAL_GREETING, composeConversationalReply, presentAgentReply 
 const BANNED =
   /I won[’']t (guess|invent|pad|look( one)? up|treat)|I can[’']t invent|won’t silently invert|won’t pad or guess|won’t treat ASAP/i;
 
-const REPLY_FILES = ["src/lib/dialog.js", "src/lib/conversational.js", "src/app.js"];
+const REPLY_FILES = [
+  "src/lib/dialog.js",
+  "src/lib/conversational.js",
+  "src/app.js",
+  "src/ui/layout.js",
+  "src/ui/quote-card.js",
+];
 
 describe("reply copy purge — ask, don’t narrate the guardrail", () => {
   it("user-facing reply sources drop won’t-invent / won’t-guess phrasing", () => {

@@ -2,14 +2,15 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { nextVersion } from "../scripts/bump-version.mjs";
 import { formatAppVersionLabel, formatAppVersionTitle } from "../src/lib/app-version.js";
+import { readClientUi } from "./client-ui.js";
 
 describe("app version 0.XX", () => {
-  it("VERSION is 0.33 for this ship (32 merged + this PR)", () => {
+  it("VERSION is 0.34 for this ship", () => {
     const raw = readFileSync("VERSION", "utf8").trim();
-    expect(raw).toBe("0.33");
-    expect(formatAppVersionLabel(raw)).toBe("v0.33");
-    expect(formatAppVersionTitle("0.33", "abc1234")).toBe("v0.33 (abc1234)");
-    expect(formatAppVersionTitle("0.33", "dev")).toBe("v0.33");
+    expect(raw).toBe("0.34");
+    expect(formatAppVersionLabel(raw)).toBe("v0.34");
+    expect(formatAppVersionTitle("0.34", "abc1234")).toBe("v0.34 (abc1234)");
+    expect(formatAppVersionTitle("0.34", "dev")).toBe("v0.34");
   });
 
   it("bump script increments 0.XX by one", () => {
@@ -18,7 +19,7 @@ describe("app version 0.XX", () => {
   });
 
   it("footer shows the version and the header does not", () => {
-    const app = readFileSync("src/app.js", "utf8");
+    const app = readClientUi();
     const header = app.slice(app.indexOf("<header"), app.indexOf("</header>"));
     expect(header).not.toContain("app-version");
     expect(header).not.toContain("version-chip");
