@@ -20,7 +20,7 @@ export function formatSessionTranscript(messages, session) {
   const origin = formatPlace(sheet?.lanes?.origin) || "—";
   const dest = formatPlace(sheet?.lanes?.destination) || "—";
   const weight = sheet?.freight?.total_weight_lbs ?? "—";
-  const pieces = sheet?.freight?.pieces ?? "—";
+  const pieces = formatPieces(sheet?.freight);
   const awaiting = session?.awaiting || "—";
   const status = sheet?.status || "—";
   const accessorials = (sheet?.pickup?.accessorials || []).join(", ") || "—";
@@ -41,6 +41,14 @@ export function formatSessionTranscript(messages, session) {
     `Awaiting: ${awaiting}`,
     `Status: ${status}`,
   ].join("\n");
+}
+
+function formatPieces(freight) {
+  if (freight?.pieces == null || freight.pieces === "") return "—";
+  if (freight.piece_unit === "pallets" || freight.piece_unit === "pieces") {
+    return `${freight.pieces} ${freight.piece_unit}`;
+  }
+  return String(freight.pieces);
 }
 
 /** @deprecated alias */

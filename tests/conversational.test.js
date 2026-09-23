@@ -48,7 +48,7 @@ describe("conversational reply copy", () => {
 
     const pieces = handleUtterance(createSession({ id: "warm-pcs" }), "3 pallets");
     const piecesWarm = presentAgentReply(pieces, true);
-    expect(piecesWarm).toMatch(/3 pieces/);
+    expect(piecesWarm).toMatch(/3 pallets/);
     expect(piecesWarm).not.toMatch(/\bpcs\b/);
 
     const weight = handleUtterance(createSession({ id: "warm-lb" }), "1200 pounds");
@@ -78,9 +78,11 @@ describe("conversational reply copy", () => {
   it("does not invent a rate or ZIP on ready / OOS", () => {
     const ready = composeConversationalReply({
       ready: true,
-      formalReply: "Sheet’s complete. Handing this to Freight Ops’ Exfresso runner for a live rate — no booking from here.",
+      formalReply: "Sheet’s complete. Handing this to Freight Ops’ Exfresso runner for a live rate.",
     });
-    expect(ready).toMatch(/no booking/i);
+    expect(ready).toMatch(/sheet is complete/i);
+    expect(ready).toMatch(/live rate/i);
+    expect(ready).not.toMatch(/no booking|book or pay/i);
     expect(ready).not.toMatch(/\$\d/);
     const oos = composeConversationalReply({
       outOfScope: true,

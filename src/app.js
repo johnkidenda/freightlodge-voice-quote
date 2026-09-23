@@ -226,8 +226,8 @@ function handoffAssistantLine(sheet) {
   if (sheet.status === "quoted") {
     const to = sheet.contact?.email;
     return to
-      ? `Quote is back. I can email it to ${to} from ${MAIL_FROM} — tap Email me this quote. No book or pay from this app.`
-      : "Quote is back. No book or pay from this app — email it if you want a copy.";
+      ? `Quote is back. I can email it to ${to} from ${MAIL_FROM} — tap Email me this quote.`
+      : "Quote is back. Email it if you want a copy.";
   }
   if (sheet.status === "out_of_scope") {
     return sheet.out_of_scope_reason || "Out of scope. No fake rate.";

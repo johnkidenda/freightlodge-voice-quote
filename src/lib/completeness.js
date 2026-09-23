@@ -85,9 +85,18 @@ export function hasMinimumLane(sheet) {
   );
 }
 
+export function hasPieceUnit(freight) {
+  return freight?.piece_unit === "pallets" || freight?.piece_unit === "pieces";
+}
+
+export function hasPieceCount(freight) {
+  return Number.isInteger(freight?.pieces) && freight.pieces >= 1;
+}
+
 export const SLOT_ORDER = [
   "origin_zip",
   "dest_zip",
+  "piece_unit",
   "pieces",
   "measure",
   "commodity",
@@ -104,7 +113,8 @@ export function nextRequiredSlot(sheet, { askedAccessorials = false } = {}) {
   if (destMissingOrGarbage && !isValidZip(dest?.postal_code)) return "dest_zip";
   if (!isValidZip(origin?.postal_code)) return "origin_zip";
   if (!isValidZip(dest?.postal_code)) return "dest_zip";
-  if (!Number.isInteger(sheet?.freight?.pieces) || sheet.freight.pieces < 1) return "pieces";
+  if (!hasPieceCount(sheet?.freight) && !hasPieceUnit(sheet?.freight)) return "piece_unit";
+  if (!hasPieceCount(sheet?.freight)) return "pieces";
   if (!hasMeasure(sheet?.freight)) return "measure";
   if (typeof sheet?.freight?.commodity !== "string" || !sheet.freight.commodity.trim()) {
     return "commodity";

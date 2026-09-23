@@ -111,8 +111,7 @@ export function buildQuoteEmailHtml({ fields, subject, mailFrom, logoUrl, logoCr
                 </tr>
                 <tr>
                   <td style="padding:12px 0 8px;">
-                    <p style="margin:0;color:#5c6573;font-size:13px;">This MVP stops at quote — no book or pay.</p>
-                    <p style="margin:6px 0 0;color:#5c6573;font-size:13px;">Sent from ${escapeHtml(mailFrom)}. Request ${escapeHtml(String(fields.requestId))}.</p>
+                    <p style="margin:0;color:#5c6573;font-size:13px;">Sent from ${escapeHtml(mailFrom)}. Request ${escapeHtml(String(fields.requestId))}.</p>
                   </td>
                 </tr>
               </table>

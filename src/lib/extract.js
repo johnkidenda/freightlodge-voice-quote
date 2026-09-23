@@ -497,6 +497,8 @@ function extractLane(raw, extracted, awaiting, sheetCities = {}) {
     if (other) extracted.destination.postal_code = other;
   }
 
+  applyDistinctZipPair(raw, extracted, uniqueZips, { cityLabeled, originZipLocked, destZipLocked });
+
   const incomplete = detectIncompleteZip(raw, awaiting);
   if (incomplete && zipTokens.length === 0) extracted.flags.incompleteZip = incomplete;
 
@@ -515,6 +517,55 @@ function extractLane(raw, extracted, awaiting, sheetCities = {}) {
       extracted.origin.state = loneState;
     }
   }
+}
+
+function zip5Of(code) {
+  return String(code || "").replace(/\D/g, "").slice(0, 5);
+}
+
+/**
+ * Two distinct 5-digit ZIPs in one utterance fill both ends.
+ * Cues: from/to, origin/dest labels, otherwise first then second.
+ * An "or" between ZIPs is a choice, not a lane, unless from/to or origin/dest is explicit.
+ * City-labeled stutter pairing is left to the caller.
+ */
+function distinctZipPair(raw, uniqueZips) {
+  const fromTo = raw.match(/\bfrom\s+(\d{5}(?:-\d{4})?)\s+(?:to|through)\s+(\d{5}(?:-\d{4})?)\b/i);
+  if (fromTo && zip5Of(fromTo[1]) !== zip5Of(fromTo[2])) {
+    return { origin: fromTo[1], dest: fromTo[2] };
+  }
+
+  const originLabeled = raw.match(
+    /\b(?:origin|pickup|pick\s*up|ship\s+from)(?:\s+zip|\s+zipcode|\s+zip\s*code)?(?:\s+is)?[:\s]+(\d{5}(?:-\d{4})?)/i,
+  );
+  const destLabeled = raw.match(
+    /\b(?:destination|dest|deliver(?:y|ed)?\s+to|ship\s+to)(?:\s+zip|\s+zipcode|\s+zip\s*code)?(?:\s+is)?[:\s]+(\d{5}(?:-\d{4})?)/i,
+  );
+  if (originLabeled && destLabeled && zip5Of(originLabeled[1]) !== zip5Of(destLabeled[1])) {
+    return { origin: originLabeled[1], dest: destLabeled[1] };
+  }
+
+  const toPair = raw.match(/\b(\d{5}(?:-\d{4})?)\s+(?:to|through)\s+(\d{5}(?:-\d{4})?)\b/i);
+  if (toPair && zip5Of(toPair[1]) !== zip5Of(toPair[2])) {
+    return { origin: toPair[1], dest: toPair[2] };
+  }
+
+  if (/\bor\b/i.test(raw)) return null;
+  if (
+    uniqueZips.length >= 2 &&
+    zip5Of(uniqueZips[0]) !== zip5Of(uniqueZips[uniqueZips.length - 1])
+  ) {
+    return { origin: uniqueZips[0], dest: uniqueZips[uniqueZips.length - 1] };
+  }
+  return null;
+}
+
+function applyDistinctZipPair(raw, extracted, uniqueZips, { cityLabeled, originZipLocked, destZipLocked }) {
+  if (cityLabeled) return;
+  const pair = distinctZipPair(raw, uniqueZips);
+  if (!pair || zip5Of(pair.origin) === zip5Of(pair.dest)) return;
+  if (!originZipLocked || !extracted.origin.postal_code) extracted.origin.postal_code = pair.origin;
+  if (!destZipLocked || !extracted.destination.postal_code) extracted.destination.postal_code = pair.dest;
 }
 
 function isLabeledLaneZipPhrase(raw) {
@@ -831,17 +882,51 @@ export function kgToPounds(kg) {
   return Math.round(n * KG_TO_LB);
 }
 
+const PIECE_UNIT_WORD = String.raw`(?:pallets?|skids?|pieces?|pcs|box(?:es)?|crates?|cartons?)`;
+
+function mapPieceUnit(word) {
+  const w = String(word || "").toLowerCase();
+  if (/^pallets?$/.test(w) || /^skids?$/.test(w)) return "pallets";
+  if (/^(?:pieces?|pcs|box(?:es)?|crates?|cartons?)$/.test(w)) return "pieces";
+  return null;
+}
+
 function extractPieces(raw, extracted, awaiting) {
   const unit = raw.match(
-    /\b(\d{1,4}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|a|an)\s+(pallets?|pieces?|pcs|skids?|boxes?|crates?|cartons?|handling units?)\b/i,
+    new RegExp(
+      String.raw`\b(\d{1,4}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|a|an)\s+(${PIECE_UNIT_WORD}|handling units?)\b`,
+      "i",
+    ),
   );
   if (unit) {
     extracted.freight.pieces = parseCount(unit[1]);
+    const mapped = mapPieceUnit(unit[2]);
+    if (mapped) extracted.freight.piece_unit = mapped;
     return;
   }
   const labeled = raw.match(/\b(?:pieces?|handling units?|qty|quantity)(?:\s+is|\s*[:=])?\s*(\d{1,4})\b/i);
   if (labeled) {
     extracted.freight.pieces = Number(labeled[1]);
+    if (/^pieces?/i.test(labeled[0])) extracted.freight.piece_unit = "pieces";
+    return;
+  }
+  const unitOnly = raw.match(
+    new RegExp(
+      String.raw`^\s*(?:(?:we(?:'re| are)|i(?:'m| am)|it(?:'s| is)|they(?:'re| are)|shipping|ship)\s+)?(${PIECE_UNIT_WORD})\s*[.!]?\s*$`,
+      "i",
+    ),
+  );
+  if (unitOnly) {
+    const mapped = mapPieceUnit(unitOnly[1]);
+    if (mapped) extracted.freight.piece_unit = mapped;
+    return;
+  }
+  if (awaiting === "piece_unit") {
+    const named = raw.match(new RegExp(String.raw`\b(${PIECE_UNIT_WORD})\b`, "i"));
+    if (named) {
+      const mapped = mapPieceUnit(named[1]);
+      if (mapped) extracted.freight.piece_unit = mapped;
+    }
     return;
   }
   if (awaiting === "pieces") {
@@ -1340,6 +1425,7 @@ export function mergeExtracted(sheet, extracted) {
   }
   const f = extracted.freight || {};
   if (Number.isInteger(f.pieces) && f.pieces >= 1) next.freight.pieces = f.pieces;
+  if (f.piece_unit === "pallets" || f.piece_unit === "pieces") next.freight.piece_unit = f.piece_unit;
   if (typeof f.total_weight_lbs === "number" && f.total_weight_lbs > 0) {
     next.freight.total_weight_lbs = f.total_weight_lbs;
   }

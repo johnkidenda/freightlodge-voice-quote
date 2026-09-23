@@ -22,8 +22,8 @@ function mockEls() {
   };
 }
 
-describe("Quoted layout — composer and tip do not overlay the quote card", () => {
-  it("hides the sticky composer and voice tip only while status is quoted", () => {
+describe("Quoted layout — typed row stays off the quote card; Hold and Send transcript stay up", () => {
+  it("hides the voice tip only while status is quoted and keeps the composer mounted", () => {
     const els = mockEls();
     applyQuotedLayout(els, "collecting");
     expect(els.chatCol.classList.has("is-quoted")).toBe(false);
@@ -33,9 +33,9 @@ describe("Quoted layout — composer and tip do not overlay the quote card", () 
 
     applyQuotedLayout(els, "quoted");
     expect(els.chatCol.classList.has("is-quoted")).toBe(true);
-    expect(els.form.hidden).toBe(true);
+    expect(els.form.hidden).toBe(false);
     expect(els.tip.hidden).toBe(true);
-    expect(els.form.attrs["aria-hidden"]).toBe("true");
+    expect(els.form.attrs["aria-hidden"]).toBe("false");
 
     applyQuotedLayout(els, "collecting");
     expect(els.chatCol.classList.has("is-quoted")).toBe(false);
@@ -53,12 +53,18 @@ describe("Quoted layout — composer and tip do not overlay the quote card", () 
     }
   });
 
-  it("CSS takes the sticky panel and tip out of layout when Quoted", () => {
+  it("CSS hides the tip, typed row, sample, and mode cluster when Quoted, not Hold or Send transcript", () => {
     const css = readFileSync("src/style.css", "utf8");
-    expect(css).toMatch(/\.chat-col\.is-quoted\s+\.composer/);
     expect(css).toMatch(/\.chat-col\.is-quoted\s+\.voice-tip/);
+    expect(css).toMatch(/\.chat-col\.is-quoted\s+\.input-row/);
+    expect(css).toMatch(/\.chat-col\.is-quoted\s+#sample/);
+    expect(css).toMatch(/\.chat-col\.is-quoted\s+\.mode-cluster/);
     expect(css).toMatch(/\.composer\[hidden\]/);
     expect(css).toMatch(/\.voice-tip\[hidden\]/);
+    expect(css).toMatch(/\.chat-col\.is-quoted\s+\.composer\s*\{[^}]*display:\s*flex/);
+    expect(css).not.toMatch(/\.chat-col\.is-quoted\s+\.composer\s*,/);
+    expect(css).not.toMatch(/\.chat-col\.is-quoted\s+#hold[^{]*\{[^}]*display:\s*none/);
+    expect(css).not.toMatch(/\.chat-col\.is-quoted\s+\.send-transcript[^{]*\{[^}]*display:\s*none/);
     expect(css).toMatch(/\.chat-col\.is-quoted\s+#quote-card:not\(:empty\)\s*\{[^}]*max-height:\s*none/);
   });
 
@@ -66,6 +72,9 @@ describe("Quoted layout — composer and tip do not overlay the quote card", () 
     const app = readClientUi();
     expect(app).toContain('id="voice-tip"');
     expect(app).toContain("applyQuotedLayout");
+    expect(app).toContain('id="hold"');
+    expect(app).toContain('id="send-transcript"');
+    expect(app).toContain("Hold to talk");
     expect(app).toContain("Email me this quote");
     expect(app).toContain('id="reset"');
     expect(app).toContain("New sheet");

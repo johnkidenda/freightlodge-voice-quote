@@ -4,7 +4,7 @@
  * builds candidates, interprets answers, and formats the QA stamp.
  */
 
-import { hasMeasure, hasMinimumLane, isValidEmail, isValidZip } from "./completeness.js";
+import { hasMeasure, hasMinimumLane, hasPieceCount, hasPieceUnit, isValidEmail, isValidZip } from "./completeness.js";
 
 export const JEV_THRESHOLD = 0.5;
 export const JEV_MODEL = "jev-latest";
@@ -17,6 +17,7 @@ export const JEV_SLOT_IDS = Object.freeze([
   "dest_city",
   "dest_zip",
   "weight",
+  "piece_unit",
   "pieces",
   "commodity",
   "pickup_date",
@@ -30,6 +31,7 @@ export const JEV_SLOT_CRITERIA = Object.freeze({
   dest_city: "This utterance names or corrects the destination city (not a ZIP).",
   dest_zip: "This utterance gives or corrects the destination 5-digit ZIP.",
   weight: "This utterance gives total weight (pounds or kg) or dims/class as the measure.",
+  piece_unit: "This utterance says the handling unit is pallets or pieces (skids are pallets; boxes, crates, cartons, and pcs are pieces). Not the count by itself.",
   pieces: "This utterance gives piece or pallet count.",
   commodity: "This utterance names the commodity / what is shipping.",
   pickup_date: "This utterance gives a pickup day or YYYY-MM-DD.",
@@ -43,6 +45,7 @@ export const JEV_SLOT_TO_AWAITING = Object.freeze({
   dest_city: "dest_zip",
   dest_zip: "dest_zip",
   weight: "measure",
+  piece_unit: "piece_unit",
   pieces: "pieces",
   commodity: "commodity",
   pickup_date: "pickup_date",
@@ -55,6 +58,7 @@ export const JEV_CLARIFY_SCRIPTS = Object.freeze({
   origin_zip: "I want to double-check origin. What’s the five-digit origin ZIP?",
   dest_zip: "I want to double-check destination. What’s the five-digit destination ZIP?",
   measure: "I want to double-check the measure. Total weight in pounds, or L×W×H, or a known NMFC class?",
+  piece_unit: "Are you shipping pallets or pieces?",
   pieces: "I want to double-check piece count. How many pieces or pallets?",
   commodity: "I want to double-check the commodity. What is shipping?",
   pickup_date: "I want to double-check pickup. Say a day (today, tomorrow, Friday) or YYYY-MM-DD.",
@@ -250,7 +254,8 @@ export function awaitingSlotIsFilled(sheet, slot, { askedAccessorials = false } 
   if (slot === "origin_zip") return isValidZip(sheet?.lanes?.origin?.postal_code);
   if (slot === "dest_zip") return isValidZip(sheet?.lanes?.destination?.postal_code);
   if (slot === "measure") return hasMeasure(sheet?.freight);
-  if (slot === "pieces") return Number.isInteger(sheet?.freight?.pieces) && sheet.freight.pieces >= 1;
+  if (slot === "piece_unit") return hasPieceUnit(sheet?.freight);
+  if (slot === "pieces") return hasPieceCount(sheet?.freight);
   if (slot === "commodity") {
     return typeof sheet?.freight?.commodity === "string" && Boolean(sheet.freight.commodity.trim());
   }
