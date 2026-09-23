@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { nextVersion } from "../scripts/bump-version.mjs";
 import { formatAppVersionLabel, formatAppVersionTitle } from "../src/lib/app-version.js";
+import { readClientUi } from "./client-ui.js";
 
 describe("app version 0.XX", () => {
   it("VERSION is 0.33 for this ship (32 merged + this PR)", () => {
@@ -18,7 +19,7 @@ describe("app version 0.XX", () => {
   });
 
   it("footer shows the version and the header does not", () => {
-    const app = readFileSync("src/app.js", "utf8");
+    const app = readClientUi();
     const header = app.slice(app.indexOf("<header"), app.indexOf("</header>"));
     expect(header).not.toContain("app-version");
     expect(header).not.toContain("version-chip");

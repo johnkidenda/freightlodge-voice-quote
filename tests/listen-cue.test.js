@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { readClientUi } from "./client-ui.js";
 import {
   LISTEN_CUE_DEBOUNCE_MS,
   LISTEN_CUE_FREQ_HZ,
@@ -116,7 +117,7 @@ describe("listen-start cue", () => {
     expect(Array.isArray(LISTEN_HAPTIC_PATTERN)).toBe(false);
     expect(pulseListenHaptic({ vibrateFn, now: 50 })).toBe(false);
 
-    const app = readFileSync("src/app.js", "utf8");
+    const app = readClientUi();
     expect(app).toMatch(/from "\.\/lib\/listen-cue\.js"/);
     expect(app).toContain("primeListenCue()");
     expect(app).toContain("playListenCue()");

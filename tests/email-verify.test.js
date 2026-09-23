@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { readClientUi } from "./client-ui.js";
 import { describe, expect, it } from "vitest";
 import {
   CODE_TTL_MS,
@@ -425,7 +426,7 @@ describe("quote path does not require a verify challenge", () => {
   });
 
   it("app happy path never starts verify or assigns mailto for quote mail", () => {
-    const app = readFileSync("src/app.js", "utf8");
+    const app = readClientUi();
     expect(app).not.toContain("startEmailVerify");
     expect(app).not.toContain("confirmEmailVerify");
     expect(app).not.toContain("holdUnverifiedEmail");

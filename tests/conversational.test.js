@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { createSession, handleUtterance, openingMessage, PROMPTS } from "../src/lib/dialog.js";
 import {
   CONVERSATIONAL_GREETING,
@@ -8,7 +9,7 @@ import {
   saveConversationalMode,
 } from "../src/lib/conversational.js";
 import { CARTESIA_TTS_VOICE_ID, CARTESIA_TTS_VOICE_NAME, getTtsProxyUrl } from "../src/lib/cartesia-tts.js";
-import { readFileSync } from "node:fs";
+import { readClientUi } from "./client-ui.js";
 
 function memoryStorage(initial = {}) {
   const data = { ...initial };
@@ -108,7 +109,7 @@ describe("conversational TTS wiring", () => {
       "https://freightlodge-stt-token.example.workers.dev/tts",
     );
     expect(getTtsProxyUrl({ VITE_STT_TOKEN_URL: "" })).toBe("");
-    const app = readFileSync("src/app.js", "utf8");
+    const app = readClientUi();
     expect(app).toContain("Conversational mode");
     expect(app).toContain("presentAgentReply");
     expect(app).toContain("speakAgentReply");

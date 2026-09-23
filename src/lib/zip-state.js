@@ -351,14 +351,6 @@ export function stateDisplayName(code) {
   return STATE_CODE_TO_NAME[key] || key || "";
 }
 
-export function overlayPlace(sheetPlace, extractedPlace) {
-  return {
-    city: extractedPlace?.city || sheetPlace?.city || null,
-    state: extractedPlace?.state || sheetPlace?.state || null,
-    postal_code: sheetPlace?.postal_code || null,
-  };
-}
-
 /**
  * ZIP vs known/implied state on the SAME side only.
  * Origin ZIP vs origin city/state; dest ZIP vs dest city/state.

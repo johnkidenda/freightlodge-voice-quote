@@ -117,72 +117,8 @@ export function nextRequiredSlot(sheet, { askedAccessorials = false } = {}) {
   return null;
 }
 
-export function progressItems(sheet, { askedAccessorials = false } = {}) {
-  return [
-    {
-      key: "origin",
-      label: "Origin ZIP",
-      done: isValidZip(sheet.lanes?.origin?.postal_code),
-      value: formatPlace(sheet.lanes?.origin),
-    },
-    {
-      key: "dest",
-      label: "Destination ZIP",
-      done: isValidZip(sheet.lanes?.destination?.postal_code),
-      value: formatPlace(sheet.lanes?.destination),
-    },
-    {
-      key: "pieces",
-      label: "Pieces",
-      done: Number.isInteger(sheet.freight?.pieces) && sheet.freight.pieces >= 1,
-      value: sheet.freight?.pieces != null ? String(sheet.freight.pieces) : null,
-    },
-    {
-      key: "measure",
-      label: "Weight / dims / class",
-      done: hasMeasure(sheet.freight),
-      value: formatMeasure(sheet.freight),
-    },
-    {
-      key: "commodity",
-      label: "Commodity",
-      done: Boolean(sheet.freight?.commodity),
-      value: sheet.freight?.commodity || null,
-    },
-    {
-      key: "pickup",
-      label: "Pickup date",
-      done: Boolean(sheet.pickup?.date),
-      value: sheet.pickup?.date || null,
-    },
-    {
-      key: "accessorials",
-      label: "Accessorials",
-      done: askedAccessorials || (sheet.pickup?.accessorials?.length > 0),
-      value: (sheet.pickup?.accessorials || []).join(", ") || (askedAccessorials ? "none" : null),
-    },
-    {
-      key: "email",
-      label: "Contact email",
-      done: isValidEmail(sheet.contact?.email),
-      value: sheet.contact?.email || null,
-    },
-  ];
-}
-
 export function formatPlace(place) {
   if (!place) return null;
   const parts = [place.city, place.state, place.postal_code].filter(Boolean);
   return parts.length ? parts.join(", ") : null;
-}
-
-export function formatMeasure(freight) {
-  if (!freight) return null;
-  const bits = [];
-  if (freight.total_weight_lbs) bits.push(`${freight.total_weight_lbs} lb`);
-  if (hasCompleteDims(freight.dims)) {
-    bits.push(`${freight.dims.length_in}×${freight.dims.width_in}×${freight.dims.height_in} in`);
-  }
-  if (freight.freight_class) bits.push(`class ${freight.freight_class}`);
-  return bits.length ? bits.join(" · ") : null;
 }

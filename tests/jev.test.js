@@ -476,6 +476,11 @@ describe("transcript + source guards", () => {
   it("keeps TYPESAFE_API_KEY off the Pages client and out of VITE_*", () => {
     const files = [
       "src/app.js",
+      "src/ui/layout.js",
+      "src/ui/chrome.js",
+      "src/ui/mic.js",
+      "src/ui/quote-card.js",
+      "src/lib/quote-email-html.js",
       "src/lib/jev.js",
       "src/lib/jev-core.js",
       "src/lib/jev-action-core.js",

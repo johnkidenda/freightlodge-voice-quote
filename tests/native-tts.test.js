@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readClientUi } from "./client-ui.js";
 import {
   DEFAULT_TTS_ENGINE,
   TTS_ENGINES,
@@ -112,7 +112,7 @@ describe("native speak / cancel", () => {
 
 describe("speaker toggle + voice control in the app", () => {
   it("speaker button toggles conversational mode; Cartesia Voice toggle is gone", () => {
-    const app = readFileSync("src/app.js", "utf8");
+    const app = readClientUi();
     expect(app).toContain('id="convo-audio"');
     expect(app).toContain("toggleConversational");
     expect(app).toMatch(/els\.convoAudio\?\.addEventListener\("click", toggleConversational\)/);

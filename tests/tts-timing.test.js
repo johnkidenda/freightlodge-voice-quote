@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
+import { readClientUi } from "./client-ui.js";
 import { formatSessionTranscript, sendSessionTranscript } from "../src/lib/transcript.js";
 import { createSession } from "../src/lib/dialog.js";
 import { STT_PROVIDER_IDS } from "../src/lib/stt-providers.js";
@@ -13,7 +13,7 @@ function jsonRes(body, ok = true) {
 
 describe("TTS timing removed from UI and Send transcript", () => {
   it("app has no latency chip or Voice: Browser/Cartesia toggle", () => {
-    const app = readFileSync("src/app.js", "utf8");
+    const app = readClientUi();
     expect(app).not.toContain('id="tts-latency"');
     expect(app).not.toContain("formatTtsLatencyReadout");
     expect(app).not.toContain("onTtsStats");

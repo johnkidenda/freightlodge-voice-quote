@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { readClientUi } from "./client-ui.js";
 import {
   PILOT_LABEL,
   demoSheet93ce7a5d,
@@ -230,7 +231,7 @@ describe("heuristic picker (no TypeSafe)", () => {
 
 describe("voice quote stays on its own path", () => {
   it("does not register the pilot form inside the VTQ app bundle", () => {
-    const app = readFileSync("src/app.js", "utf8");
+    const app = readClientUi();
     expect(app).not.toContain("exfresso-pilot");
     expect(app).toContain("fetchJevDecision");
     const dialog = readFileSync("src/lib/dialog.js", "utf8");

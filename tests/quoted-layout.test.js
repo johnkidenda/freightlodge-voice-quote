@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { applyQuotedLayout } from "../src/app.js";
+import { readClientUi } from "./client-ui.js";
 
 function mockEls() {
   const classes = new Set();
@@ -62,7 +63,7 @@ describe("Quoted layout — composer and tip do not overlay the quote card", () 
   });
 
   it("markup still has the quote Email button and New sheet reset", () => {
-    const app = readFileSync("src/app.js", "utf8");
+    const app = readClientUi();
     expect(app).toContain('id="voice-tip"');
     expect(app).toContain("applyQuotedLayout");
     expect(app).toContain("Email me this quote");
