@@ -18,7 +18,7 @@ function readDefined(name, fallback) {
 }
 
 export function getAppVersion() {
-  return readDefined("VITE_APP_VERSION", "0.33") || "0.33";
+  return readDefined("VITE_APP_VERSION", "0.34") || "0.34";
 }
 
 export function getAppCommit() {
