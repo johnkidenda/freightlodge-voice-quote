@@ -12,6 +12,13 @@ function placeLine(place) {
   return [place?.city, place?.state, place?.postal_code].filter(Boolean).join(", ");
 }
 
+function piecesLine(freight) {
+  const n = freight?.pieces;
+  if (n == null || n === "") return "—";
+  if (freight.piece_unit === "pallets" || freight.piece_unit === "pieces") return `${n} ${freight.piece_unit}`;
+  return String(n);
+}
+
 export function quoteEmailFields(sheet) {
   const q = sheet?.quote_result || {};
   const origin = placeLine(sheet?.lanes?.origin);
@@ -23,7 +30,7 @@ export function quoteEmailFields(sheet) {
     origin: origin || "—",
     dest: dest || "—",
     lane: `${origin || "—"} → ${dest || "—"}`,
-    pieces: sheet?.freight?.pieces ?? "—",
+    pieces: piecesLine(sheet?.freight),
     weight: `${sheet?.freight?.total_weight_lbs ?? "—"} lb`,
     commodity: sheet?.freight?.commodity || "—",
     pickup: sheet?.pickup?.date || "—",
@@ -74,7 +81,6 @@ export function formatQuoteEmail(sheet) {
       `Pickup: ${fields.pickup}`,
       `Request: ${fields.requestId}`,
       "",
-      "This MVP stops at quote — no book or pay.",
       `Sent from ${MAIL_FROM}.`,
     ].join("\n"),
   };

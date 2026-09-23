@@ -194,7 +194,7 @@ describe("dialog uses Jev for slot focus + gates", () => {
     });
     const result = handleUtterance(session, "30030", { jev });
     expect(result.session.sheet.lanes.destination.postal_code).toBe("30030");
-    expect(result.session.awaiting).toBe("pieces");
+    expect(result.session.awaiting).toBe("piece_unit");
     expect(result.jev.focus).toBeNull();
     expect(result.jev.needsClarify).toBe(false);
     expect(result.reply).toMatch(/pieces|pallets/i);

@@ -33,6 +33,7 @@ const PROMPTS = {
   incomplete_zip: "That ZIP is short — I need a full 5-digit ZIP.",
   incomplete_dest_zip: "That destination ZIP is short — I need a full 5-digit ZIP.",
   incomplete_origin_zip: "That origin ZIP is short — I need a full 5-digit ZIP.",
+  piece_unit: "Are you shipping pallets or pieces?",
   pieces: "How many pieces or pallets?",
   measure:
     "I need a real measure: total weight in pounds, or L×W×H in inches, or the NMFC class if you already know it.",
@@ -460,13 +461,17 @@ export function handleUtterance(session, text, { now, jev } = {}) {
 
   if (
     isAlreadyMentioned(raw) &&
-    awaitingNow === "pieces" &&
+    (awaitingNow === "pieces" || awaitingNow === "piece_unit") &&
     typeof sheet.freight?.total_weight_lbs === "number" &&
     sheet.freight.total_weight_lbs > 0 &&
-    !extracted.freight?.pieces
+    !extracted.freight?.pieces &&
+    !extracted.freight?.piece_unit
   ) {
-    const reply = "Got the weight; I still need piece/pallet count.";
-    return finish(session, sheet, askedAccessorials, reply, extracted, "pieces", undefined, lastBareZip, zipClarify, jevAfter, accessorialClarify);
+    const reply =
+      awaitingNow === "piece_unit"
+        ? "Got the weight; are you shipping pallets or pieces?"
+        : "Got the weight; I still need piece/pallet count.";
+    return finish(session, sheet, askedAccessorials, reply, extracted, awaitingNow, undefined, lastBareZip, zipClarify, jevAfter, accessorialClarify);
   }
 
   if (extracted.flags.incompleteZip) {
@@ -504,7 +509,7 @@ export function handleUtterance(session, text, { now, jev } = {}) {
 
   if (isReadyForQuote(sheet) && askedAccessorials && !jevBlocksReady) {
     sheet = { ...sheet, status: "ready_for_quote", error_reason: null, out_of_scope_reason: null };
-    const reply = "Sheet’s complete. Handing this to Freight Ops’ Exfresso runner for a live rate — no booking from here.";
+    const reply = "Sheet’s complete. Handing this to Freight Ops’ Exfresso runner for a live rate.";
     return {
       session: {
         ...session,
@@ -568,7 +573,14 @@ function promptFor(slot, sheet) {
     const label = placeLabel(sheet.lanes?.origin);
     if (label) return `I have origin ${label}. What’s the origin ZIP?`;
   }
+  if (slot === "pieces") return piecesCountPrompt(sheet);
   return slot ? PROMPTS[slot] : PROMPTS.email;
+}
+
+function piecesCountPrompt(sheet) {
+  if (sheet?.freight?.piece_unit === "pallets") return "How many pallets?";
+  if (sheet?.freight?.piece_unit === "pieces") return "How many pieces?";
+  return PROMPTS.pieces;
 }
 
 function zip5(code) {
@@ -696,7 +708,17 @@ function acknowledge(extracted, sheet) {
     else if (extracted.destination?.city) bits.push(`dest ${extracted.destination.city} (still need ZIP)`);
     else if (extracted.destination?.state) bits.push(`dest ${extracted.destination.state} (still need ZIP)`);
   }
-  if (extracted.freight?.pieces) bits.push(`${extracted.freight.pieces} pcs`);
+  if (extracted.freight?.pieces) {
+    const unit =
+      extracted.freight.piece_unit === "pallets"
+        ? "pallets"
+        : extracted.freight.piece_unit === "pieces"
+          ? "pieces"
+          : "pcs";
+    bits.push(`${extracted.freight.pieces} ${unit}`);
+  } else if (extracted.freight?.piece_unit === "pallets" || extracted.freight?.piece_unit === "pieces") {
+    bits.push(extracted.freight.piece_unit);
+  }
   if (extracted.flags?.weightFromKg && extracted.freight?.total_weight_lbs) {
     bits.push(`${extracted.flags.weightKg} kg (~${extracted.freight.total_weight_lbs} lb)`);
   } else if (extracted.freight?.total_weight_lbs) {

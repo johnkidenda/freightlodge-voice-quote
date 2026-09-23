@@ -168,11 +168,19 @@ button, input { font: inherit; }
   flex-direction: column;
   gap: 8px;
 }
-.chat-col.is-quoted .composer,
 .composer[hidden],
 .chat-col.is-quoted .voice-tip,
-.voice-tip[hidden] {
+.voice-tip[hidden],
+.chat-col.is-quoted .input-row,
+.chat-col.is-quoted #sample,
+.chat-col.is-quoted .mode-cluster,
+.input-row[hidden],
+#sample[hidden],
+.mode-cluster[hidden] {
   display: none;
+}
+.chat-col.is-quoted .composer {
+  display: flex;
 }
 .input-row { display: flex; gap: 8px; }
 .input-row input {

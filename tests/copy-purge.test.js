@@ -59,6 +59,13 @@ describe("reply copy purge — ask, don’t narrate the guardrail", () => {
     expect(presentAgentReply(result, true)).not.toMatch(BANNED);
   });
 
+  it("end-of-flow copy drops booking disclaimers", () => {
+    const booking = /no booking from here|no book or pay/i;
+    for (const file of [...REPLY_FILES, "index.html", "src/lib/email.js", "src/lib/quote-email-html.js"]) {
+      expect(readFileSync(file, "utf8"), file).not.toMatch(booking);
+    }
+  });
+
   it("conversational incomplete ZIP / dest / measure stay short and positive", () => {
     expect(
       composeConversationalReply({

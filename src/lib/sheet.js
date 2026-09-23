@@ -40,6 +40,7 @@ export function emptySheet({ id, now } = {}) {
     },
     freight: {
       pieces: null,
+      piece_unit: null,
       total_weight_lbs: null,
       dims: null,
       freight_class: null,

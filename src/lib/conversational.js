@@ -62,7 +62,12 @@ function conversationalHave(sheet, extracted) {
   else if (extracted?.destination?.city && !isGarbagePlace(extracted.destination)) {
     bits.push(extracted.destination.city);
   }
-  if (extracted?.freight?.pieces) bits.push(`${extracted.freight.pieces} pieces`);
+  if (extracted?.freight?.pieces) {
+    const unit = extracted.freight.piece_unit === "pallets" ? "pallets" : "pieces";
+    bits.push(`${extracted.freight.pieces} ${unit}`);
+  } else if (extracted?.freight?.piece_unit === "pallets" || extracted?.freight?.piece_unit === "pieces") {
+    bits.push(extracted.freight.piece_unit);
+  }
   if (extracted?.freight?.total_weight_lbs) bits.push(`${extracted.freight.total_weight_lbs} pounds`);
   if (extracted?.freight?.commodity) bits.push(extracted.freight.commodity);
   if (extracted?.pickup?.date) bits.push(`pickup ${extracted.pickup.date}`);
@@ -106,7 +111,12 @@ function conversationalAsk(sheet, awaiting) {
       ? `I have ${destCity}. What’s the destination ZIP?`
       : "Where is this going? I need a city, state, or ZIP.";
   }
-  if (awaiting === "pieces") return "How many pieces or pallets?";
+  if (awaiting === "piece_unit") return "Are you shipping pallets or pieces?";
+  if (awaiting === "pieces") {
+    if (sheet?.freight?.piece_unit === "pallets") return "How many pallets?";
+    if (sheet?.freight?.piece_unit === "pieces") return "How many pieces?";
+    return "How many pieces or pallets?";
+  }
   if (awaiting === "measure") {
     return "What’s the total weight in pounds? Or dims or class if you already know them.";
   }
@@ -136,7 +146,7 @@ export function composeConversationalReply({
 } = {}) {
   if (outOfScope) return formalReply || "";
   if (ready) {
-    return "The sheet is complete. I’ll hand this to Freight Ops for a live rate — no booking from here.";
+    return "The sheet is complete. I’ll hand this to Freight Ops for a live rate.";
   }
   if (extracted?.flags?.zipClarify) return formalReply || "";
   if (extracted?.flags?.incompleteZip) {

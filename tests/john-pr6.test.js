@@ -118,8 +118,9 @@ describe("PR6 phone — already mentioned weight", () => {
     const result = handleUtterance(session, "I already mentioned it");
     expect(result.session.sheet.freight.total_weight_lbs).toBe(2205);
     expect(result.session.sheet.freight.pieces).toBeNull();
-    expect(result.session.awaiting).toBe("pieces");
+    expect(result.session.sheet.freight.piece_unit).toBeNull();
+    expect(result.session.awaiting).toBe("piece_unit");
     expect(result.reply).toMatch(/got the weight/i);
-    expect(result.reply).toMatch(/piece|pallet/i);
+    expect(result.reply).toMatch(/pallets or pieces/i);
   });
 });
