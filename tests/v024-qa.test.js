@@ -31,62 +31,82 @@ function jevAccessorialsClarify() {
   });
 }
 
-describe("v0.24 inside accessorial sticks (7af26cfd)", () => {
-  it("bare inside / inside delivery / inside pickup park and do not re-ask extras", () => {
-    for (const utterance of ["inside", "Inside", "inside.", "I need inside", "inside delivery", "inside pickup"]) {
+describe("inside without a side asks which end", () => {
+  it("bare inside does not fill both ends", () => {
+    for (const utterance of ["inside", "Inside", "inside.", "I need inside"]) {
       const extracted = extractSlots(utterance, { awaiting: "accessorials" });
-      expect(extracted.pickup.accessorials?.length, utterance).toBeGreaterThan(0);
-      if (/deliv/i.test(utterance)) {
-        expect(extracted.pickup.accessorials, utterance).toContain("inside_delivery");
-        expect(extracted.pickup.accessorials, utterance).not.toContain("inside_pickup");
-      } else if (/pick/i.test(utterance)) {
-        expect(extracted.pickup.accessorials, utterance).toContain("inside_pickup");
-        expect(extracted.pickup.accessorials, utterance).not.toContain("inside_delivery");
-      } else {
-        expect(extracted.pickup.accessorials, utterance).toEqual(
-          expect.arrayContaining(["inside_pickup", "inside_delivery"]),
-        );
-      }
-
+      expect(extracted.pickup.accessorials || [], utterance).toEqual([]);
+      expect(extracted.flags.ambiguousInside, utterance).toBe(true);
       const result = handleUtterance(readyForAccessorials(`in-${utterance}`), utterance);
-      expect(result.session.sheet.pickup.accessorials.length, utterance).toBeGreaterThan(0);
-      expect(result.session.askedAccessorials, utterance).toBe(true);
-      expect(result.session.awaiting, utterance).not.toBe("accessorials");
+      expect(result.session.sheet.pickup.accessorials, utterance).toEqual([]);
+      expect(result.session.awaiting, utterance).toBe("inside_side");
+      expect(result.reply, utterance).toBe("Inside pickup, inside delivery, or both?");
+      expect(result.reply, utterance).not.toMatch(/\u2014/);
       expect(result.reply, utterance).not.toMatch(/Any (accessorials|extras)/i);
-      expect(nextRequiredSlot(result.session.sheet, { askedAccessorials: result.session.askedAccessorials })).not.toBe(
-        "accessorials",
-      );
+      expect(presentAgentReply(result, true)).toBe("Inside pickup, inside delivery, or both?");
     }
   });
 
-  it("saying inside twice keeps the accessorials and does not re-ask extras", () => {
-    let result = handleUtterance(readyForAccessorials("in-twice"), "inside");
-    expect(result.session.sheet.pickup.accessorials).toEqual(
-      expect.arrayContaining(["inside_pickup", "inside_delivery"]),
-    );
+  it.each([
+    ["pickup", ["inside_pickup"]],
+    ["delivery", ["inside_delivery"]],
+    ["both", ["inside_pickup", "inside_delivery"]],
+    ["both ends", ["inside_pickup", "inside_delivery"]],
+    ["origin", ["inside_pickup"]],
+    ["destination", ["inside_delivery"]],
+  ])("answer %s fills %j and moves on", (answer, ids) => {
+    const asked = handleUtterance(readyForAccessorials(`side-${answer}`), "inside");
+    const result = handleUtterance(asked.session, answer);
+    expect(result.session.sheet.pickup.accessorials).toEqual(expect.arrayContaining(ids));
+    expect(result.session.sheet.pickup.accessorials).toHaveLength(ids.length);
     expect(result.session.awaiting).toBe("email");
+    expect(result.session.accessorialClarify).toBeNull();
+    expect(result.reply).not.toMatch(/Inside pickup, inside delivery/);
+  });
+
+  it("explicit inside delivery / pickup / both fill directly", () => {
+    const cases = [
+      ["inside delivery", ["inside_delivery"]],
+      ["inside pickup", ["inside_pickup"]],
+      ["inside both", ["inside_pickup", "inside_delivery"]],
+      ["inside origin", ["inside_pickup"]],
+      ["inside destination", ["inside_delivery"]],
+    ];
+    for (const [utterance, ids] of cases) {
+      const extracted = extractSlots(utterance, { awaiting: "accessorials" });
+      expect(extracted.flags.ambiguousInside, utterance).toBeFalsy();
+      expect(extracted.pickup.accessorials, utterance).toEqual(expect.arrayContaining(ids));
+      const result = handleUtterance(readyForAccessorials(`direct-${utterance}`), utterance);
+      expect(result.session.sheet.pickup.accessorials, utterance).toEqual(expect.arrayContaining(ids));
+      expect(result.session.sheet.pickup.accessorials, utterance).toHaveLength(ids.length);
+      expect(result.session.awaiting, utterance).toBe("email");
+      expect(result.reply, utterance).not.toMatch(/Inside pickup, inside delivery/);
+      expect(nextRequiredSlot(result.session.sheet, { askedAccessorials: true })).not.toBe("accessorials");
+    }
+  });
+
+  it("saying inside again still asks which side", () => {
+    let result = handleUtterance(readyForAccessorials("in-twice"), "inside");
+    expect(result.session.awaiting).toBe("inside_side");
     result = handleUtterance(result.session, "inside");
-    expect(result.session.sheet.pickup.accessorials).toEqual(
-      expect.arrayContaining(["inside_pickup", "inside_delivery"]),
-    );
-    expect(result.session.askedAccessorials).toBe(true);
-    expect(result.session.awaiting).not.toBe("accessorials");
-    expect(result.reply).not.toMatch(/Any (accessorials|extras)/i);
+    expect(result.session.sheet.pickup.accessorials).toEqual([]);
+    expect(result.session.awaiting).toBe("inside_side");
+    expect(result.reply).toBe("Inside pickup, inside delivery, or both?");
     expect(result.reply).not.toMatch(/didn[’']t catch a new accessorials/i);
   });
 
-  it("Jev does not re-ask extras after inside is parked", () => {
+  it("asks which side even when Jev wants a generic accessorials clarify", () => {
     const result = handleUtterance(readyForAccessorials("in-jev"), "inside", {
       jev: jevAccessorialsClarify(),
     });
-    expect(result.session.sheet.pickup.accessorials).toEqual(
-      expect.arrayContaining(["inside_pickup", "inside_delivery"]),
-    );
-    expect(result.jev.needsClarify).toBe(false);
-    expect(result.jev.focus).toBeNull();
-    expect(result.session.awaiting).toBe("email");
+    expect(result.session.sheet.pickup.accessorials).toEqual([]);
+    expect(result.session.awaiting).toBe("inside_side");
+    expect(result.reply).toBe("Inside pickup, inside delivery, or both?");
     expect(result.reply).not.toMatch(/double-check accessorials|Any (accessorials|extras)/i);
-    expect(result.session.jevLog.at(-1)).toMatch(/Jev: on /);
+    const parked = handleUtterance(result.session, "delivery");
+    expect(parked.session.sheet.pickup.accessorials).toEqual(["inside_delivery"]);
+    expect(parked.session.awaiting).toBe("email");
+    expect(parked.reply).not.toMatch(/double-check accessorials|Any (accessorials|extras)/i);
   });
 });
 
@@ -104,14 +124,10 @@ describe("v0.24 liftgate clarifies side without wiping inside (7af26cfd)", () =>
   });
 
   it("inside then liftgate keeps inside and asks pickup vs delivery", () => {
-    let result = handleUtterance(readyForAccessorials("lg-1"), "inside");
-    expect(result.session.sheet.pickup.accessorials).toEqual(
-      expect.arrayContaining(["inside_pickup", "inside_delivery"]),
-    );
+    let result = handleUtterance(readyForAccessorials("lg-1"), "inside delivery");
+    expect(result.session.sheet.pickup.accessorials).toEqual(["inside_delivery"]);
     result = handleUtterance(result.session, "liftgate");
-    expect(result.session.sheet.pickup.accessorials).toEqual(
-      expect.arrayContaining(["inside_pickup", "inside_delivery"]),
-    );
+    expect(result.session.sheet.pickup.accessorials).toEqual(["inside_delivery"]);
     expect(result.session.sheet.pickup.accessorials).not.toContain("liftgate_pickup");
     expect(result.session.sheet.pickup.accessorials).not.toContain("liftgate_delivery");
     expect(result.session.awaiting).toBe("liftgate_side");
@@ -120,23 +136,25 @@ describe("v0.24 liftgate clarifies side without wiping inside (7af26cfd)", () =>
     expect(result.reply).not.toMatch(/\u2014/);
 
     const pickup = handleUtterance(result.session, "pickup");
-    expect(pickup.session.sheet.pickup.accessorials).toEqual(
-      expect.arrayContaining(["inside_pickup", "inside_delivery", "liftgate_pickup"]),
-    );
+    expect(pickup.session.sheet.pickup.accessorials).toEqual(["inside_delivery", "liftgate_pickup"]);
+    expect(pickup.session.sheet.pickup.accessorials).not.toContain("inside_pickup");
     expect(pickup.session.sheet.pickup.accessorials).not.toContain("liftgate_delivery");
     expect(pickup.session.awaiting).toBe("email");
     expect(pickup.session.accessorialClarify).toBeNull();
   });
 
-  it("same-turn inside and liftgate accumulates inside and still clarifies liftgate", () => {
+  it("same-turn inside and liftgate asks inside first, then liftgate", () => {
     const result = handleUtterance(readyForAccessorials("lg-same"), "inside and liftgate");
-    expect(result.session.sheet.pickup.accessorials).toEqual(
+    expect(result.session.sheet.pickup.accessorials).toEqual([]);
+    expect(result.session.awaiting).toBe("inside_side");
+    expect(result.reply).toBe("Inside pickup, inside delivery, or both?");
+    const insides = handleUtterance(result.session, "both");
+    expect(insides.session.sheet.pickup.accessorials).toEqual(
       expect.arrayContaining(["inside_pickup", "inside_delivery"]),
     );
-    expect(result.session.sheet.pickup.accessorials).not.toContain("liftgate_pickup");
-    expect(result.session.sheet.pickup.accessorials).not.toContain("liftgate_delivery");
-    expect(result.session.awaiting).toBe("liftgate_side");
-    const both = handleUtterance(result.session, "both");
+    expect(insides.session.sheet.pickup.accessorials).not.toContain("liftgate_pickup");
+    expect(insides.session.awaiting).toBe("liftgate_side");
+    const both = handleUtterance(insides.session, "both");
     expect(both.session.sheet.pickup.accessorials).toEqual(
       expect.arrayContaining(["inside_pickup", "inside_delivery", "liftgate_pickup", "liftgate_delivery"]),
     );

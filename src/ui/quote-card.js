@@ -9,7 +9,7 @@ export function quoteCard(sheet, emailNote) {
     return `<section class="card oos">
       <h3>Out of scope</h3>
       <p>${escapeHtml(sheet.out_of_scope_reason || "This lane is not domestic LTL.")}</p>
-      <p class="muted">Honest handoff — no fake rate.</p>
+      <p class="muted">Honest handoff. No fake rate.</p>
     </section>`;
   }
   if (sheet.status === "error") {

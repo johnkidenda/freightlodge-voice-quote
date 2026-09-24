@@ -24,15 +24,15 @@ describe("reply copy purge — ask, don’t narrate the guardrail", () => {
 
   it("formal + conversational greetings ask for the origin ZIP in plain CS", () => {
     expect(openingMessage()).toBe(
-      "Freight Lodge — I’ll take a US domestic LTL quote. Where are we picking up? What’s the origin ZIP?",
+      "Freight Lodge. I’ll take a US domestic LTL quote. Where are we picking up? What’s the origin ZIP?",
     );
     expect(CONVERSATIONAL_GREETING).toBe(
-      "Hi — I can take a US domestic LTL quote. Where are we picking up? What’s the origin ZIP?",
+      "Hi. I can take a US domestic LTL quote. Where are we picking up? What’s the origin ZIP?",
     );
     expect(PROMPTS.origin_zip).toBe("What’s the origin ZIP? City is helpful, but I need the five-digit ZIP.");
     expect(PROMPTS.dest_zip).toBe("Where is this going? I need a destination city, state, or ZIP.");
     expect(PROMPTS.pickup_date).toBe("What pickup date works? Say a day or YYYY-MM-DD.");
-    expect(PROMPTS.incomplete_zip).toBe("That ZIP is short — I need a full 5-digit ZIP.");
+    expect(PROMPTS.incomplete_zip).toBe("That ZIP is short. I need a full 5-digit ZIP.");
   });
 
   it("metro clarify and ASAP still ask without the old won’t-invent tail", () => {
@@ -42,7 +42,7 @@ describe("reply copy purge — ask, don’t narrate the guardrail", () => {
       metro: { city: "Atlanta" },
       statedCity: "New York",
     });
-    expect(metro).toBe("You said New York but 30301 looks like Atlanta. Which is right — New York or 30301?");
+    expect(metro).toBe("You said New York but 30301 looks like Atlanta. Which is right, New York or 30301?");
     expect(metro).not.toMatch(BANNED);
 
     const session = createSession({ id: "asap-copy" });
@@ -59,6 +59,16 @@ describe("reply copy purge — ask, don’t narrate the guardrail", () => {
     expect(presentAgentReply(result, true)).not.toMatch(BANNED);
   });
 
+  it("dialog prompts and app copy contain no em dash", () => {
+    expect(openingMessage()).not.toMatch(/\u2014/);
+    for (const [key, value] of Object.entries(PROMPTS)) {
+      expect(value, key).not.toMatch(/\u2014/);
+    }
+    expect(readFileSync("src/app.js", "utf8")).not.toMatch(/\u2014/);
+    expect(readFileSync("src/lib/conversational.js", "utf8")).not.toMatch(/\u2014/);
+    expect(readFileSync("index.html", "utf8")).not.toMatch(/\u2014/);
+  });
+
   it("end-of-flow copy drops booking disclaimers", () => {
     const booking = /no booking from here|no book or pay/i;
     for (const file of [...REPLY_FILES, "index.html", "src/lib/email.js", "src/lib/quote-email-html.js"]) {
@@ -72,12 +82,12 @@ describe("reply copy purge — ask, don’t narrate the guardrail", () => {
         extracted: { flags: { incompleteZip: { role: "dest" } } },
         formalReply: PROMPTS.incomplete_dest_zip,
       }),
-    ).toBe("That ZIP is short — I need a full 5-digit ZIP.");
+    ).toBe("That ZIP is short. I need a full 5-digit ZIP.");
     expect(
       composeConversationalReply({
         extracted: { flags: { incompleteTo: true } },
         formalReply: PROMPTS.dest_incomplete,
       }),
-    ).toBe("That ended at “to” — I still need the destination city, state, or ZIP.");
+    ).toBe("That ended at “to”. I still need the destination city, state, or ZIP.");
   });
 });

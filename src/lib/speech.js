@@ -67,6 +67,47 @@ export function collapseProgressiveFinals(segments) {
   return out.join(" ").replace(/\s+/g, " ").trim();
 }
 
+const BARE_COUNT_RE =
+  /^(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|won|too|to|for|ate|\d{1,4})$/i;
+
+/** One-word count, including STT homophones used while awaiting pieces. */
+export function isBareCountUtterance(text) {
+  const t = String(text || "")
+    .toLowerCase()
+    .replace(/[.!?]+$/g, "")
+    .trim();
+  return BARE_COUNT_RE.test(t);
+}
+
+/**
+ * Choose a transcript from STT alternatives (Web Speech, or the same shape
+ * from any other recognizer). A one-word count stays even when confidence
+ * is low. Other non-empty text is kept too: "yes", "none", and "pallets"
+ * are real answers.
+ */
+export function pickTranscript(alternatives, { numericSlot = false } = {}) {
+  const alts = [];
+  const list = Array.isArray(alternatives) ? alternatives : alternatives ? [alternatives] : [];
+  for (const alt of list) {
+    if (alt == null) continue;
+    const transcript = String(typeof alt === "string" ? alt : alt.transcript || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!transcript) continue;
+    const confidence = typeof alt === "string" ? NaN : Number(alt.confidence);
+    alts.push({ transcript, confidence });
+  }
+  if (!alts.length) return "";
+  const top = alts[0];
+  const words = top.transcript.split(" ").length;
+  const low = Number.isFinite(top.confidence) && top.confidence < 0.5;
+  if (numericSlot && (low || words < 2)) {
+    const count = alts.find((a) => isBareCountUtterance(a.transcript));
+    if (count) return count.transcript.replace(/[.!?]+$/g, "").trim();
+  }
+  return top.transcript;
+}
+
 export function normalizeRecognitionResults(results) {
   const list = [];
   const length = results?.length ?? 0;
@@ -76,6 +117,7 @@ export function normalizeRecognitionResults(results) {
     list.push({
       transcript: String(transcript),
       isFinal: Boolean(row?.isFinal),
+      confidence: Number(row?.confidence ?? row?.[0]?.confidence),
     });
   }
   return list;
@@ -107,10 +149,22 @@ export function rebuildFromResults(results) {
  * One running transcript for a hold session. Replace progressive
  * duplicates; never join a history of growing finals.
  */
-export function createTranscriptBuffer() {
+export function createTranscriptBuffer({ numericSlot } = {}) {
   let holding = false;
   let slots = [];
   let prior = "";
+  let numericHint = "";
+
+  function slotIsNumeric() {
+    return Boolean(typeof numericSlot === "function" ? numericSlot() : numericSlot);
+  }
+
+  function rememberCount(text) {
+    const cleaned = String(text || "")
+      .replace(/[.!?]+$/g, "")
+      .trim();
+    if (isBareCountUtterance(cleaned)) numericHint = cleaned;
+  }
 
   function snap() {
     const rebuilt = rebuildFromResults(slots);
@@ -131,6 +185,7 @@ export function createTranscriptBuffer() {
       holding = true;
       slots = [];
       prior = "";
+      numericHint = "";
     },
     applyResults(results) {
       if (!holding) return { preview: "", commit: null };
@@ -141,8 +196,23 @@ export function createTranscriptBuffer() {
       // Mobile stop() sometimes emits an empty final and drops the only
       // hypothesis we had for a short phrase.
       if (!hasText && kept) return snap();
+      const incoming = collapseProgressiveFinals(next.map((row) => row.transcript));
+      const low = next.some((row) => Number.isFinite(row.confidence) && row.confidence < 0.5);
+      // A low-confidence one-word non-count must not wipe "five" on a numeric slot.
+      if (
+        slotIsNumeric() &&
+        numericHint &&
+        incoming &&
+        !isBareCountUtterance(incoming) &&
+        incoming.split(/\s+/).length < 2 &&
+        low
+      ) {
+        return snap();
+      }
       slots = next;
-      return snap();
+      const snapped = snap();
+      rememberCount(snapped.preview);
+      return snapped;
     },
     onSpeechResult({ interim = "", finalText = "", results } = {}) {
       if (results) return this.applyResults(results);
@@ -164,6 +234,7 @@ export function createTranscriptBuffer() {
     checkpoint() {
       const rebuilt = rebuildFromResults(slots);
       prior = collapseProgressiveFinals([prior, rebuilt.finals, rebuilt.interim]);
+      rememberCount(rebuilt.interim || rebuilt.finals || prior);
       slots = [];
     },
     /**
@@ -174,10 +245,13 @@ export function createTranscriptBuffer() {
      */
     release() {
       const { preview } = snap();
+      let text = String(preview || "").trim();
+      if (!text && slotIsNumeric() && numericHint) text = numericHint;
       holding = false;
       slots = [];
       prior = "";
-      return preview;
+      numericHint = "";
+      return text;
     },
     isHolding() {
       return holding;
@@ -197,12 +271,13 @@ export function createHoldToTalk({
   tailMs = RELEASE_TAIL_MS,
   endFallbackMs = 500,
   restartDelayMs = 120,
+  numericSlot,
   schedule = (fn, ms) => setTimeout(fn, ms),
   unschedule = (id) => clearTimeout(id),
 } = {}) {
   const Ctor = Recognition || getSpeechRecognitionCtor();
   const mode = preferTapToTalk() ? "toggle" : "hold";
-  const buffer = createTranscriptBuffer();
+  const buffer = createTranscriptBuffer({ numericSlot });
 
   if (!Ctor) {
     return {
@@ -259,11 +334,23 @@ export function createHoldToTalk({
     rec.interimResults = true;
     rec.continuous = true;
     rec.onresult = (event) => {
+      const slot = Boolean(typeof numericSlot === "function" ? numericSlot() : numericSlot);
       const rows = [];
       for (let i = 0; i < event.results.length; i += 1) {
+        const result = event.results[i];
+        const alts = [];
+        const n = typeof result?.length === "number" ? result.length : 0;
+        for (let j = 0; j < n; j += 1) {
+          const alt = result[j];
+          if (!alt) continue;
+          alts.push({ transcript: alt.transcript ?? "", confidence: alt.confidence });
+        }
         rows.push({
-          transcript: event.results[i][0].transcript,
-          isFinal: event.results[i].isFinal,
+          transcript: alts.length
+            ? pickTranscript(alts, { numericSlot: slot })
+            : String(result?.[0]?.transcript || ""),
+          isFinal: Boolean(result?.isFinal),
+          confidence: Number(alts[0]?.confidence),
         });
       }
       const { preview } = buffer.applyResults(rows);

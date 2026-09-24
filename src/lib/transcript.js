@@ -1,4 +1,4 @@
-import { formatPlace } from "./completeness.js";
+import { formatPlace, formatStoredPieces } from "./completeness.js";
 import { formatJevTranscriptLine } from "./jev-core.js";
 import { getSttProvider } from "./stt-providers.js";
 
@@ -29,7 +29,7 @@ export function formatSessionTranscript(messages, session) {
   return [
     ...turns,
     "",
-    "— Sheet snapshot —",
+    "Sheet snapshot:",
     `Request: ${requestId}`,
     `STT: ${sttLabel}`,
     formatJevTranscriptLine(session),
@@ -44,11 +44,7 @@ export function formatSessionTranscript(messages, session) {
 }
 
 function formatPieces(freight) {
-  if (freight?.pieces == null || freight.pieces === "") return "—";
-  if (freight.piece_unit === "pallets" || freight.piece_unit === "pieces") {
-    return `${freight.pieces} ${freight.piece_unit}`;
-  }
-  return String(freight.pieces);
+  return formatStoredPieces(freight);
 }
 
 /** @deprecated alias */

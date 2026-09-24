@@ -390,6 +390,44 @@ function applyCityLabeledZips(extracted, cityZips, sheetCities = {}) {
   return applied;
 }
 
+const ORIGIN_ZIP_LABEL = String.raw`origin|pickup|pick\s*up|ship\s+from`;
+const DEST_ZIP_LABEL = String.raw`destination|dest|delivery|deliver(?:y|ed)?\s+to|ship\s+to`;
+const LABELED_ZIP_TAIL = String.raw`(?:\s+zip|\s+zipcode|\s+zip\s*code)?(?:\s+is)?[:\s]+`;
+
+function labeledZipRe(label, digits) {
+  return new RegExp(String.raw`\b(?:${label})${LABELED_ZIP_TAIL}(${digits})(?!\d)`, "i");
+}
+
+/**
+ * from/to (or X to Y) where one side is 5 digits and the other is not.
+ * Both-valid pairs stay on the existing path. An "or" is a choice, not a lane.
+ */
+function matchPartialZipPair(raw) {
+  if (/\bor\b/i.test(raw)) return null;
+  const patterns = [
+    /\bfrom\s+(\d{3,5})(?:-\d{4})?\s+(?:to|through)\s+(\d{3,5})(?:-\d{4})?(?!\d)/i,
+    /\b(\d{5})(?:-\d{4})?\s+(?:to|through)\s+(\d{3,4})(?!\d)/i,
+    /\b(\d{3,4})(?!\d)\s+(?:to|through)\s+(\d{5})(?:-\d{4})?\b/i,
+  ];
+  for (const re of patterns) {
+    const m = raw.match(re);
+    if (!m) continue;
+    const originDigits = m[1];
+    const destDigits = m[2];
+    const originOk = originDigits.length === 5;
+    const destOk = destDigits.length === 5;
+    if (originOk === destOk) continue;
+    return {
+      originZip: originOk ? originDigits : null,
+      destZip: destOk ? destDigits : null,
+      incomplete: originOk
+        ? { digits: destDigits, role: "dest", labeled: true }
+        : { digits: originDigits, role: "origin", labeled: true },
+    };
+  }
+  return null;
+}
+
 function uniqueLaneZips(zipTokens) {
   const seen = [];
   for (const m of zipTokens) {
@@ -422,23 +460,25 @@ function extractLane(raw, extracted, awaiting, sheetCities = {}) {
     extracted.destination.postal_code = fromToZips[2];
   }
 
-  const labeledOrigin = raw.match(
-    /\b(?:origin|pickup|pick\s*up|ship\s+from)(?:\s+zip|\s+zipcode|\s+zip\s*code)?(?:\s+is)?[:\s]+(\d{5}(?:-\d{4})?)/i,
-  );
+  const labeledOrigin = raw.match(labeledZipRe(ORIGIN_ZIP_LABEL, String.raw`\d{5}(?:-\d{4})?`));
   if (labeledOrigin) extracted.origin.postal_code = labeledOrigin[1];
 
-  const labeledDest = raw.match(
-    /\b(?:destination|dest|deliver(?:y|ed)?\s+to|ship\s+to)(?:\s+zip|\s+zipcode|\s+zip\s*code)?(?:\s+is)?[:\s]+(\d{5}(?:-\d{4})?)/i,
-  );
+  const labeledDest = raw.match(labeledZipRe(DEST_ZIP_LABEL, String.raw`\d{5}(?:-\d{4})?`));
   if (labeledDest) extracted.destination.postal_code = labeledDest[1];
+
+  const partialPair = matchPartialZipPair(raw);
+  if (partialPair?.originZip && !extracted.origin.postal_code) extracted.origin.postal_code = partialPair.originZip;
+  if (partialPair?.destZip && !extracted.destination.postal_code) extracted.destination.postal_code = partialPair.destZip;
 
   const destZipAfter = raw.match(/\b(\d{5}(?:-\d{4})?)\s+is\s+(?:the\s+)?(?:destination|dest)\b/i);
   if (destZipAfter) extracted.destination.postal_code = destZipAfter[1];
   const originZipAfter = raw.match(/\b(\d{5}(?:-\d{4})?)\s+is\s+(?:the\s+)?origin\b/i);
   if (originZipAfter) extracted.origin.postal_code = originZipAfter[1];
 
-  const destZipLocked = Boolean(labeledDest || destZipAfter);
-  const originZipLocked = Boolean(labeledOrigin || originZipAfter || fromToZips);
+  const destZipLocked = Boolean(labeledDest || destZipAfter || partialPair?.destZip || partialPair?.incomplete?.role === "dest");
+  const originZipLocked = Boolean(
+    labeledOrigin || originZipAfter || fromToZips || partialPair?.originZip || partialPair?.incomplete?.role === "origin",
+  );
 
   const fromPlace = matchPlaceAfter(raw, /\bfrom\s+/i);
   if (fromPlace && !isGarbagePlace(fromPlace)) Object.assign(extracted.origin, fromPlace);
@@ -499,8 +539,8 @@ function extractLane(raw, extracted, awaiting, sheetCities = {}) {
 
   applyDistinctZipPair(raw, extracted, uniqueZips, { cityLabeled, originZipLocked, destZipLocked });
 
-  const incomplete = detectIncompleteZip(raw, awaiting);
-  if (incomplete && zipTokens.length === 0) extracted.flags.incompleteZip = incomplete;
+  const incomplete = partialPair?.incomplete || detectIncompleteZip(raw, awaiting);
+  if (incomplete && (incomplete.labeled || zipTokens.length === 0)) extracted.flags.incompleteZip = incomplete;
 
   stripNoiseCity(extracted.origin, sheetCities.originCity);
   stripNoiseCity(extracted.destination, sheetCities.destCity);
@@ -535,12 +575,8 @@ function distinctZipPair(raw, uniqueZips) {
     return { origin: fromTo[1], dest: fromTo[2] };
   }
 
-  const originLabeled = raw.match(
-    /\b(?:origin|pickup|pick\s*up|ship\s+from)(?:\s+zip|\s+zipcode|\s+zip\s*code)?(?:\s+is)?[:\s]+(\d{5}(?:-\d{4})?)/i,
-  );
-  const destLabeled = raw.match(
-    /\b(?:destination|dest|deliver(?:y|ed)?\s+to|ship\s+to)(?:\s+zip|\s+zipcode|\s+zip\s*code)?(?:\s+is)?[:\s]+(\d{5}(?:-\d{4})?)/i,
-  );
+  const originLabeled = raw.match(labeledZipRe(ORIGIN_ZIP_LABEL, String.raw`\d{5}(?:-\d{4})?`));
+  const destLabeled = raw.match(labeledZipRe(DEST_ZIP_LABEL, String.raw`\d{5}(?:-\d{4})?`));
   if (originLabeled && destLabeled && zip5Of(originLabeled[1]) !== zip5Of(destLabeled[1])) {
     return { origin: originLabeled[1], dest: destLabeled[1] };
   }
@@ -570,8 +606,10 @@ function applyDistinctZipPair(raw, extracted, uniqueZips, { cityLabeled, originZ
 
 function isLabeledLaneZipPhrase(raw) {
   return (
-    /\b(?:origin|destination|dest)(?:\s+zip|\s+zipcode|\s+zip\s*code)?[:\s]+\d{3,5}/i.test(raw) ||
-    /\b(?:origin|destination|dest)(?:\s+zip|\s+zipcode|\s+zip\s*code)/i.test(raw) ||
+    /\b(?:origin|destination|dest|pickup|pick\s*up|delivery)(?:\s+zip|\s+zipcode|\s+zip\s*code)?[:\s]+\d{3,5}/i.test(
+      raw,
+    ) ||
+    /\b(?:origin|destination|dest|pickup|pick\s*up|delivery)(?:\s+zip|\s+zipcode|\s+zip\s*code)/i.test(raw) ||
     /\b(?:zip|zipcode|zip\s*code)\s+is\s+\d/i.test(raw) ||
     /\b\d{3,5}(?:-\d{4})?\s+is\s+(?:the\s+)?(?:destination|dest|origin)\b/i.test(raw) ||
     /\b[a-z]+(?:\s+[a-z]+)?\s+zip(?:\s*code)?\s+is\b/i.test(raw)
@@ -579,14 +617,10 @@ function isLabeledLaneZipPhrase(raw) {
 }
 
 function detectIncompleteZip(raw, awaiting) {
-  const destShort = raw.match(
-    /\b(?:destination|dest)(?:\s+zip|\s+zipcode|\s+zip\s*code)?(?:\s+is)?[:\s]+(\d{3,4})\b/i,
-  );
-  if (destShort) return { digits: destShort[1], role: "dest" };
-  const originShort = raw.match(
-    /\b(?:origin|pickup)(?:\s+zip|\s+zipcode|\s+zip\s*code)?(?:\s+is)?[:\s]+(\d{3,4})\b/i,
-  );
-  if (originShort) return { digits: originShort[1], role: "origin" };
+  const destShort = raw.match(labeledZipRe(DEST_ZIP_LABEL, String.raw`\d{3,4}`));
+  if (destShort) return { digits: destShort[1], role: "dest", labeled: true };
+  const originShort = raw.match(labeledZipRe(ORIGIN_ZIP_LABEL, String.raw`\d{3,4}`));
+  if (originShort) return { digits: originShort[1], role: "origin", labeled: true };
   const zipShort = raw.match(/\b(?:zip|zipcode|zip\s*code)(?:\s+is)?[:\s]+(\d{3,4})\b/i);
   if (zipShort) {
     const role = awaiting === "dest_zip" ? "dest" : awaiting === "origin_zip" ? "origin" : "unknown";
@@ -884,6 +918,22 @@ export function kgToPounds(kg) {
 
 const PIECE_UNIT_WORD = String.raw`(?:pallets?|skids?|pieces?|pcs|box(?:es)?|crates?|cartons?)`;
 
+/** Web Speech homophones for a bare count. Only used while awaiting pieces. */
+const STT_COUNT_ALIASES = {
+  won: 1,
+  too: 2,
+  to: 2,
+  for: 4,
+  ate: 8,
+};
+
+const SPOKEN_COUNT_WORDS = Object.keys(WORD_NUMBERS)
+  .filter((word) => word !== "a" && word !== "an")
+  .sort((a, b) => b.length - a.length);
+
+const COUNT_WITH_UNIT = [...SPOKEN_COUNT_WORDS, "won", "too", "ate", "a", "an"].join("|");
+const AWAITING_COUNT = [...SPOKEN_COUNT_WORDS, "won", "too", "to", "for", "ate"].join("|");
+
 function mapPieceUnit(word) {
   const w = String(word || "").toLowerCase();
   if (/^pallets?$/.test(w) || /^skids?$/.test(w)) return "pallets";
@@ -894,7 +944,7 @@ function mapPieceUnit(word) {
 function extractPieces(raw, extracted, awaiting) {
   const unit = raw.match(
     new RegExp(
-      String.raw`\b(\d{1,4}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|a|an)\s+(${PIECE_UNIT_WORD}|handling units?)\b`,
+      String.raw`\b(\d{1,4}|${COUNT_WITH_UNIT})\s+(${PIECE_UNIT_WORD}|handling units?)\b`,
       "i",
     ),
   );
@@ -930,15 +980,41 @@ function extractPieces(raw, extracted, awaiting) {
     return;
   }
   if (awaiting === "pieces") {
-    const lone = raw.match(/^\s*(\d{1,4}|one|two|three|four|five|six|seven|eight|nine|ten)\s*$/i);
-    if (lone) extracted.freight.pieces = parseCount(lone[1]);
+    const loose = loosePieceCount(raw);
+    if (loose) {
+      extracted.freight.pieces = loose.count;
+      if (loose.unit) extracted.freight.piece_unit = loose.unit;
+    }
   }
 }
 
+/**
+ * A short answer while awaiting pieces: "five", "5", "five.", "it's five",
+ * "five pallets", plus STT "won" / "to" / "for" / "ate".
+ */
+function loosePieceCount(raw) {
+  let loose = String(raw || "")
+    .replace(/[.!?]+$/g, "")
+    .trim();
+  loose = loose.replace(
+    /^(?:it(?:'s| is)|its|that(?:'s| is)|there(?:'s| are)|i said|just)\s+/i,
+    "",
+  );
+  const m = loose.match(new RegExp(String.raw`^(${AWAITING_COUNT}|\d{1,4})(?:\s+(${PIECE_UNIT_WORD}))?$`, "i"));
+  if (!m) return null;
+  const count = parseCount(m[1]);
+  if (!count) return null;
+  const unit = m[2] ? mapPieceUnit(m[2]) : null;
+  return { count, unit };
+}
+
 function parseCount(token) {
-  const lower = String(token).toLowerCase();
+  const lower = String(token)
+    .toLowerCase()
+    .replace(/^[.,!?]+|[.,!?]+$/g, "");
+  if (STT_COUNT_ALIASES[lower] != null) return STT_COUNT_ALIASES[lower];
   if (WORD_NUMBERS[lower] != null) return WORD_NUMBERS[lower];
-  const n = Number(token);
+  const n = Number(lower);
   return Number.isInteger(n) && n >= 1 ? n : null;
 }
 
@@ -1255,6 +1331,17 @@ function extractTime(raw, extracted) {
 
 const PROTECT_SYNONYM = /\b(?:please\s+)?protect(?:ed|ing)?\b/i;
 
+/** Side words next to "inside". No side means ask, do not assume both ends. */
+function insideSideWords(raw) {
+  const both = /\b(?:both(?:\s+ends)?|each|either)\b/i.test(raw);
+  const pick = /\b(?:pick\s*-?\s*up|pickup|origin)\b/i.test(raw);
+  const deliv = /\b(?:deliver(?:y|ed)?|destination|dest)\b/i.test(raw);
+  if (both || (pick && deliv)) return "both";
+  if (pick) return "pickup";
+  if (deliv) return "delivery";
+  return null;
+}
+
 function extractAccessorials(raw, extracted, awaiting) {
   const mentionsAccessorial =
     /lift|residential|inside|limited\s+access|appointment|notify|freeze|protect(?:ed|ing)?/i.test(raw);
@@ -1282,9 +1369,19 @@ function extractAccessorials(raw, extracted, awaiting) {
     found.push("protect_from_freeze");
     extracted.flags.softProtect = true;
   }
-  const hasInsideSide = found.includes("inside_pickup") || found.includes("inside_delivery");
-  if (/\binside\b/i.test(raw) && !hasInsideSide) {
-    found.push("inside_pickup", "inside_delivery");
+  if (/\binside\b/i.test(raw)) {
+    const side = insideSideWords(raw);
+    const hasInsideSide = found.includes("inside_pickup") || found.includes("inside_delivery");
+    if (side === "both") {
+      if (!found.includes("inside_pickup")) found.push("inside_pickup");
+      if (!found.includes("inside_delivery")) found.push("inside_delivery");
+    } else if (side === "pickup" && !hasInsideSide) {
+      found.push("inside_pickup");
+    } else if (side === "delivery" && !hasInsideSide) {
+      found.push("inside_delivery");
+    } else if (!hasInsideSide) {
+      extracted.flags.ambiguousInside = true;
+    }
   }
   const hasLiftgateSide = found.includes("liftgate_pickup") || found.includes("liftgate_delivery");
   if (/lift\s*-?\s*gates?/i.test(raw) && !hasLiftgateSide) {

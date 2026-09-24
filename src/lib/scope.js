@@ -51,7 +51,7 @@ export function detectOutOfScope(text, sheet) {
   const lower = raw.toLowerCase();
   for (const place of NON_US_PLACES) {
     if (lower.includes(place)) {
-      return hit(`Lane mentions ${place}, which is treated as international — out of scope for domestic LTL.`);
+      return hit(`Lane mentions ${place}, which is treated as international. Out of scope for domestic LTL.`);
     }
   }
   const originCountry = sheet?.lanes?.origin?.country;

@@ -78,7 +78,7 @@ describe("token mint now grants TTS", () => {
         new Request("https://freightlodge-stt-token.example/tts", {
           method: "POST",
           headers: { Origin: PAGES_ORIGIN, "Content-Type": "application/json" },
-          body: JSON.stringify({ transcript: "Got it — what’s the pickup ZIP?" }),
+          body: JSON.stringify({ transcript: "Got it. What’s the pickup ZIP?" }),
         }),
         env,
       );
@@ -143,7 +143,7 @@ describe("client TTS helper", () => {
   it("speaking hook turns on while generating and off when idle", async () => {
     const flags = [];
     onAgentSpeaking((on) => flags.push(on));
-    await speakAgentReply("Got the destination ZIP — 78721.", {
+    await speakAgentReply("Got the destination ZIP, 78721.", {
       url: "https://proxy.example/tts",
       fetchImpl: async () => ({ ok: true, arrayBuffer: async () => new Uint8Array([1]).buffer }),
       playAudio: async () => {},

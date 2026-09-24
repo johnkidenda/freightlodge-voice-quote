@@ -162,6 +162,7 @@ describe("dump and short ZIP still work", () => {
     session.awaiting = "dest_zip";
     const result = handleUtterance(session, "dest zip 787");
     expect(result.session.sheet.lanes.destination.postal_code).toBeNull();
-    expect(result.reply).toMatch(/5-digit|five.digit/i);
+    expect(result.reply).toMatch(/I heard 787 for the destination, which is only three digits/i);
+    expect(result.reply).not.toMatch(/\u2014/);
   });
 });

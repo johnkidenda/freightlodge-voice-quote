@@ -42,7 +42,7 @@ describe("conversational reply copy", () => {
   it("says destination / pieces / pounds instead of dest / pcs / lb", () => {
     const dest = handleUtterance(createSession({ id: "warm-dest" }), "destination zip is 78721");
     const destWarm = presentAgentReply(dest, true);
-    expect(destWarm).toMatch(/destination ZIP — 78721/);
+    expect(destWarm).toMatch(/destination ZIP, 78721/);
     expect(destWarm).not.toMatch(/\bdest\b/);
     expect(destWarm).not.toMatch(/Got dest 78721/i);
 
@@ -86,9 +86,9 @@ describe("conversational reply copy", () => {
     expect(ready).not.toMatch(/\$\d/);
     const oos = composeConversationalReply({
       outOfScope: true,
-      formalReply: "That’s ocean — I won’t quote a fake rate.",
+      formalReply: "That’s ocean. I won’t quote a fake rate.",
     });
-    expect(oos).toBe("That’s ocean — I won’t quote a fake rate.");
+    expect(oos).toBe("That’s ocean. I won’t quote a fake rate.");
   });
 
   it("persists the toggle and greeting is warmer when on", () => {
@@ -96,7 +96,7 @@ describe("conversational reply copy", () => {
     expect(loadConversationalMode(store)).toBe(false);
     expect(saveConversationalMode(true, store)).toBe(true);
     expect(loadConversationalMode(store)).toBe(true);
-    expect(CONVERSATIONAL_GREETING).toMatch(/Hi —/);
+    expect(CONVERSATIONAL_GREETING).toMatch(/^Hi\./);
     expect(CONVERSATIONAL_GREETING).toMatch(/origin ZIP/);
     expect(CONVERSATIONAL_GREETING).not.toBe(openingMessage());
   });

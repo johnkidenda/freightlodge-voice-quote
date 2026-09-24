@@ -167,7 +167,7 @@ export function formatVerifyEmail({ code, from = MAIL_FROM_DEFAULT }) {
     text: [
       `Your Freight Lodge confirmation code is ${code}.`,
       "",
-      "It expires in 10 minutes. Enter it in the app — do not forward this email.",
+      "It expires in 10 minutes. Enter it in the app. Do not forward this email.",
       "If you did not ask for a quote, you can ignore this.",
       "",
       `Sent from ${from}`,

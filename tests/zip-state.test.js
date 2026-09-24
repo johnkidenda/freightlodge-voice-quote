@@ -82,7 +82,7 @@ describe("ZIP-in-state dialog", () => {
     expect(result.session.sheet.lanes.origin.postal_code).toBeNull();
     expect(result.session.sheet.lanes.origin.state).toBe("TX");
     expect(result.session.sheet.lanes.origin.city).toBeNull();
-    expect(result.reply).toBe("30301 looks like Georgia, but origin is Texas — which is right?");
+    expect(result.reply).toBe("30301 looks like Georgia, but origin is Texas. Which is right?");
     expect(result.extracted.flags.zipClarify.kind).toBe("state");
     expect(result.session.zipClarify.kind).toBe("state");
   });
@@ -135,7 +135,7 @@ describe("ZIP-in-state dialog", () => {
     expect(result.session.sheet.lanes.origin.postal_code).toBeNull();
     expect(result.session.sheet.lanes.origin.city).toBe("Austin");
     expect(result.session.sheet.lanes.origin.state).toBeNull();
-    expect(result.reply).toBe("99501 looks like Alaska, but origin is Texas — which is right?");
+    expect(result.reply).toBe("99501 looks like Alaska, but origin is Texas. Which is right?");
   });
 
   it("New York city + 30301 still uses metro city clarify, not a silent park", () => {
@@ -231,7 +231,7 @@ describe("ZIP-in-state dialog", () => {
     session.awaiting = "origin_zip";
     const result = handleUtterance(session, "30301");
     const warm = presentAgentReply(result, true);
-    expect(warm).toBe("30301 looks like Georgia, but origin is Texas — which is right?");
+    expect(warm).toBe("30301 looks like Georgia, but origin is Texas. Which is right?");
     expect(warm).not.toMatch(/\bdest\b/);
   });
 
@@ -240,7 +240,7 @@ describe("ZIP-in-state dialog", () => {
       { kind: "state", zip: "30301", zipState: "GA", placeState: "TX", attemptedRole: "origin" },
       emptySheet(),
     );
-    expect(q).toBe("30301 looks like Georgia, but origin is Texas — which is right?");
+    expect(q).toBe("30301 looks like Georgia, but origin is Texas. Which is right?");
     expect(stateDisplayName("GA")).toBe("Georgia");
   });
 

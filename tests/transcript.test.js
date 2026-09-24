@@ -34,7 +34,7 @@ describe("QA transcript copy", () => {
     expect(text).toMatch(/^Agent: Freight Lodge/m);
     expect(text).toContain("User: destination zip is 78721");
     expect(text).toContain(`Agent: ${first.reply}`);
-    expect(text).toContain("— Sheet snapshot —");
+    expect(text).toContain("Sheet snapshot:");
     expect(text).toMatch(/Origin:/);
     expect(text).toMatch(/Dest:.*78721/);
     expect(text).toMatch(/Weight:/);
@@ -117,7 +117,7 @@ describe("sendSessionTranscript delivery", () => {
     expect(src).toMatch(/formsubmit\.co\/ajax/i);
     const app = readFileSync("src/app.js", "utf8");
     expect(app).toContain("Opened mail app…");
-    expect(app).toContain("Could not send silently — opened mail");
+    expect(app).toContain("Could not send silently. Opened mail");
     expect(app).toContain('result.mode === "formsubmit"');
     expect(app).toContain("sttProvider: STT_PROVIDER_IDS.WEB_SPEECH");
     expect(app).not.toContain("Opened mail app with transcript");
