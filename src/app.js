@@ -12,7 +12,12 @@ import {
 import { onAgentSpeaking, speakAgentReply, stopAgentSpeech } from "./lib/agent-speech.js";
 import { copyTextToClipboard, sendSessionTranscript } from "./lib/transcript.js";
 import { playListenCue } from "./lib/listen-cue.js";
-import { fetchJevDecision, isJevDisabled, recentAssistantReplies } from "./lib/jev.js";
+import {
+  fetchJevDecision,
+  isJevDisabled,
+  recentAssistantReplies,
+  saveJevSessionEnabled,
+} from "./lib/jev.js";
 import { renderChrome, renderTtsWave } from "./ui/chrome.js";
 import { layout } from "./ui/layout.js";
 import { bindMic } from "./ui/mic.js";
@@ -28,14 +33,29 @@ function browserStorage() {
   return typeof localStorage !== "undefined" ? localStorage : null;
 }
 
+function browserSessionStore() {
+  return typeof sessionStorage !== "undefined" ? sessionStorage : null;
+}
+
+function jevEnabledNow() {
+  return !isJevDisabled({
+    search: typeof location !== "undefined" ? location.search : "",
+    storage: browserStorage(),
+    sessionStore: browserSessionStore(),
+  });
+}
+
 function greetingFor(conversational) {
   return conversational ? CONVERSATIONAL_GREETING : openingMessage();
 }
 
 function createViewState() {
   const conversational = loadConversationalMode(browserStorage());
+  const jevOn = jevEnabledNow();
+  const session = createSession();
+  session.jevEnabled = jevOn;
   return {
-    session: createSession(),
+    session,
     messages: [{ role: "assistant", text: greetingFor(conversational) }],
     listening: false,
     finishing: false,
@@ -43,6 +63,7 @@ function createViewState() {
     emailNote: null,
     hold: null,
     conversational,
+    jevOn,
     ttsSpeaking: false,
   };
 }
@@ -54,7 +75,7 @@ export function mountApp(root) {
   });
   const state = createViewState();
 
-  root.innerHTML = layout(state.conversational);
+  root.innerHTML = layout(state.conversational, state.jevOn);
   const els = {
     thread: root.querySelector("#thread"),
     form: root.querySelector("#composer"),
@@ -62,6 +83,7 @@ export function mountApp(root) {
     hold: root.querySelector("#hold"),
     conversational: root.querySelector("#conversational"),
     convoAudio: root.querySelector("#convo-audio"),
+    jevMode: root.querySelector("#jev-mode"),
     ttsWave: root.querySelector("#tts-wave"),
     quote: root.querySelector("#quote-card"),
     chatCol: root.querySelector(".chat-col"),
@@ -158,8 +180,15 @@ export function mountApp(root) {
     render(els, state);
   }
 
+  function toggleJev() {
+    state.jevOn = saveJevSessionEnabled(!state.jevOn, browserSessionStore());
+    state.session.jevEnabled = state.jevOn;
+    render(els, state);
+  }
+
   els.conversational?.addEventListener("click", toggleConversational);
   els.convoAudio?.addEventListener("click", toggleConversational);
+  els.jevMode?.addEventListener("click", toggleJev);
 
   els.form.addEventListener("submit", (e) => {
     e.preventDefault();
@@ -180,6 +209,7 @@ export function mountApp(root) {
 
   els.reset.addEventListener("click", () => {
     state.session = createSession();
+    state.session.jevEnabled = state.jevOn;
     state.messages = [{ role: "assistant", text: greetingFor(state.conversational) }];
     stopAgentSpeech();
     state.emailNote = null;
@@ -208,12 +238,16 @@ async function acceptUserText(els, state, text) {
   push(state, "user", text);
   render(els, state);
 
+  state.session.jevEnabled = state.jevOn;
   const jev = await fetchJevDecision({
     utterance: text,
     sheet: state.session.sheet,
     recentReplies: recentAssistantReplies(state.messages, 3),
     awaiting: state.session.awaiting,
     askedAccessorials: state.session.askedAccessorials,
+    search: typeof location !== "undefined" ? location.search : "",
+    storage: browserStorage(),
+    sessionStore: browserSessionStore(),
   });
   const result = handleUtterance(state.session, text, { jev });
   state.session = result.session;

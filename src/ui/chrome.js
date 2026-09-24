@@ -21,16 +21,38 @@ export function renderChrome(els, state) {
     els.conversational.setAttribute("aria-pressed", state.conversational ? "true" : "false");
   }
   const awaitingEmail = state.session.awaiting === "email";
+  const awaitingCount = state.session.awaiting === "pieces";
   els.form?.classList.toggle("is-email-ask", awaitingEmail);
+  els.form?.classList.toggle("is-count-ask", awaitingCount);
   if (els.input) {
-    els.input.placeholder = awaitingEmail
-      ? "Type the email address…"
-      : "Type origin zip code, dest zip code, pieces…";
-    els.input.setAttribute("inputmode", awaitingEmail ? "email" : "text");
-    els.input.setAttribute("autocomplete", awaitingEmail ? "email" : "off");
+    if (awaitingEmail) {
+      els.input.placeholder = "Type the email address…";
+      els.input.setAttribute("inputmode", "email");
+      els.input.setAttribute("autocomplete", "email");
+    } else if (awaitingCount) {
+      els.input.placeholder = "Type the number…";
+      els.input.setAttribute("inputmode", "numeric");
+      els.input.setAttribute("autocomplete", "off");
+    } else {
+      els.input.placeholder = "Type origin zip code, dest zip code, pieces…";
+      els.input.setAttribute("inputmode", "text");
+      els.input.setAttribute("autocomplete", "off");
+    }
   }
+  renderJevMode(els, state);
   renderConvoAudio(els, state);
   renderTtsWave(els, state);
+}
+
+function renderJevMode(els, state) {
+  if (!els.jevMode) return;
+  const on = state.jevOn !== false;
+  els.jevMode.classList.toggle("is-active", on);
+  els.jevMode.setAttribute("aria-pressed", on ? "true" : "false");
+  els.jevMode.textContent = on ? "Jev on" : "Jev off";
+  const label = on ? "Jev is on. Turn Jev off." : "Jev is off. Turn Jev on.";
+  els.jevMode.title = label;
+  els.jevMode.setAttribute("aria-label", label);
 }
 
 function renderConvoAudio(els, state) {

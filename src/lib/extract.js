@@ -606,6 +606,12 @@ function extractLane(raw, extracted, awaiting, sheetCities = {}) {
   const labeledDest = raw.match(labeledZipRe(DEST_ZIP_LABEL, String.raw`\d{5}(?:-\d{4})?`));
   if (labeledDest) extracted.destination.postal_code = labeledDest[1];
 
+  // STT "origins of God is 78721" still names the origin. Words may sit between the label and the digits.
+  const looseOrigin = raw.match(/\borigins?\b(?:\s+[a-z]+){0,6}?\s+is\s+(\d{5}(?:-\d{4})?)\b/i);
+  if (looseOrigin && !extracted.origin.postal_code) extracted.origin.postal_code = looseOrigin[1];
+  const looseDest = raw.match(/\b(?:destination|dest)\b(?:\s+[a-z]+){0,6}?\s+is\s+(\d{5}(?:-\d{4})?)\b/i);
+  if (looseDest && !extracted.destination.postal_code) extracted.destination.postal_code = looseDest[1];
+
   const partialPair = matchPartialZipPair(raw);
   if (partialPair?.originZip && !extracted.origin.postal_code) extracted.origin.postal_code = partialPair.originZip;
   if (partialPair?.destZip && !extracted.destination.postal_code) extracted.destination.postal_code = partialPair.destZip;
@@ -615,9 +621,16 @@ function extractLane(raw, extracted, awaiting, sheetCities = {}) {
   const originZipAfter = raw.match(/\b(\d{5}(?:-\d{4})?)\s+is\s+(?:the\s+)?origin\b/i);
   if (originZipAfter) extracted.origin.postal_code = originZipAfter[1];
 
-  const destZipLocked = Boolean(labeledDest || destZipAfter || partialPair?.destZip || partialPair?.incomplete?.role === "dest");
+  const destZipLocked = Boolean(
+    labeledDest || looseDest || destZipAfter || partialPair?.destZip || partialPair?.incomplete?.role === "dest",
+  );
   const originZipLocked = Boolean(
-    labeledOrigin || originZipAfter || fromToZips || partialPair?.originZip || partialPair?.incomplete?.role === "origin",
+    labeledOrigin ||
+      looseOrigin ||
+      originZipAfter ||
+      fromToZips ||
+      partialPair?.originZip ||
+      partialPair?.incomplete?.role === "origin",
   );
 
   const fromPlace = matchPlaceAfter(raw, /\bfrom\s+/i);
@@ -872,17 +885,29 @@ export function firstBareZip(text) {
   return m ? m[1] + (m[2] || "") : null;
 }
 
+/** Distinct 5-digit ZIPs in utterance order. A ZIP+4 stays on its 5-digit stem for uniqueness. */
+export function distinctUtteranceZips(text) {
+  const seen = [];
+  for (const match of String(text || "").matchAll(/\b(\d{5})(?:-\d{4})?\b/g)) {
+    if (!seen.includes(match[1])) seen.push(match[1]);
+  }
+  return seen;
+}
+
 /**
  * “that’s the destination” / “the ZIP I just sent is the destination”
  * → move last ZIP onto dest or origin. Does not invent ZIPs.
+ * A turn that states two ZIPs is an assignment, not a move of the first one.
+ * STT “origins” counts as origin so it cannot be read as dest-only.
  */
 export function detectZipRoleCorrection(text) {
   const t = String(text || "")
     .toLowerCase()
     .replace(/['’]/g, "");
   if (!t.trim()) return null;
+  if (distinctUtteranceZips(t).length >= 2) return null;
   const mentionsDest = /\b(dest|destination)\b/.test(t);
-  const mentionsOrigin = /\borigin\b/.test(t);
+  const mentionsOrigin = /\borigins?\b/.test(t);
   const refersToPrior =
     /\b(that|thats|that is|the zip|zip code|i just sent|just sent|just gave)\b/.test(t);
   if (mentionsDest && refersToPrior && !mentionsOrigin) return "dest";
@@ -893,19 +918,19 @@ export function detectZipRoleCorrection(text) {
   return null;
 }
 
-export function applyZipRoleCorrection(sheet, role, zip) {
+export function applyZipRoleCorrection(sheet, role, zip, { clearOther = true } = {}) {
   if (!role || !zip || !/^\d{5}(?:-\d{4})?$/.test(zip)) return sheet;
   const next = structuredClone(sheet);
   if (role === "dest") {
     next.lanes.destination.postal_code = zip;
     fillStateFromZip(next.lanes.destination, zip);
-    if (next.lanes.origin.postal_code === zip) {
+    if (clearOther && next.lanes.origin.postal_code === zip) {
       next.lanes.origin.postal_code = null;
     }
   } else if (role === "origin") {
     next.lanes.origin.postal_code = zip;
     fillStateFromZip(next.lanes.origin, zip);
-    if (next.lanes.destination.postal_code === zip) {
+    if (clearOther && next.lanes.destination.postal_code === zip) {
       next.lanes.destination.postal_code = null;
     }
   }

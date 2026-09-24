@@ -1,4 +1,5 @@
 import { isValidZip, pieceUnitForAck, spokenPieceCount } from "./completeness.js";
+import { piecesCountPrompt } from "./dialog.js";
 import { isGarbagePlace } from "./extract.js";
 
 export const CONVERSATIONAL_GREETING =
@@ -112,11 +113,7 @@ function conversationalAsk(sheet, awaiting) {
       : "Where is this going? I need a city, state, or zip code.";
   }
   if (awaiting === "piece_unit") return "Are you shipping pallets or pieces?";
-  if (awaiting === "pieces") {
-    if (sheet?.freight?.piece_unit === "pallets") return "How many pallets?";
-    if (sheet?.freight?.piece_unit === "pieces") return "How many pieces?";
-    return "How many pieces or pallets?";
-  }
+  if (awaiting === "pieces") return piecesCountPrompt(sheet);
   if (awaiting === "measure") {
     return "What’s the total weight in pounds? Or dims or class if you already know them.";
   }

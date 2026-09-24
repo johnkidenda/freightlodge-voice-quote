@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { createSession, handleUtterance } from "../src/lib/dialog.js";
 import { presentAgentReply } from "../src/lib/conversational.js";
 import {
+  JEV_SESSION_KEY,
   JEV_SLOT_IDS,
   JEV_STORAGE_KEY,
   buildJevQuestions,
@@ -15,6 +16,8 @@ import {
   interpretJevAnswers,
   isJevDisabled,
   normalizeJevDecision,
+  readJevSessionFlag,
+  saveJevSessionEnabled,
   offDecision,
 } from "../src/lib/jev.js";
 import { formatSessionTranscript } from "../src/lib/transcript.js";
@@ -320,13 +323,61 @@ describe("client Jev proxy helper", () => {
     });
     expect(decision).toEqual(offDecision("disabled"));
     expect(isJevDisabled({ search: "", storage: mem })).toBe(true);
-    expect(isJevDisabled({ search: "?jev=1", storage: mem })).toBe(false);
+    expect(isJevDisabled({ search: "?jev=1", storage: mem, sessionStore: mem })).toBe(false);
     expect(
       await fetchJevDecision({
         utterance: "78721",
         url: "https://proxy.example/jev",
         search: "?jev=1",
         storage: mem,
+        fetchImpl: async () => ({
+          ok: true,
+          status: 200,
+          json: async () => ({ ok: true, jev: "on", answers: jevAnswers() }),
+        }),
+      }),
+    ).toMatchObject({ on: true });
+  });
+
+  it("session toggle skips Jev without writing the long-lived flag", async () => {
+    const storage = new Map();
+    const local = {
+      getItem: (k) => (storage.has(k) ? storage.get(k) : null),
+      setItem: (k, v) => storage.set(k, String(v)),
+    };
+    const session = new Map();
+    const tab = {
+      getItem: (k) => (session.has(k) ? session.get(k) : null),
+      setItem: (k, v) => session.set(k, String(v)),
+    };
+    expect(readJevSessionFlag(tab)).toBeNull();
+    expect(isJevDisabled({ search: "", storage: local, sessionStore: tab })).toBe(false);
+    expect(saveJevSessionEnabled(false, tab)).toBe(false);
+    expect(tab.getItem(JEV_SESSION_KEY)).toBe("off");
+    expect(local.getItem(JEV_STORAGE_KEY)).toBeNull();
+    expect(isJevDisabled({ search: "", storage: local, sessionStore: tab })).toBe(true);
+    const decision = await fetchJevDecision({
+      utterance: "78721",
+      url: "https://proxy.example/jev",
+      search: "",
+      storage: local,
+      sessionStore: tab,
+      fetchImpl: async () => {
+        throw new Error("should not fetch");
+      },
+    });
+    expect(decision).toEqual(offDecision("disabled"));
+
+    expect(saveJevSessionEnabled(true, tab)).toBe(true);
+    local.setItem(JEV_STORAGE_KEY, "0");
+    expect(isJevDisabled({ search: "", storage: local, sessionStore: tab })).toBe(false);
+    expect(
+      await fetchJevDecision({
+        utterance: "78721",
+        url: "https://proxy.example/jev",
+        search: "",
+        storage: local,
+        sessionStore: tab,
         fetchImpl: async () => ({
           ok: true,
           status: 200,
@@ -468,9 +519,13 @@ describe("transcript + source guards", () => {
       result.session,
     );
     expect(text).toContain("STT: Web Speech");
+    expect(text).toContain("Jev mode: on");
     expect(text).toMatch(/Jev: on /);
     expect(text).toContain("slots=dest_zip");
     expect(formatJevTranscriptLine(createSession({ id: "empty" }))).toBe("Jev: off");
+    const off = formatSessionTranscript([], { ...result.session, jevEnabled: false });
+    expect(off).toContain("Jev mode: off");
+    expect(off).not.toContain("Jev mode: on");
   });
 
   it("keeps TYPESAFE_API_KEY off the Pages client and out of VITE_*", () => {
@@ -497,6 +552,18 @@ describe("transcript + source guards", () => {
     expect(app).toContain("fetchJevDecision");
     expect(app).toContain("isJevDisabled");
     expect(app).toContain("handleUtterance(state.session, text, { jev })");
+    expect(app).toContain("saveJevSessionEnabled");
+    expect(app).toContain("sessionStorage");
+    expect(app).toContain("jevEnabled");
+    const layout = readFileSync("src/ui/layout.js", "utf8");
+    expect(layout).toContain('id="jev-mode"');
+    expect(layout).toContain("Jev on");
+    expect(layout).toContain("Jev off");
+    const chrome = readFileSync("src/ui/chrome.js", "utf8");
+    expect(chrome).toContain("is-count-ask");
+    expect(chrome).toContain("Type the number…");
+    const css = readFileSync("src/style.css", "utf8");
+    expect(css).toMatch(/\.composer\.is-count-ask/);
     expect(app).not.toMatch(/openrouter/i);
     expect(app).not.toMatch(/api\.anthropic|api\.x\.ai|openai\.com\/v1\/chat/i);
   });

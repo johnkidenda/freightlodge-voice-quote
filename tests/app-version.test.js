@@ -5,12 +5,12 @@ import { formatAppVersionLabel, formatAppVersionTitle } from "../src/lib/app-ver
 import { readClientUi } from "./client-ui.js";
 
 describe("app version 0.XX", () => {
-  it("VERSION is 0.37 for this ship", () => {
+  it("VERSION is 0.38 for this ship", () => {
     const raw = readFileSync("VERSION", "utf8").trim();
-    expect(raw).toBe("0.37");
-    expect(formatAppVersionLabel(raw)).toBe("v0.37");
-    expect(formatAppVersionTitle(raw, "abc1234")).toBe("v0.37 (abc1234)");
-    expect(formatAppVersionTitle(raw, "dev")).toBe("v0.37");
+    expect(raw).toBe("0.38");
+    expect(formatAppVersionLabel(raw)).toBe("v0.38");
+    expect(formatAppVersionTitle(raw, "abc1234")).toBe("v0.38 (abc1234)");
+    expect(formatAppVersionTitle(raw, "dev")).toBe("v0.38");
   });
 
   it("bump script increments 0.XX by one", () => {

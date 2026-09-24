@@ -13,6 +13,7 @@ import {
   applyZipToRole,
   detectCityZipMetroClarify,
   detectZipRoleCorrection,
+  distinctUtteranceZips,
   extractSlots,
   firstBareZip,
   isGarbagePlace,
@@ -40,7 +41,7 @@ const PROMPTS = {
   incomplete_dest_zip: "That destination zip code is short. I need a full 5-digit zip code.",
   incomplete_origin_zip: "That origin zip code is short. I need a full 5-digit zip code.",
   piece_unit: "Are you shipping pallets or pieces?",
-  pieces: "How many pieces or pallets?",
+  pieces: "How many pieces or pallets? Please type it in.",
   measure:
     "I need a real measure: total weight in pounds, or L×W×H in inches, or the NMFC class if you already know it.",
   commodity: "What’s the commodity?",
@@ -484,13 +485,41 @@ export function handleUtterance(session, text, { now, jev } = {}) {
     }
   }
 
-  const roleFix = detectZipRoleCorrection(raw);
+  const spokenZips = distinctUtteranceZips(raw);
+  const extractedOriginZip = zip5(extracted.origin?.postal_code);
+  const extractedDestZip = zip5(extracted.destination?.postal_code);
+  const extractedDistinctPair = Boolean(
+    extractedOriginZip && extractedDestZip && extractedOriginZip !== extractedDestZip,
+  );
+  // Two ZIPs in one turn are an assignment. Never move the first (often origin) onto dest.
+  const roleFix =
+    extractedDistinctPair || spokenZips.length >= 2 ? null : detectZipRoleCorrection(raw);
   const zipForFix = firstBareZip(raw) || extracted.flags.bareZip || session.lastBareZip;
-  if (roleFix && zipForFix && !extracted.flags.zipClarify) {
-    sheet = applyZipRoleCorrection(sheet, roleFix, zipForFix);
+  const wouldCopyOriginOntoDest =
+    roleFix === "dest" &&
+    extractedOriginZip &&
+    extractedOriginZip === zip5(zipForFix) &&
+    extractedDestZip &&
+    extractedDestZip !== extractedOriginZip;
+  const pureMove = Boolean(roleFix && !firstBareZip(raw));
+  if (roleFix && zipForFix && !extracted.flags.zipClarify && !wouldCopyOriginOntoDest) {
+    sheet = applyZipRoleCorrection(sheet, roleFix, zipForFix, { clearOther: pureMove });
     if (roleFix === "dest") extracted.destination.postal_code = zipForFix;
     if (roleFix === "origin") extracted.origin.postal_code = zipForFix;
     extracted.flags.zipRole = roleFix;
+  }
+  // A filled ZIP stays put unless this turn moves it ("that's the destination") or corrects it.
+  if (!pureMove && !utteranceCorrectsSlot(raw) && !extracted.flags.zipClarify) {
+    const originBefore = zip5(sheetFromClarify?.lanes?.origin?.postal_code);
+    const destBefore = zip5(sheetFromClarify?.lanes?.destination?.postal_code);
+    if (originBefore && !zip5(sheet.lanes?.origin?.postal_code)) {
+      sheet.lanes.origin.postal_code = sheetFromClarify.lanes.origin.postal_code;
+      extracted.origin = { ...(extracted.origin || {}), postal_code: originBefore };
+    }
+    if (destBefore && !zip5(sheet.lanes?.destination?.postal_code)) {
+      sheet.lanes.destination.postal_code = sheetFromClarify.lanes.destination.postal_code;
+      extracted.destination = { ...(extracted.destination || {}), postal_code: destBefore };
+    }
   }
 
   const lastBareZip = firstBareZip(raw) || extracted.flags.bareZip || session.lastBareZip;
@@ -645,9 +674,10 @@ function promptFor(slot, sheet) {
   return slot ? PROMPTS[slot] : PROMPTS.email;
 }
 
-function piecesCountPrompt(sheet) {
-  if (sheet?.freight?.piece_unit === "pallets") return "How many pallets?";
-  if (sheet?.freight?.piece_unit === "pieces") return "How many pieces?";
+export function piecesCountPrompt(sheet) {
+  const typed = "Please type it in.";
+  if (sheet?.freight?.piece_unit === "pallets") return `How many pallets? ${typed}`;
+  if (sheet?.freight?.piece_unit === "pieces") return `How many pieces? ${typed}`;
   return PROMPTS.pieces;
 }
 
