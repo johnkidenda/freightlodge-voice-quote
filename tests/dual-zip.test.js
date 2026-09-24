@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createSession, handleUtterance } from "../src/lib/dialog.js";
-import { extractSlots } from "../src/lib/extract.js";
+import { detectZipRoleCorrection, extractSlots } from "../src/lib/extract.js";
 import { presentAgentReply } from "../src/lib/conversational.js";
 
 const PAIRS = ["60601 to 75201", "from 60601 to 75201", "origin 60601 dest 75201", "60601 75201"];
@@ -116,5 +116,83 @@ describe("dual ZIP while awaiting one ZIP slot", () => {
     const extracted = extractSlots("dest zip 30301 or 78721", { awaiting: "dest_zip" });
     expect(extracted.origin.postal_code).not.toBe("30301");
     expect(extracted.destination.postal_code).not.toBe("78721");
+  });
+});
+
+function austinAtlantaSession(id) {
+  const session = createSession({ id });
+  session.sheet.lanes.origin = { city: "Austin", state: "TX", postal_code: null, country: "US" };
+  session.sheet.lanes.destination = { city: "Atlanta", state: "GA", postal_code: null, country: "US" };
+  session.sheet.freight.commodity = "orange juice";
+  session.sheet.freight.total_weight_lbs = 1000;
+  session.awaiting = "origin_zip";
+  return session;
+}
+
+describe("transcript db28f770 dual ZIP", () => {
+  it.each([
+    "origins of God is 78721 and destination zip code is 30030",
+    "origins of god is 78721 and destination zip code is 30030",
+    "origins zip code is 78721 and destination zip code is 30030",
+    "origin zip code is 78721 and destination zip code is 30030",
+    "origin zip is 78721 and destination zip is 30030",
+    "origin zip 78721 destination zip 30030",
+    "78721 30030",
+    "78721 and 30030",
+  ])("parks both ends from %s and does not copy origin onto dest", (text) => {
+    const extracted = extractSlots(text, {
+      awaiting: "origin_zip",
+      originCity: "Austin",
+      destCity: "Atlanta",
+    });
+    expect(extracted.origin.postal_code, text).toBe("78721");
+    expect(extracted.destination.postal_code, text).toBe("30030");
+    expect(detectZipRoleCorrection(text), text).toBeNull();
+
+    const result = handleUtterance(austinAtlantaSession(`dual-${text}`), text);
+    expect(result.session.sheet.lanes.origin.postal_code, text).toBe("78721");
+    expect(result.session.sheet.lanes.origin.city, text).toBe("Austin");
+    expect(result.session.sheet.lanes.destination.postal_code, text).toBe("30030");
+    expect(result.session.sheet.lanes.destination.city, text).toBe("Atlanta");
+    expect(result.session.awaiting, text).not.toBe("origin_zip");
+    expect(result.session.awaiting, text).not.toBe("dest_zip");
+    expect(result.reply, text).not.toMatch(/dest 78721/);
+    expect(result.reply, text).not.toMatch(/origin zip code/i);
+    const warm = presentAgentReply(result, true);
+    expect(warm, text).toMatch(/origin ZIP, 78721/);
+    expect(warm, text).toMatch(/destination ZIP, 30030/);
+    expect(warm, text).not.toMatch(/destination ZIP, 78721/);
+    expect(warm, text).not.toMatch(/origin zip code for Austin/i);
+  });
+
+  it("STT origins-of-God while awaiting dest still fills origin, not dest", () => {
+    const extracted = extractSlots("origins of God is 78721", { awaiting: "dest_zip" });
+    expect(extracted.origin.postal_code).toBe("78721");
+    expect(extracted.destination.postal_code).toBeUndefined();
+  });
+
+  it("correcting only the destination keeps an uncontested origin", () => {
+    const session = austinAtlantaSession("correct-dest");
+    session.sheet.lanes.origin.postal_code = "78721";
+    session.sheet.lanes.destination.postal_code = "78721";
+    session.awaiting = "dest_zip";
+    const result = handleUtterance(session, "destination zip code is 30030");
+    expect(result.session.sheet.lanes.origin.postal_code).toBe("78721");
+    expect(result.session.sheet.lanes.destination.postal_code).toBe("30030");
+    expect(result.session.awaiting).not.toBe("origin_zip");
+    expect(result.reply).not.toMatch(/origin zip code/i);
+    expect(presentAgentReply(result, true)).not.toMatch(/origin zip code/i);
+  });
+
+  it("a later dest-only correction does not clear the origin parked by the dual utterance", () => {
+    let session = handleUtterance(
+      austinAtlantaSession("then-correct"),
+      "origins of God is 78721 and destination zip code is 30030",
+    ).session;
+    expect(session.sheet.lanes.origin.postal_code).toBe("78721");
+    const result = handleUtterance(session, "destination zip code is 30303");
+    expect(result.session.sheet.lanes.origin.postal_code).toBe("78721");
+    expect(result.session.sheet.lanes.destination.postal_code).toBe("30303");
+    expect(result.session.awaiting).not.toBe("origin_zip");
   });
 });

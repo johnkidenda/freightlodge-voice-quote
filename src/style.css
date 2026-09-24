@@ -174,6 +174,7 @@ button, input { font: inherit; }
 .chat-col.is-quoted .input-row,
 .chat-col.is-quoted #sample,
 .chat-col.is-quoted .mode-cluster,
+.chat-col.is-quoted #jev-mode,
 .input-row[hidden],
 #sample[hidden],
 .mode-cluster[hidden] {
@@ -289,7 +290,8 @@ button, input { font: inherit; }
   outline-offset: 2px;
 }
 .convo-speaker { display: block; }
-.composer.is-email-ask .input-row input {
+.composer.is-email-ask .input-row input,
+.composer.is-count-ask .input-row input {
   border-color: var(--gold);
   box-shadow: 0 0 0 3px rgba(199, 154, 60, 0.22);
   background: #fffdf6;

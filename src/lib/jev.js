@@ -26,6 +26,8 @@ export {
 } from "./jev-core.js";
 
 export const JEV_STORAGE_KEY = "freightlodge.jev";
+/** Session A/B switch. Does not rewrite the longer-lived query flag in localStorage. */
+export const JEV_SESSION_KEY = "freightlodge.jev.session";
 
 /** `?jev=0` / `off` / `false` disables; `?jev=1` re-enables. */
 export function readJevQueryFlag(search) {
@@ -39,7 +41,36 @@ export function readJevQueryFlag(search) {
   return null;
 }
 
-export function isJevDisabled({ search, storage } = {}) {
+/** `on` / `off` when this tab chose a mode. `null` when the session has not chosen. */
+export function readJevSessionFlag(sessionStore) {
+  try {
+    const v = String(sessionStore?.getItem?.(JEV_SESSION_KEY) || "").trim().toLowerCase();
+    if (v === "0" || v === "off") return false;
+    if (v === "1" || v === "on") return true;
+  } catch {
+    /* private mode */
+  }
+  return null;
+}
+
+export function saveJevSessionEnabled(on, sessionStore) {
+  const next = Boolean(on);
+  try {
+    sessionStore?.setItem?.(JEV_SESSION_KEY, next ? "on" : "off");
+  } catch {
+    /* quota / private mode */
+  }
+  return next;
+}
+
+export function isJevDisabled({ search, storage, sessionStore } = {}) {
+  const session = sessionStore === undefined
+    ? typeof sessionStorage !== "undefined" ? sessionStorage : null
+    : sessionStore;
+  const sessionFlag = readJevSessionFlag(session);
+  if (sessionFlag === false) return true;
+  if (sessionFlag === true) return false;
+
   const querySearch = search ?? (typeof location !== "undefined" ? location.search : "");
   const store = storage === undefined
     ? typeof localStorage !== "undefined" ? localStorage : null
@@ -99,8 +130,9 @@ export async function fetchJevDecision({
   timeoutMs = JEV_TIMEOUT_MS,
   search,
   storage,
+  sessionStore,
 } = {}) {
-  if (isJevDisabled({ search, storage })) return offDecision("disabled");
+  if (isJevDisabled({ search, storage, sessionStore })) return offDecision("disabled");
   const text = String(utterance || "").trim();
   const proxy = url == null ? getJevProxyUrl() : String(url).trim();
   if (!text || !proxy) return offDecision(proxy ? "empty utterance" : "no proxy");

@@ -59,7 +59,7 @@ export const JEV_CLARIFY_SCRIPTS = Object.freeze({
   dest_zip: "I want to double-check destination. What’s the 5-digit destination zip code?",
   measure: "I want to double-check the measure. Total weight in pounds, or L×W×H, or a known NMFC class?",
   piece_unit: "Are you shipping pallets or pieces?",
-  pieces: "I want to double-check piece count. How many pieces or pallets?",
+  pieces: "I want to double-check piece count. How many pieces or pallets? Please type it in.",
   commodity: "I want to double-check the commodity. What is shipping?",
   pickup_date: "I want to double-check pickup. Say a day (today, tomorrow, Friday) or YYYY-MM-DD.",
   accessorials: "I want to double-check accessorials. Liftgate, residential, inside, or none?",

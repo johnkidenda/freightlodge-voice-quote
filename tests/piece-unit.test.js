@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatStoredPieces, SLOT_ORDER, nextRequiredSlot } from "../src/lib/completeness.js";
-import { createSession, handleUtterance, PROMPTS } from "../src/lib/dialog.js";
+import { createSession, handleUtterance, piecesCountPrompt, PROMPTS } from "../src/lib/dialog.js";
 import { quoteEmailFields } from "../src/lib/email.js";
 import { extractSlots } from "../src/lib/extract.js";
 import { composeConversationalReply, presentAgentReply } from "../src/lib/conversational.js";
@@ -40,8 +40,11 @@ describe("piece unit then count", () => {
     expect(result.session.sheet.freight.piece_unit).toBe("pallets");
     expect(result.session.sheet.freight.pieces).toBeNull();
     expect(result.session.awaiting).toBe("pieces");
-    expect(result.reply).toMatch(/How many pallets\?/);
-    expect(presentAgentReply(result, true)).toMatch(/How many pallets\?/);
+    expect(result.reply).toBe("Got pallets. How many pallets? Please type it in.");
+    expect(presentAgentReply(result, true)).toBe(
+      "Got pallets. How many pallets? Please type it in.",
+    );
+    expect(result.reply).not.toMatch(/\u2014/);
   });
 
   it("after pieces, asks how many pieces", () => {
@@ -50,7 +53,8 @@ describe("piece unit then count", () => {
     const result = handleUtterance(session, "we're shipping pieces");
     expect(result.session.sheet.freight.piece_unit).toBe("pieces");
     expect(result.session.awaiting).toBe("pieces");
-    expect(result.reply).toMatch(/How many pieces\?/);
+    expect(result.reply).toBe("Got pieces. How many pieces? Please type it in.");
+    expect(presentAgentReply(result, true)).toBe("Got pieces. How many pieces? Please type it in.");
   });
 
   it.each([
@@ -227,12 +231,26 @@ describe("short counts while awaiting pieces", () => {
     ["um five", 5],
     ["it's five", 5],
     ["five pallets", 5],
+    ["for pallets", 4],
     ["5", 5],
   ])("%s commits as %s pallets", (text, count) => {
     const result = handleUtterance(awaitingPieces(`stt-${text}`), text);
     expect(result.session.sheet.freight.pieces, text).toBe(count);
     expect(result.session.sheet.freight.piece_unit).toBe("pallets");
     expect(result.reply, text).toMatch(new RegExp(`Got ${count} pallet`));
+  });
+
+  it("count ask copy steers to typing and still accepts a spoken number", () => {
+    expect(PROMPTS.pieces).toBe("How many pieces or pallets? Please type it in.");
+    expect(piecesCountPrompt({ freight: { piece_unit: "pallets" } })).toBe(
+      "How many pallets? Please type it in.",
+    );
+    expect(piecesCountPrompt({ freight: { piece_unit: "pieces" } })).toBe(
+      "How many pieces? Please type it in.",
+    );
+    const spoken = handleUtterance(awaitingPieces("spoken-four"), "4");
+    expect(spoken.session.sheet.freight.pieces).toBe(4);
+    expect(spoken.session.awaiting).not.toBe("pieces");
   });
 
   it("does not treat to/for as a count outside the pieces slot", () => {

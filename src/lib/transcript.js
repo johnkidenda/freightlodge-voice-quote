@@ -32,6 +32,7 @@ export function formatSessionTranscript(messages, session) {
     "Sheet snapshot:",
     `Request: ${requestId}`,
     `STT: ${sttLabel}`,
+    `Jev mode: ${session?.jevEnabled === false ? "off" : "on"}`,
     formatJevTranscriptLine(session),
     `Origin: ${origin}`,
     `Dest: ${dest}`,
