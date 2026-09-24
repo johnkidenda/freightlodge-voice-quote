@@ -1,3 +1,4 @@
+import { formatStoredPieces } from "./completeness.js";
 import { emailQuoteSendUrl } from "./email-verify-client.js";
 import { buildQuoteEmailHtml } from "./quote-email-html.js";
 
@@ -13,10 +14,7 @@ function placeLine(place) {
 }
 
 function piecesLine(freight) {
-  const n = freight?.pieces;
-  if (n == null || n === "") return "—";
-  if (freight.piece_unit === "pallets" || freight.piece_unit === "pieces") return `${n} ${freight.piece_unit}`;
-  return String(n);
+  return formatStoredPieces(freight);
 }
 
 export function quoteEmailFields(sheet) {

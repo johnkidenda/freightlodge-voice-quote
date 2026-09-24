@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { SLOT_ORDER, nextRequiredSlot } from "../src/lib/completeness.js";
+import { formatStoredPieces, SLOT_ORDER, nextRequiredSlot } from "../src/lib/completeness.js";
 import { createSession, handleUtterance, PROMPTS } from "../src/lib/dialog.js";
+import { quoteEmailFields } from "../src/lib/email.js";
 import { extractSlots } from "../src/lib/extract.js";
-import { presentAgentReply } from "../src/lib/conversational.js";
+import { composeConversationalReply, presentAgentReply } from "../src/lib/conversational.js";
+import { formatSessionTranscript } from "../src/lib/transcript.js";
 
 function zippedSession(id = "unit") {
   const session = createSession({ id });
@@ -100,5 +102,141 @@ describe("piece unit then count", () => {
       expect(result.reply, text).not.toMatch(/How many (pallets|pieces)\?/);
       expect(result.reply, text).not.toMatch(/Are you shipping pallets or pieces/);
     }
+  });
+
+  it("confirms the stored unit, singular when the count is 1", () => {
+    const pallets = zippedSession("ack-pallets");
+    pallets.sheet.freight.piece_unit = "pallets";
+    pallets.awaiting = "pieces";
+    const five = handleUtterance(pallets, "five");
+    expect(five.session.sheet.freight.pieces).toBe(5);
+    expect(five.session.sheet.freight.piece_unit).toBe("pallets");
+    expect(five.reply).toMatch(/Got 5 pallets\./);
+    expect(five.reply).not.toMatch(/pieces/);
+    expect(presentAgentReply(five, true)).toMatch(/Got 5 pallets\./);
+    expect(presentAgentReply(five, true)).not.toMatch(/\bpcs\b/);
+
+    const one = handleUtterance(
+      { ...pallets, sheet: { ...pallets.sheet, freight: { ...pallets.sheet.freight, pieces: null } } },
+      "one",
+    );
+    expect(one.session.sheet.freight.pieces).toBe(1);
+    expect(one.reply).toMatch(/Got 1 pallet\./);
+    expect(presentAgentReply(one, true)).toMatch(/Got 1 pallet\./);
+
+    const pieces = zippedSession("ack-pieces");
+    pieces.sheet.freight.piece_unit = "pieces";
+    pieces.awaiting = "pieces";
+    const fivePieces = handleUtterance(pieces, "5");
+    expect(fivePieces.reply).toMatch(/Got 5 pieces\./);
+    expect(presentAgentReply(fivePieces, true)).toMatch(/Got 5 pieces\./);
+    const onePiece = handleUtterance(
+      {
+        ...pieces,
+        sheet: { ...pieces.sheet, freight: { ...pieces.sheet.freight, pieces: null } },
+      },
+      "1",
+    );
+    expect(onePiece.reply).toMatch(/Got 1 piece\./);
+
+    const warmUnknown = composeConversationalReply({
+      extracted: { freight: { pieces: 5 }, origin: {}, destination: {}, pickup: {}, contact: {}, flags: {} },
+      sheet: { freight: {}, lanes: { origin: {}, destination: {} } },
+      awaiting: "measure",
+    });
+    expect(warmUnknown).toMatch(/Got 5 pieces\./);
+    expect(warmUnknown).not.toMatch(/\bpcs\b/);
+    expect(warmUnknown).not.toMatch(/pallet/);
+  });
+
+  it("echoes the stored unit in the sheet summary and the quote email", () => {
+    const palletSheet = {
+      freight: { pieces: 5, piece_unit: "pallets" },
+      lanes: { origin: {}, destination: {} },
+      pickup: {},
+      contact: {},
+    };
+    expect(formatStoredPieces(palletSheet.freight)).toBe("5 pallets");
+    expect(formatStoredPieces({ pieces: 1, piece_unit: "pallets" })).toBe("1 pallet");
+    expect(formatStoredPieces({ pieces: 5, piece_unit: "pieces" })).toBe("5 pieces");
+    expect(formatStoredPieces({ pieces: 1, piece_unit: "pieces" })).toBe("1 piece");
+    expect(formatStoredPieces({ pieces: 5 })).toBe("5");
+    expect(quoteEmailFields(palletSheet).pieces).toBe("5 pallets");
+    expect(quoteEmailFields({ ...palletSheet, freight: { pieces: 1, piece_unit: "pieces" } }).pieces).toBe(
+      "1 piece",
+    );
+    const transcript = formatSessionTranscript([], {
+      sheet: palletSheet,
+      awaiting: "commodity",
+    });
+    expect(transcript).toMatch(/Pieces: 5 pallets/);
+  });
+});
+
+describe("short counts while awaiting pieces", () => {
+  const WORDS = [
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine",
+    "ten",
+    "eleven",
+    "twelve",
+    "thirteen",
+    "fourteen",
+    "fifteen",
+    "sixteen",
+    "seventeen",
+    "eighteen",
+    "nineteen",
+    "twenty",
+  ];
+
+  function awaitingPieces(id) {
+    const session = zippedSession(id);
+    session.sheet.freight.piece_unit = "pallets";
+    session.awaiting = "pieces";
+    return session;
+  }
+
+  it.each(WORDS)("bare word %s commits the count", (word) => {
+    const result = handleUtterance(awaitingPieces(`word-${word}`), word);
+    expect(result.session.sheet.freight.pieces).toBe(WORDS.indexOf(word) + 1);
+    expect(result.session.sheet.freight.piece_unit).toBe("pallets");
+    expect(result.session.awaiting).not.toBe("pieces");
+  });
+
+  it.each(["1", "5", "12", "20"])("bare digits %s commit the count", (text) => {
+    const result = handleUtterance(awaitingPieces(`digit-${text}`), text);
+    expect(result.session.sheet.freight.pieces).toBe(Number(text));
+    expect(result.session.awaiting).not.toBe("pieces");
+  });
+
+  it.each([
+    ["won", 1],
+    ["to", 2],
+    ["too", 2],
+    ["for", 4],
+    ["ate", 8],
+    ["five.", 5],
+    ["um five", 5],
+    ["it's five", 5],
+    ["five pallets", 5],
+    ["5", 5],
+  ])("%s commits as %s pallets", (text, count) => {
+    const result = handleUtterance(awaitingPieces(`stt-${text}`), text);
+    expect(result.session.sheet.freight.pieces, text).toBe(count);
+    expect(result.session.sheet.freight.piece_unit).toBe("pallets");
+    expect(result.reply, text).toMatch(new RegExp(`Got ${count} pallet`));
+  });
+
+  it("does not treat to/for as a count outside the pieces slot", () => {
+    expect(extractSlots("for Dallas", { awaiting: "origin_zip" }).freight.pieces).toBeUndefined();
+    expect(extractSlots("to Atlanta", { awaiting: "dest_zip" }).freight.pieces).toBeUndefined();
   });
 });

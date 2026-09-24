@@ -5,6 +5,8 @@ import {
   collapseProgressiveFinals,
   createHoldToTalk,
   createTranscriptBuffer,
+  isBareCountUtterance,
+  pickTranscript,
   preferTapToTalk,
 } from "../src/lib/speech.js";
 
@@ -131,8 +133,9 @@ function fakeRecognition() {
   Recognition.prototype.emit = function emit(rows) {
     this.onresult?.({
       results: rows.map((row) => {
-        const item = [{ transcript: row.transcript }];
-        item.transcript = row.transcript;
+        const alts = row.alternatives || [{ transcript: row.transcript, confidence: row.confidence }];
+        const item = alts.map((alt) => ({ transcript: alt.transcript, confidence: alt.confidence }));
+        item.transcript = alts[0]?.transcript || "";
         item.isFinal = row.isFinal;
         return item;
       }),
@@ -230,12 +233,75 @@ describe("short mobile answers are not dropped", () => {
     expect(buf.release()).toBe("one pallet");
   });
 
+  it("releases a one-word interim count instead of dropping it", () => {
+    const buf = createTranscriptBuffer({ numericSlot: () => true });
+    buf.start();
+    buf.applyResults([{ transcript: "five", isFinal: false, confidence: 0.15 }]);
+    expect(buf.release()).toBe("five");
+  });
+
+  it("keeps the count when a later result is an empty final", () => {
+    const buf = createTranscriptBuffer({ numericSlot: () => true });
+    buf.start();
+    buf.applyResults([{ transcript: "five", isFinal: false, confidence: 0.2 }]);
+    buf.applyResults([{ transcript: "", isFinal: true }]);
+    expect(buf.release()).toBe("five");
+  });
+
+  it("prefers a count alternative when the top hypothesis is a low-confidence fragment", () => {
+    expect(
+      pickTranscript(
+        [
+          { transcript: "fiv", confidence: 0.2 },
+          { transcript: "five", confidence: 0.4 },
+        ],
+        { numericSlot: true },
+      ),
+    ).toBe("five");
+    expect(isBareCountUtterance("five")).toBe(true);
+    expect(isBareCountUtterance("five.")).toBe(true);
+  });
+
   it("keeps the phrase when a later result is an empty final", () => {
     const buf = createTranscriptBuffer();
     buf.start();
     buf.applyResults([{ transcript: "one pallet", isFinal: false }]);
     buf.applyResults([{ transcript: "", isFinal: true }]);
     expect(buf.release()).toBe("one pallet");
+  });
+
+  it("commits interim five on release while awaiting a numeric slot", () => {
+    const { Recognition, instances } = fakeRecognition();
+    const timers = [];
+    const commits = [];
+    const talk = createHoldToTalk({
+      Recognition,
+      numericSlot: () => true,
+      onCommit: (text) => commits.push(text),
+      schedule: (fn, ms) => {
+        const id = timers.length + 1;
+        timers.push({ id, fn, ms });
+        return id;
+      },
+      unschedule: (id) => {
+        const i = timers.findIndex((t) => t.id === id);
+        if (i >= 0) timers.splice(i, 1);
+      },
+    });
+    talk.start();
+    instances[0].emit([
+      {
+        isFinal: false,
+        alternatives: [
+          { transcript: "fiv", confidence: 0.18 },
+          { transcript: "five", confidence: 0.33 },
+        ],
+      },
+    ]);
+    talk.stop();
+    expect(commits).toEqual([]);
+    timers[0].fn();
+    expect(commits).toEqual(["five"]);
   });
 
   it("commits one pallet when stop ends the recognizer without a final", () => {

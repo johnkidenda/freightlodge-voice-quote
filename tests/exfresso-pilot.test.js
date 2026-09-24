@@ -101,6 +101,19 @@ describe("heuristic picker (no TypeSafe)", () => {
     expect(pick.actionId).toBe("inside_pickup");
   });
 
+  it("does not treat an unlabeled inside checkbox as both ends", () => {
+    const pick = pickHeuristicAction(
+      [
+        { id: "inside", kind: "check", field: "inside", checked: false, label: "Inside" },
+        { id: "continue-pickup", kind: "click", role: "button", label: "Continue" },
+      ],
+      sheet,
+      { status: "collecting", values: { accessorials: [] } },
+    );
+    expect(pick.actionId).not.toBe("inside");
+    expect(pick.actionId).toBe("continue-pickup");
+  });
+
   it("submits Get rates only on review after fields match", () => {
     const filled = {
       origin_zip: "78721",

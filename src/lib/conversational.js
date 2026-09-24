@@ -1,4 +1,4 @@
-import { isValidZip } from "./completeness.js";
+import { isValidZip, pieceUnitForAck, spokenPieceCount } from "./completeness.js";
 import { isGarbagePlace } from "./extract.js";
 
 export const CONVERSATIONAL_GREETING =
@@ -63,8 +63,8 @@ function conversationalHave(sheet, extracted) {
     bits.push(extracted.destination.city);
   }
   if (extracted?.freight?.pieces) {
-    const unit = extracted.freight.piece_unit === "pallets" ? "pallets" : "pieces";
-    bits.push(`${extracted.freight.pieces} ${unit}`);
+    const unit = pieceUnitForAck(extracted.freight, sheet?.freight);
+    bits.push(spokenPieceCount(extracted.freight.pieces, unit, { unknown: "pieces" }));
   } else if (extracted?.freight?.piece_unit === "pallets" || extracted?.freight?.piece_unit === "pieces") {
     bits.push(extracted.freight.piece_unit);
   }
@@ -128,6 +128,9 @@ function conversationalAsk(sheet, awaiting) {
   if (awaiting === "liftgate_side") {
     return "Is that liftgate at pickup, delivery, or both?";
   }
+  if (awaiting === "inside_side") {
+    return "Inside pickup, inside delivery, or both?";
+  }
   if (awaiting === "email") return "What email should I put on the sheet? Typing it is safer than saying it.";
   return "";
 }
@@ -149,6 +152,7 @@ export function composeConversationalReply({
     return "The sheet is complete. I’ll hand this to Freight Ops for a live rate.";
   }
   if (extracted?.flags?.zipClarify) return formalReply || "";
+  if (extracted?.flags?.incompleteZip?.digits) return formalReply || "";
   if (extracted?.flags?.incompleteZip) {
     return "That ZIP is short — I need a full 5-digit ZIP.";
   }

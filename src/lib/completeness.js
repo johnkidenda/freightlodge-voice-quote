@@ -132,3 +132,31 @@ export function formatPlace(place) {
   const parts = [place.city, place.state, place.postal_code].filter(Boolean);
   return parts.length ? parts.join(", ") : null;
 }
+
+/** Unit on this utterance, otherwise the unit already stored on the sheet. */
+export function pieceUnitForAck(extractedFreight, sheetFreight) {
+  const unit = extractedFreight?.piece_unit || sheetFreight?.piece_unit;
+  return unit === "pallets" || unit === "pieces" ? unit : null;
+}
+
+/**
+ * Spoken count. Singular when the unit is known and the count is 1.
+ * `unknown` keeps the previous wording when the unit is not on the sheet.
+ */
+export function spokenPieceCount(count, unit, { unknown = "pcs" } = {}) {
+  const n = Number(count);
+  if (!Number.isInteger(n) || n < 1) return "";
+  if (unit === "pallets") return n === 1 ? "1 pallet" : `${n} pallets`;
+  if (unit === "pieces") return n === 1 ? "1 piece" : `${n} pieces`;
+  if (unknown === "number") return String(n);
+  if (unknown === "pieces") return `${n} pieces`;
+  return `${n} pcs`;
+}
+
+/** Sheet summary / email line. Number only when the unit was never stored. */
+export function formatStoredPieces(freight) {
+  if (freight?.pieces == null || freight.pieces === "") return "—";
+  const unit = freight.piece_unit === "pallets" || freight.piece_unit === "pieces" ? freight.piece_unit : null;
+  if (!unit) return String(freight.pieces);
+  return spokenPieceCount(freight.pieces, unit);
+}

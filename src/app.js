@@ -128,7 +128,13 @@ export function mountApp(root) {
     state.hold?.abort?.();
     state.listening = false;
     state.finishing = false;
-    const talk = createSpeechSession(talkCallbacks());
+    const talk = createSpeechSession({
+      ...talkCallbacks(),
+      numericSlot: () => {
+        const slot = state.session?.awaiting;
+        return slot === "pieces" || slot === "measure";
+      },
+    });
     state.hold = talk;
     sessionRef.current = talk;
     applyHoldAvailability();

@@ -1,5 +1,11 @@
 import { emptySheet } from "./sheet.js";
-import { isReadyForQuote, isValidZip, nextRequiredSlot } from "./completeness.js";
+import {
+  isReadyForQuote,
+  isValidZip,
+  nextRequiredSlot,
+  pieceUnitForAck,
+  spokenPieceCount,
+} from "./completeness.js";
 import {
   applyCityZipChoice,
   applyExtractedSlots,
@@ -42,6 +48,7 @@ const PROMPTS = {
   accessorials:
     "Any accessorials — liftgate, residential, inside, limited access, appointment, freeze protect? Or say none.",
   liftgate_side: "Liftgate at pickup, delivery, or both?",
+  inside_side: "Inside pickup, inside delivery, or both?",
   email:
     "What email should I put on the sheet so we can send the quote? Typing the address is safer than saying it — voice often mangles emails.",
 };
@@ -182,6 +189,46 @@ function liftgateIdsForSide(side) {
   return [];
 }
 
+function decideInsideSide(raw) {
+  const t = String(raw || "")
+    .toLowerCase()
+    .replace(/['’]/g, "");
+  if (!t.trim()) return null;
+  if (/\b(both\s+ends|both|each|either|pickup and delivery|delivery and pickup|origin and destination|destination and origin)\b/.test(t)) {
+    return "both";
+  }
+  const pick = /\b(pick\s*-?\s*up|pickup|origin)\b/.test(t);
+  const deliv = /\b(deliver(?:y|ed)?|destination|dest)\b/.test(t);
+  if (pick && deliv) return "both";
+  if (pick) return "pickup";
+  if (deliv) return "delivery";
+  return null;
+}
+
+function insideIdsForSide(side) {
+  if (side === "pickup") return ["inside_pickup"];
+  if (side === "delivery") return ["inside_delivery"];
+  if (side === "both") return ["inside_pickup", "inside_delivery"];
+  return [];
+}
+
+const DIGIT_WORDS = ["", "one", "two", "three", "four", "five", "six"];
+
+function incompleteZipReply(flag) {
+  const digits = String(flag?.digits || "");
+  const role = flag?.role;
+  if (flag?.labeled && digits && (role === "dest" || role === "origin")) {
+    const side = role === "dest" ? "destination" : "origin";
+    const n = digits.length;
+    const word = DIGIT_WORDS[n] || String(n);
+    const unit = n === 1 ? "digit" : "digits";
+    return `I heard ${digits} for the ${side}, which is only ${word} ${unit}. What’s the full ZIP?`;
+  }
+  if (role === "dest") return PROMPTS.incomplete_dest_zip;
+  if (role === "origin") return PROMPTS.incomplete_origin_zip;
+  return PROMPTS.incomplete_zip;
+}
+
 function addAccessorials(extracted, ids) {
   if (!extracted.pickup) extracted.pickup = {};
   const cur = Array.isArray(extracted.pickup.accessorials) ? extracted.pickup.accessorials : [];
@@ -307,7 +354,25 @@ export function handleUtterance(session, text, { now, jev } = {}) {
     extracted.destination = {};
   }
   let accessorialClarify = session.accessorialClarify || null;
-  if (accessorialClarify?.kind === "liftgate") {
+  let queuedLiftgateThisTurn = false;
+  if (accessorialClarify?.kind === "inside") {
+    const already = extracted.pickup.accessorials || [];
+    const hasInside = already.includes("inside_pickup") || already.includes("inside_delivery");
+    const side = decideInsideSide(raw);
+    const pendingLiftgate = Boolean(accessorialClarify.pendingLiftgate);
+    if (hasInside || side) {
+      if (!hasInside && side) addAccessorials(extracted, insideIdsForSide(side));
+      extracted.flags.ambiguousInside = false;
+      if (pendingLiftgate) {
+        accessorialClarify = { kind: "liftgate" };
+        extracted.flags.ambiguousLiftgate = true;
+        queuedLiftgateThisTurn = true;
+      } else {
+        accessorialClarify = null;
+      }
+    }
+  }
+  if (!queuedLiftgateThisTurn && accessorialClarify?.kind === "liftgate") {
     const already = extracted.pickup.accessorials || [];
     const hasLift = already.includes("liftgate_pickup") || already.includes("liftgate_delivery");
     const side = decideLiftgateSide(raw);
@@ -452,6 +517,14 @@ export function handleUtterance(session, text, { now, jev } = {}) {
     return finish(session, sheet, askedAccessorials, reply, extracted, stay, undefined, lastBareZip, zipClarify, jevAfter, accessorialClarify);
   }
 
+  if (extracted.flags.ambiguousInside || accessorialClarify?.kind === "inside") {
+    const pendingLiftgate = Boolean(extracted.flags.ambiguousLiftgate || accessorialClarify?.pendingLiftgate);
+    accessorialClarify = { kind: "inside", pendingLiftgate };
+    const ack = acknowledge(extracted, sheet);
+    const reply = ack ? `${ack} ${PROMPTS.inside_side}` : PROMPTS.inside_side;
+    return finish(session, sheet, askedAccessorials, reply, extracted, "inside_side", undefined, lastBareZip, zipClarify, jevAfter, accessorialClarify);
+  }
+
   if (extracted.flags.ambiguousLiftgate || accessorialClarify?.kind === "liftgate") {
     accessorialClarify = { kind: "liftgate" };
     const ack = acknowledge(extracted, sheet);
@@ -476,12 +549,7 @@ export function handleUtterance(session, text, { now, jev } = {}) {
 
   if (extracted.flags.incompleteZip) {
     const role = extracted.flags.incompleteZip.role;
-    const reply =
-      role === "dest"
-        ? PROMPTS.incomplete_dest_zip
-        : role === "origin"
-          ? PROMPTS.incomplete_origin_zip
-          : PROMPTS.incomplete_zip;
+    const reply = incompleteZipReply(extracted.flags.incompleteZip);
     const stay =
       role === "dest" ? "dest_zip" : role === "origin" ? "origin_zip" : session.awaiting;
     return finish(session, sheet, askedAccessorials, reply, extracted, stay, undefined, undefined, zipClarify, jevAfter, accessorialClarify);
@@ -709,13 +777,8 @@ function acknowledge(extracted, sheet) {
     else if (extracted.destination?.state) bits.push(`dest ${extracted.destination.state} (still need ZIP)`);
   }
   if (extracted.freight?.pieces) {
-    const unit =
-      extracted.freight.piece_unit === "pallets"
-        ? "pallets"
-        : extracted.freight.piece_unit === "pieces"
-          ? "pieces"
-          : "pcs";
-    bits.push(`${extracted.freight.pieces} ${unit}`);
+    const unit = pieceUnitForAck(extracted.freight, sheet?.freight);
+    bits.push(spokenPieceCount(extracted.freight.pieces, unit, { unknown: "pcs" }));
   } else if (extracted.freight?.piece_unit === "pallets" || extracted.freight?.piece_unit === "pieces") {
     bits.push(extracted.freight.piece_unit);
   }
