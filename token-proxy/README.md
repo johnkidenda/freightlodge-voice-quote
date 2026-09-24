@@ -12,7 +12,9 @@ Mic → text is **Web Speech only**. Spoken agent replies use browser `speechSyn
 
 ## Deploy (Cloudflare Worker)
 
-Needs this directory’s `wrangler.toml` plus secrets **`TYPESAFE_API_KEY`** and SMTP fields (values from the box — do not commit them).
+Needs this directory’s `wrangler.toml` plus secrets **`TYPESAFE_API_KEY`** and SMTP fields (values from the box, do not commit them).
+
+Live Worker: `https://freightlodge-stt-token.johnkidenda.workers.dev`. Jev and email-verify validation work there. Actual SMTP sending from the Worker currently fails because smtp.hostinger.com sits on Cloudflare IPs, which Workers cannot open TCP to. An email-provider decision is pending.
 
 ```bash
 cd token-proxy
@@ -25,18 +27,16 @@ npx wrangler secret put MAIL_FROM
 npx wrangler deploy
 ```
 
-Wrangler prints the URL. Worker name is `freightlodge-stt-token` (`workers_dev = true`).
-
-Point the Pages build at it:
+Worker name is `freightlodge-stt-token`. Live URL:
 
 ```bash
-VITE_API_BASE_URL=https://freightlodge-stt-token.<SUBDOMAIN>.workers.dev
+VITE_API_BASE_URL=https://freightlodge-stt-token.johnkidenda.workers.dev
 ```
 
 GitHub Actions: repository secret
 
 - Name: `VITE_API_BASE_URL`
-- Value: the `workers.dev` URL above (no trailing slash)
+- Value: `https://freightlodge-stt-token.johnkidenda.workers.dev` (no trailing slash). The Pages workflow uses this URL when the secret is unset.
 
 CORS allows `https://johnkidenda.github.io` and any `http://localhost:*` / `http://127.0.0.1:*`. Other origins get no `Access-Control-Allow-Origin`. Logic lives in `src/cors.js`.
 
@@ -53,7 +53,7 @@ Set keys in the environment only. Listens on `http://127.0.0.1:8787` (`PORT` / `
 - `POST /jev-action` — DOM action helper for the Exfresso pilot
 - `POST /email/verify/start` / `confirm` / `POST /email/quote` (body may include `html?`)
 
-Email routes need `SMTP_PASS` (or `EMAIL_VERIFY_DEV_MODE=1` in local/test). The Worker sends via `cloudflare:sockets` TLS SMTP on port 465. Challenge storage is in-memory (per isolate).
+Email routes need `SMTP_PASS` (or `EMAIL_VERIFY_DEV_MODE=1` in local/test). The Worker tries SMTP over `cloudflare:sockets` (implicit TLS, then STARTTLS). Challenge storage is in-memory (per isolate). Live SMTP send currently fails: smtp.hostinger.com sits on Cloudflare IPs, which Workers cannot open TCP to. Jev and email-verify validation still work. An email-provider decision is pending.
 
 `/jev` and `/jev-action` work when `TYPESAFE_API_KEY` is set. Missing key → `503 { jev: "off" }`; the voice SPA falls back to heuristics.
 

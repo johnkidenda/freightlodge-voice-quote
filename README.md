@@ -32,7 +32,7 @@ Optional: copy `.env.example` → `.env` if you later wire `OPENAI_API_KEY` into
 
 ### API proxy (Jev + email Worker)
 
-Point the SPA at the Cloudflare Worker (or local stub) with `VITE_API_BASE_URL`. `TYPESAFE_API_KEY` and SMTP secrets stay on the Worker — never in `VITE_*`. See [`token-proxy/README.md`](token-proxy/README.md).
+Point the SPA at the Cloudflare Worker (or local stub) with `VITE_API_BASE_URL`. Live Worker: `https://freightlodge-stt-token.johnkidenda.workers.dev`. Jev and email-verify validation work on that Worker. Actual SMTP sending from the Worker currently fails because smtp.hostinger.com sits on Cloudflare IPs, which Workers cannot open TCP to. An email-provider decision is pending. `TYPESAFE_API_KEY` and SMTP secrets stay on the Worker, never in `VITE_*`. See [`token-proxy/README.md`](token-proxy/README.md).
 
 ### Jev (TypeSafe System One) post-utterance decisions
 
@@ -104,13 +104,13 @@ npx wrangler secret put TYPESAFE_API_KEY
 npx wrangler deploy
 ```
 
-Placeholder to set as the GitHub Actions secret, then rebuild Pages:
+GitHub Actions secret (the Pages workflow falls back to this URL if the secret is unset):
 
 ```
-VITE_API_BASE_URL=https://freightlodge-stt-token.<ACCOUNT>.workers.dev
+VITE_API_BASE_URL=https://freightlodge-stt-token.johnkidenda.workers.dev
 ```
 
-Use the URL `wrangler deploy` prints. Full copy-paste path: [`token-proxy/README.md`](token-proxy/README.md).
+Full copy-paste path: [`token-proxy/README.md`](token-proxy/README.md).
 
 ## What the app does
 
@@ -188,7 +188,7 @@ GitHub Pages calls the same `VITE_API_BASE_URL` origin as Jev (the Cloudflare Wo
 | `SMTP_PASS` | mailbox password (server-side only) |
 | `EMAIL_VERIFY_DEV_MODE` | `1` in local/test only — logs quote/verify sends server-side and skips SMTP |
 
-Production without `SMTP_PASS` → `503`. The Cloudflare Worker sends via TLS SMTP (`cloudflare:sockets` on port 465).
+Production without `SMTP_PASS` returns `503`. Jev and email-verify validation work on the live Worker. Actual SMTP sending from the Worker currently fails because smtp.hostinger.com sits on Cloudflare IPs, which Workers cannot open TCP to. An email-provider decision is pending.
 
 Do not put SMTP secrets in `VITE_*` or in the GitHub Pages bundle.
 
