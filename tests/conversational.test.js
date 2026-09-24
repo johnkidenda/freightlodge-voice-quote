@@ -8,7 +8,7 @@ import {
   presentAgentReply,
   saveConversationalMode,
 } from "../src/lib/conversational.js";
-import { CARTESIA_TTS_VOICE_ID, CARTESIA_TTS_VOICE_NAME, getTtsProxyUrl } from "../src/lib/cartesia-tts.js";
+import { speakAgentReply, DEFAULT_TTS_ENGINE, TTS_ENGINES } from "../src/lib/agent-speech.js";
 import { readClientUi } from "./client-ui.js";
 
 function memoryStorage(initial = {}) {
@@ -103,14 +103,9 @@ describe("conversational reply copy", () => {
 });
 
 describe("conversational TTS wiring", () => {
-  it("uses Skylar and derives /tts from the token mint URL", () => {
-    expect(CARTESIA_TTS_VOICE_NAME).toBe("Skylar");
-    expect(CARTESIA_TTS_VOICE_ID).toBe("db6b0ed5-d5d3-463d-ae85-518a07d3c2b4");
-    expect(getTtsProxyUrl({ VITE_STT_TOKEN_URL: "/api/stt-token" })).toBe("/api/tts");
-    expect(getTtsProxyUrl({ VITE_STT_TOKEN_URL: "https://freightlodge-stt-token.example.workers.dev" })).toBe(
-      "https://freightlodge-stt-token.example.workers.dev/tts",
-    );
-    expect(getTtsProxyUrl({ VITE_STT_TOKEN_URL: "" })).toBe("");
+  it("uses browser speechSynthesis only (no cloud TTS)", () => {
+    expect(DEFAULT_TTS_ENGINE).toBe(TTS_ENGINES.BROWSER);
+    expect(typeof speakAgentReply).toBe("function");
     const app = readClientUi();
     expect(app).toContain("Conversational mode");
     expect(app).toContain("presentAgentReply");
@@ -137,8 +132,6 @@ describe("conversational TTS wiring", () => {
     expect(app).not.toContain("sttBadge");
     expect(app).not.toContain("sttBadgeText");
     expect(app).not.toContain("STT: Web Speech");
-    expect(app).not.toContain("STT: Cartesia");
-    expect(app).not.toMatch(/CARTESIA_API_KEY\s*=/);
   });
 
   it("app module parses so Conversational mode can mount", async () => {

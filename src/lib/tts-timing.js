@@ -1,7 +1,8 @@
 /** Last spoken-reply timing for Send snapshot + in-app readout. */
 
 export function ttsEngineLabel(engine) {
-  return String(engine || "").toLowerCase() === "cartesia" ? "Cartesia" : "Browser";
+  void engine;
+  return "Browser";
 }
 
 export function formatTtsMs(ms) {
@@ -11,7 +12,7 @@ export function formatTtsMs(ms) {
   return String(Math.round(n));
 }
 
-/** In-app chip: “Cartesia 820 ms” / “Browser 40 ms” / “—” when silent or off. */
+/** In-app chip: “Browser 40 ms” / “—” when silent or off. */
 export function formatTtsLatencyReadout({ engine, firstAudioMs, silent } = {}) {
   if (silent) return "—";
   const n = formatTtsMs(firstAudioMs);

@@ -1,22 +1,21 @@
 #!/usr/bin/env node
 /**
- * Local Node stub for the Cartesia token + TTS proxy.
+ * Local Node stub for Jev + email (Hostinger SMTP).
  *
- *   CARTESIA_API_KEY= TYPESAFE_API_KEY= node token-proxy/local-stub.mjs
+ *   TYPESAFE_API_KEY= SMTP_PASS= node token-proxy/local-stub.mjs
  *
  * Then point the Vite app at it:
- *   VITE_STT_TOKEN_URL=http://127.0.0.1:8787 npm run dev
+ *   VITE_API_BASE_URL=http://127.0.0.1:8787 npm run dev
  *
- * Mint: POST /
- * TTS audio: POST /tts  (CARTESIA_API_KEY stays on this process)
- * Jev: POST /jev  (TYPESAFE_API_KEY stays on this process)
- * Email: POST /email/verify/start|confirm and POST /email/quote (SMTP_PASS stays here)
+ * Jev: POST /jev
+ * Jev-action: POST /jev-action
+ * Email: POST /email/verify/start|confirm and POST /email/quote
  */
 import { createServer } from "node:http";
-import { corsHeaders, mintCartesiaToken, synthesizeCartesiaTts } from "./src/mint.js";
+import { corsHeaders } from "./src/cors.js";
 import { evaluateUtteranceJev } from "./src/jev.js";
 import { evaluateDomAction } from "./src/jev-action.js";
-import { dispatchEmailApi, isEmailApiPath } from "./src/email-verify.js";
+import { dispatchEmailApi, isEmailApiPath, smtpPasswordSet } from "./src/email-verify.js";
 import { sendSmtpMail } from "./src/smtp-send.js";
 
 const PORT = Number(process.env.PORT) || 8787;
@@ -56,7 +55,6 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  const apiKey = process.env.CARTESIA_API_KEY;
   const typesafeKey = process.env.TYPESAFE_API_KEY;
 
   if (req.method === "GET" && path === "/") {
@@ -66,9 +64,8 @@ const server = createServer(async (req, res) => {
       {
         ok: true,
         service: "freightlodge-stt-token",
-        tts: Boolean(apiKey),
         jev: Boolean(typesafeKey),
-        email: true,
+        email: smtpPasswordSet(process.env),
       },
       origin,
     );
@@ -160,51 +157,12 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (!apiKey) {
-    send(res, 503, { error: "STT token proxy not configured" }, origin);
-    return;
-  }
-
-  if (path === "/tts") {
-    if (req.method !== "POST") {
-      send(res, 405, { error: "method not allowed" }, origin);
-      return;
-    }
-    try {
-      const body = await readJson(req);
-      const audio = await synthesizeCartesiaTts({
-        apiKey,
-        transcript: body.transcript || body.text || "",
-        voiceId: body.voice_id,
-      });
-      res.writeHead(200, {
-        "Content-Type": "audio/mpeg",
-        "Cache-Control": "no-store",
-        ...corsHeaders(origin),
-      });
-      res.end(Buffer.from(audio));
-    } catch (err) {
-      const status = err?.code === "TTS_EMPTY" ? 400 : 502;
-      send(res, status, { error: String(err?.message || err) }, origin);
-    }
-    return;
-  }
-
-  if (req.method !== "POST" && req.method !== "GET") {
-    send(res, 405, { error: "method not allowed" }, origin);
-    return;
-  }
-  try {
-    const minted = await mintCartesiaToken({ apiKey });
-    send(res, 200, minted, origin);
-  } catch (err) {
-    send(res, 502, { error: String(err?.message || err) }, origin);
-  }
+  send(res, 404, { error: "not found" }, origin);
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`Cartesia token/TTS + Jev stub listening on http://${HOST}:${PORT}`);
-  console.log("Mint: POST /   TTS: POST /tts   Jev: POST /jev   Jev-action: POST /jev-action");
+  console.log(`Jev + email stub listening on http://${HOST}:${PORT}`);
+  console.log("Jev: POST /jev   Jev-action: POST /jev-action");
   console.log("Email: POST /email/verify/start  POST /email/verify/confirm  POST /email/quote");
-  console.log("CARTESIA_API_KEY, TYPESAFE_API_KEY, and SMTP_PASS stay on this process only.");
+  console.log("TYPESAFE_API_KEY and SMTP_PASS stay on this process only.");
 });

@@ -1,20 +1,15 @@
-import { getSttTokenUrl } from "./stt-providers.js";
+import { getApiBaseUrl } from "./api-base.js";
 import { extractContactEmail as peekContactEmail } from "./extract.js";
 
 export const VERIFY_CODE_COOLDOWN_MS = 30_000;
 export const VERIFY_CODE_DIGITS = 6;
 
 /**
- * Sibling origin of VITE_STT_TOKEN_URL — same pattern as GET /jev.
- * `/api/stt-token` → `/api`; a tunnel root stays the tunnel root.
+ * Origin of VITE_API_BASE_URL — same base as GET /jev.
+ * `/api` stays `/api`; a Worker root stays the Worker root.
  */
 export function getTokenProxyOrigin(env = typeof import.meta !== "undefined" ? import.meta.env : undefined) {
-  const tokenUrl = getSttTokenUrl(env);
-  if (!tokenUrl) return "";
-  const trimmed = tokenUrl.replace(/\/$/, "");
-  if (trimmed.endsWith("/stt-token")) return trimmed.slice(0, -"/stt-token".length);
-  if (trimmed.endsWith("/token")) return trimmed.slice(0, -"/token".length);
-  return trimmed;
+  return getApiBaseUrl(env);
 }
 
 export function emailVerifyStartUrl(apiBase = "", env) {

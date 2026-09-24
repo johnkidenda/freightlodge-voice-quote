@@ -78,7 +78,7 @@ curl -sS -X POST "http://127.0.0.1:8787/jev-action" \
   -d '{"step":"origin","candidates":[{"id":"origin-zip","kind":"fill","label":"Origin ZIP","field":"origin_zip"},{"id":"continue","kind":"click","label":"Continue"}],"sheet":{"lanes":{"origin":{"postal_code":"78721"}}}}'
 ```
 
-Worker path after deploy: `{VITE_STT_TOKEN_URL}/jev-action` (same origin as `/jev`). Redeploy the Worker so `/jev-action` exists in production.
+Worker path after deploy: `{VITE_API_BASE_URL}/jev-action` (same origin as `/jev`). Redeploy the Worker so `/jev-action` exists in production.
 
 ## Locked demo sheet (transcript 93ce7a5d)
 

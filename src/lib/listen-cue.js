@@ -41,7 +41,7 @@ function startSilentUnlock(ctx) {
 
 /**
  * Create / resume a shared AudioContext on the hold/tap gesture so the later
- * ding can play after Cartesia finishes connecting (gesture may already be gone).
+ * ding can play after the mic session starts (gesture may already be gone).
  * Starts a near-silent tick during the gesture — iOS often ignores resume()
  * alone. Does not take an exclusive audio session / fight the silent switch.
  */

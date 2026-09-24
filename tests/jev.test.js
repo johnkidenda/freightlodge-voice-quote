@@ -21,7 +21,7 @@ import { formatSessionTranscript } from "../src/lib/transcript.js";
 import { TYPESAFE_SYSTEMONE_URL } from "../src/lib/jev-core.js";
 import { evaluateUtteranceJev } from "../token-proxy/src/jev.js";
 import worker from "../token-proxy/src/index.js";
-import { PAGES_ORIGIN } from "../token-proxy/src/mint.js";
+import { PAGES_ORIGIN } from "../token-proxy/src/cors.js";
 
 function readySheet() {
   const session = createSession({ id: "ready-jev" });
@@ -292,13 +292,13 @@ describe("dialog uses Jev for slot focus + gates", () => {
 });
 
 describe("client Jev proxy helper", () => {
-  it("derives /jev from the token mint URL like /tts", () => {
-    expect(getJevProxyUrl({ VITE_STT_TOKEN_URL: "/api/stt-token" })).toBe("/api/jev");
-    expect(getJevProxyUrl({ VITE_STT_TOKEN_URL: "https://opens-trio-tune-disciplines.trycloudflare.com" })).toBe(
-      "https://opens-trio-tune-disciplines.trycloudflare.com/jev",
+  it("derives /jev from VITE_API_BASE_URL", () => {
+    expect(getJevProxyUrl({ VITE_API_BASE_URL: "/api" })).toBe("/api/jev");
+    expect(getJevProxyUrl({ VITE_API_BASE_URL: "https://freightlodge-stt-token.example.workers.dev" })).toBe(
+      "https://freightlodge-stt-token.example.workers.dev/jev",
     );
-    expect(getJevProxyUrl({ VITE_STT_TOKEN_URL: "https://proxy.example/token" })).toBe("https://proxy.example/jev");
-    expect(getJevProxyUrl({ VITE_STT_TOKEN_URL: "" })).toBe("");
+    expect(getJevProxyUrl({ VITE_API_BASE_URL: "https://proxy.example" })).toBe("https://proxy.example/jev");
+    expect(getJevProxyUrl({ VITE_API_BASE_URL: "" })).toBe("");
   });
 
   it("?jev=0 skips Jev and never calls the proxy", async () => {
@@ -396,7 +396,7 @@ describe("token-proxy POST /jev", () => {
           headers: { Origin: PAGES_ORIGIN, "Content-Type": "application/json" },
           body: JSON.stringify({ utterance: "Chicago 60601" }),
         }),
-        { CARTESIA_API_KEY: "sk_car_test" },
+        {},
       );
       expect(res.status).toBe(503);
       const body = await res.json();

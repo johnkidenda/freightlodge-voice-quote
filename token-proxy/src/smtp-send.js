@@ -1,6 +1,5 @@
 /**
- * Node-only Hostinger SMTP send. Do not import this from the Cloudflare Worker
- * bundle — Workers cannot open smtp.hostinger.com:465.
+ * Node-only Hostinger SMTP send. Do not import into the Cloudflare Worker bundle. The Worker uses smtp-worker.js (cloudflare:sockets) instead.
  *
  * Env (never VITE_*):
  *   SMTP_HOST  default smtp.hostinger.com

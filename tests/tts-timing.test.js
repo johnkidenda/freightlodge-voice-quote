@@ -12,7 +12,7 @@ function jsonRes(body, ok = true) {
 }
 
 describe("TTS timing removed from UI and Send transcript", () => {
-  it("app has no latency chip or Voice: Browser/Cartesia toggle", () => {
+  it("app has no latency chip or Voice engine toggle", () => {
     const app = readClientUi();
     expect(app).not.toContain('id="tts-latency"');
     expect(app).not.toContain("formatTtsLatencyReadout");
@@ -24,18 +24,16 @@ describe("TTS timing removed from UI and Send transcript", () => {
     expect(app).toContain("Conversational mode");
     expect(app).not.toContain("stt-badge");
     expect(app).not.toContain("STT: Web Speech");
-    expect(app).not.toContain("STT: Cartesia");
-  });
+      });
 
   it("Send snapshot does not stamp Voice or TTS first-audio ms", () => {
     const text = formatSessionTranscript([{ role: "user", text: "hello" }], {
       ...createSession({ id: "tts-snap" }),
-      ttsEngine: "cartesia",
+      ttsEngine: "browser",
       ttsFirstAudioMs: 820,
       ttsDurationMs: 2100,
     });
-    expect(text).not.toContain("Voice: Cartesia");
-    expect(text).not.toContain("TTS first-audio ms:");
+        expect(text).not.toContain("TTS first-audio ms:");
     expect(text).not.toContain("TTS duration ms:");
     expect(text).toContain("STT: Web Speech");
   });

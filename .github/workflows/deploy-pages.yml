@@ -27,7 +27,7 @@ jobs:
       - run: npm test
       - run: npm run build
         env:
-          VITE_STT_TOKEN_URL: ${{ secrets.VITE_STT_TOKEN_URL }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
           VITE_APP_COMMIT: ${{ github.sha }}
       - name: Add .nojekyll
         run: touch dist/.nojekyll
@@ -61,7 +61,7 @@ jobs:
       - run: npm ci
       - run: npm run build
         env:
-          VITE_STT_TOKEN_URL: ${{ secrets.VITE_STT_TOKEN_URL }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
           VITE_APP_COMMIT: ${{ github.sha }}
       - name: Add .nojekyll
         run: touch dist/.nojekyll

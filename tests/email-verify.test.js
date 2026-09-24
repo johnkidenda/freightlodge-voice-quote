@@ -212,7 +212,7 @@ describe("quote email send — no mailto success", () => {
     };
     const result = await emailQuote(sheet, {
       apiBase: "",
-      env: { VITE_STT_TOKEN_URL: "https://proxy.example/stt-token" },
+      env: { VITE_API_BASE_URL: "https://proxy.example" },
       fetchFn: async (url, init) => {
         expect(url).toBe("https://proxy.example/email/quote");
         const payload = JSON.parse(init.body);
@@ -354,19 +354,19 @@ describe("formatQuoteEmailHtml mirrors the quote card", () => {
 });
 
 describe("client helpers", () => {
-  it("maps VITE_STT_TOKEN_URL origin the same way as /jev", () => {
-    expect(getTokenProxyOrigin({ VITE_STT_TOKEN_URL: "https://tunnel.example" })).toBe("https://tunnel.example");
-    expect(emailVerifyStartUrl("", { VITE_STT_TOKEN_URL: "https://tunnel.example" })).toBe(
+  it("maps VITE_API_BASE_URL origin the same way as /jev", () => {
+    expect(getTokenProxyOrigin({ VITE_API_BASE_URL: "https://tunnel.example" })).toBe("https://tunnel.example");
+    expect(emailVerifyStartUrl("", { VITE_API_BASE_URL: "https://tunnel.example" })).toBe(
       "https://tunnel.example/email/verify/start",
     );
-    expect(emailVerifyConfirmUrl("", { VITE_STT_TOKEN_URL: "https://tunnel.example" })).toBe(
+    expect(emailVerifyConfirmUrl("", { VITE_API_BASE_URL: "https://tunnel.example" })).toBe(
       "https://tunnel.example/email/verify/confirm",
     );
-    expect(emailQuoteSendUrl("", { VITE_STT_TOKEN_URL: "https://tunnel.example" })).toBe(
+    expect(emailQuoteSendUrl("", { VITE_API_BASE_URL: "https://tunnel.example" })).toBe(
       "https://tunnel.example/email/quote",
     );
-    expect(emailVerifyStartUrl("/app", { VITE_STT_TOKEN_URL: "/api/stt-token" })).toBe("/api/email/verify/start");
-    expect(emailQuoteSendUrl("/app", { VITE_STT_TOKEN_URL: "/api/stt-token" })).toBe("/api/email-quote");
+    expect(emailVerifyStartUrl("/app", { VITE_API_BASE_URL: "/api" })).toBe("/api/email/verify/start");
+    expect(emailQuoteSendUrl("/app", { VITE_API_BASE_URL: "/api" })).toBe("/api/email-quote");
     expect(emailVerifyStartUrl("/app", {})).toBe("/app/api/email/verify/start");
   });
 

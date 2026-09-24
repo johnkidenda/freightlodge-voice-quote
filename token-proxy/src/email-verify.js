@@ -1,9 +1,9 @@
 /**
  * In-app email verification: 6-digit code, hash-only storage, TTL, attempts.
  *
- * Storage is in-memory (fine for the local stub / Vite middleware).
- * A Cloudflare Worker isolate would need a durable store (KV / D1) later —
- * this Map does not survive deploys or multi-isolate traffic.
+ * Storage is in-memory (fine for the local stub / Vite middleware / single
+ * Worker isolate). This Map does not survive deploys or multi-isolate traffic;
+ * add KV / D1 later if needed.
  *
  * Never put SMTP_PASS or the plaintext code in a client response.
  */
@@ -217,7 +217,7 @@ export async function startEmailVerification({
       status: 503,
       body: {
         ok: false,
-        error: "Email send needs the Node stub (Hostinger SMTP). This runtime cannot open SMTP.",
+        error: "Email send is not wired in this runtime (missing sendMail).",
       },
     };
   }
@@ -373,7 +373,7 @@ export async function sendQuoteEmail({
       status: 503,
       body: {
         ok: false,
-        error: "Email send needs the Node stub (Hostinger SMTP). This runtime cannot open SMTP.",
+        error: "Email send is not wired in this runtime (missing sendMail).",
         from,
         to: dest,
         subject: subj,

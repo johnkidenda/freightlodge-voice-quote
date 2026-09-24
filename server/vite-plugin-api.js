@@ -1,6 +1,5 @@
 import { simulateExfressoRunner } from "../src/lib/handoff.js";
 import { MAIL_FROM, formatQuoteEmail, formatQuoteEmailHtml } from "../src/lib/email.js";
-import { mintCartesiaToken, synthesizeCartesiaTts } from "../token-proxy/src/mint.js";
 import { evaluateUtteranceJev } from "../token-proxy/src/jev.js";
 import { evaluateDomAction } from "../token-proxy/src/jev-action.js";
 import { dispatchEmailApi, isEmailApiPath } from "../token-proxy/src/email-verify.js";
@@ -43,8 +42,6 @@ async function handler(req, res, next) {
       path === "/api/email/quote" ||
       path === "/api/email/verify/start" ||
       path === "/api/email/verify/confirm" ||
-      path === "/api/stt-token" ||
-      path === "/api/tts" ||
       path === "/api/jev" ||
       path === "/api/jev-action")
   ) {
@@ -53,20 +50,6 @@ async function handler(req, res, next) {
     return;
   }
 
-  if ((req.method === "POST" || req.method === "GET") && path === "/api/stt-token") {
-    const apiKey = process.env.CARTESIA_API_KEY;
-    if (!apiKey) {
-      send(res, 503, { error: "STT token proxy not configured" });
-      return;
-    }
-    try {
-      const minted = await mintCartesiaToken({ apiKey });
-      send(res, 200, minted);
-    } catch (err) {
-      send(res, 502, { error: String(err.message || err) });
-    }
-    return;
-  }
 
   if ((req.method === "POST" || req.method === "GET") && path === "/api/jev-action") {
     if (req.method === "GET") {
@@ -124,29 +107,6 @@ async function handler(req, res, next) {
     return;
   }
 
-  if (req.method === "POST" && path === "/api/tts") {
-    const apiKey = process.env.CARTESIA_API_KEY;
-    if (!apiKey) {
-      send(res, 503, { error: "STT token proxy not configured" });
-      return;
-    }
-    try {
-      const body = await readJson(req);
-      const audio = await synthesizeCartesiaTts({
-        apiKey,
-        transcript: body.transcript || body.text || "",
-        voiceId: body.voice_id,
-      });
-      res.statusCode = 200;
-      res.setHeader("Content-Type", "audio/mpeg");
-      res.setHeader("Cache-Control", "no-store");
-      res.end(Buffer.from(audio));
-    } catch (err) {
-      const status = err?.code === "TTS_EMPTY" ? 400 : 502;
-      send(res, status, { error: String(err.message || err) });
-    }
-    return;
-  }
 
   if (req.method === "POST" && path === "/api/quote-handoff") {
     try {
