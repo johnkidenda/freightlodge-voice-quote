@@ -30,15 +30,15 @@ import {
 } from "./jev-core.js";
 
 export const GREETING =
-  "Freight Lodge — I’ll take a US domestic LTL quote. Where are we picking up? What’s the origin ZIP?";
+  "Freight Lodge. I’ll take a US domestic LTL quote. Where are we picking up? What’s the origin ZIP?";
 
 const PROMPTS = {
   origin_zip: "What’s the origin ZIP? City is helpful, but I need the five-digit ZIP.",
   dest_zip: "Where is this going? I need a destination city, state, or ZIP.",
-  dest_incomplete: "That ended at “to” — I still need the destination city, state, or ZIP.",
-  incomplete_zip: "That ZIP is short — I need a full 5-digit ZIP.",
-  incomplete_dest_zip: "That destination ZIP is short — I need a full 5-digit ZIP.",
-  incomplete_origin_zip: "That origin ZIP is short — I need a full 5-digit ZIP.",
+  dest_incomplete: "That ended at “to”. I still need the destination city, state, or ZIP.",
+  incomplete_zip: "That ZIP is short. I need a full 5-digit ZIP.",
+  incomplete_dest_zip: "That destination ZIP is short. I need a full 5-digit ZIP.",
+  incomplete_origin_zip: "That origin ZIP is short. I need a full 5-digit ZIP.",
   piece_unit: "Are you shipping pallets or pieces?",
   pieces: "How many pieces or pallets?",
   measure:
@@ -46,11 +46,11 @@ const PROMPTS = {
   commodity: "What’s the commodity?",
   pickup_date: "What pickup date works? Say a day or YYYY-MM-DD.",
   accessorials:
-    "Any accessorials — liftgate, residential, inside, limited access, appointment, freeze protect? Or say none.",
+    "Any accessorials? Liftgate, residential, inside, limited access, appointment, freeze protect, or say none.",
   liftgate_side: "Liftgate at pickup, delivery, or both?",
   inside_side: "Inside pickup, inside delivery, or both?",
   email:
-    "What email should I put on the sheet so we can send the quote? Typing the address is safer than saying it — voice often mangles emails.",
+    "What email should I put on the sheet so we can send the quote? Typing the address is safer than saying it. Voice often mangles emails.",
 };
 
 export function createSession({ id, now } = {}) {
@@ -80,32 +80,32 @@ export function zipClarifyQuestion(clarify, sheet) {
     const zipName = stateDisplayName(clarify.zipState);
     const placeName = stateDisplayName(clarify.placeState);
     const side = clarify.attemptedRole === "dest" ? "destination" : "origin";
-    return `${clarify.zip} looks like ${zipName}, but ${side} is ${placeName} — which is right?`;
+    return `${clarify.zip} looks like ${zipName}, but ${side} is ${placeName}. Which is right?`;
   }
   if (clarify?.kind === "same" && clarify.zip) {
-    return `Origin and destination would both be ${clarify.zip}. Same ZIP both ends — is that right?`;
+    return `Origin and destination would both be ${clarify.zip}. Same ZIP both ends. Is that right?`;
   }
   if (!clarify?.zip || !clarify?.metro?.city) return PROMPTS.origin_zip;
   if (clarify.kind === "metro") {
     const stated = [clarify.statedCity, clarify.statedState].filter(Boolean).join(", ") || "that city";
     const cityName = clarify.statedCity || stated;
-    return `You said ${stated} but ${clarify.zip} looks like ${clarify.metro.city}. Which is right — ${cityName} or ${clarify.zip}?`;
+    return `You said ${stated} but ${clarify.zip} looks like ${clarify.metro.city}. Which is right, ${cityName} or ${clarify.zip}?`;
   }
   const place = clarify.metro.city;
   const destCity = sheet?.lanes?.destination?.city;
   const destConflicts =
     destCity && clarify.metro && destCity.toLowerCase() !== place.toLowerCase();
   if (destConflicts && clarify.altZip) {
-    return `${clarify.zip} looks like ${place} — did you mean ${destCity} ${clarify.altZip}?`;
+    return `${clarify.zip} looks like ${place}. Did you mean ${destCity} ${clarify.altZip}?`;
   }
   if (destConflicts && destCity) {
-    return `${clarify.zip} looks like ${place} — dest is ${destCity}. Is ${clarify.zip} the origin ZIP?`;
+    return `${clarify.zip} looks like ${place}. Dest is ${destCity}. Is ${clarify.zip} the origin ZIP?`;
   }
   if (clarify.suggestedRole === "dest") {
-    return `${clarify.zip} looks like ${place} — is that the destination ZIP?`;
+    return `${clarify.zip} looks like ${place}. Is that the destination ZIP?`;
   }
   if (clarify.suggestedRole === "origin") {
-    return `${clarify.zip} looks like ${place} — is that the origin ZIP?`;
+    return `${clarify.zip} looks like ${place}. Is that the origin ZIP?`;
   }
   return `${clarify.zip} looks like ${place}. Origin ZIP or destination ZIP?`;
 }
@@ -557,7 +557,7 @@ export function handleUtterance(session, text, { now, jev } = {}) {
 
   if (extracted.flags.vagueMeasure && !extracted.freight.total_weight_lbs && !extracted.freight.dims && !extracted.freight.freight_class) {
     const reply =
-      "If you have pounds, L×W×H, or a known NMFC class, say it — otherwise I’ll keep asking.";
+      "If you have pounds, L×W×H, or a known NMFC class, say it. Otherwise I’ll keep asking.";
     return finish(session, sheet, askedAccessorials, reply, extracted, undefined, undefined, lastBareZip, zipClarify, jevAfter, accessorialClarify);
   }
 
@@ -619,7 +619,7 @@ export function handleUtterance(session, text, { now, jev } = {}) {
     if (addedNothing && reply === session.lastReply) {
       reply =
         awaiting === "dest_zip"
-          ? "Still need the destination city, state, or ZIP — that last message didn’t add one."
+          ? "Still need the destination city, state, or ZIP. That last message didn’t add one."
           : `I didn’t catch a new ${awaiting?.replaceAll("_", " ") || "detail"} in that. ${ask}`;
     }
   }

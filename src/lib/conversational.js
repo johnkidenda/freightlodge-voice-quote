@@ -2,7 +2,7 @@ import { isValidZip, pieceUnitForAck, spokenPieceCount } from "./completeness.js
 import { isGarbagePlace } from "./extract.js";
 
 export const CONVERSATIONAL_GREETING =
-  "Hi — I can take a US domestic LTL quote. Where are we picking up? What’s the origin ZIP?";
+  "Hi. I can take a US domestic LTL quote. Where are we picking up? What’s the origin ZIP?";
 
 export const CONVERSATIONAL_STORAGE_KEY = "freightlodge.conversational";
 
@@ -56,9 +56,9 @@ function conversationalHave(sheet, extracted) {
   }
 
   const bits = [];
-  if (extracted?.origin?.postal_code) bits.push(`the origin ZIP — ${extracted.origin.postal_code}`);
+  if (extracted?.origin?.postal_code) bits.push(`the origin ZIP, ${extracted.origin.postal_code}`);
   else if (extracted?.origin?.city) bits.push(extracted.origin.city);
-  if (extracted?.destination?.postal_code) bits.push(`the destination ZIP — ${extracted.destination.postal_code}`);
+  if (extracted?.destination?.postal_code) bits.push(`the destination ZIP, ${extracted.destination.postal_code}`);
   else if (extracted?.destination?.city && !isGarbagePlace(extracted.destination)) {
     bits.push(extracted.destination.city);
   }
@@ -77,10 +77,10 @@ function conversationalHave(sheet, extracted) {
   if (extracted?.contact?.email) bits.push(extracted.contact.email);
   if (!bits.length) return "";
   if (bits.length === 1 && extracted?.destination?.postal_code && !extracted?.origin?.postal_code) {
-    return `Got the destination ZIP — ${extracted.destination.postal_code}.`;
+    return `Got the destination ZIP, ${extracted.destination.postal_code}.`;
   }
   if (bits.length === 1 && extracted?.origin?.postal_code && !extracted?.destination?.postal_code) {
-    return `Got the origin ZIP — ${extracted.origin.postal_code}.`;
+    return `Got the origin ZIP, ${extracted.origin.postal_code}.`;
   }
   return `Got ${joinSpoken(bits)}.`;
 }
@@ -104,7 +104,7 @@ function conversationalAsk(sheet, awaiting) {
     return "I still need the origin and destination ZIPs.";
   }
   if (awaiting === "origin_zip") {
-    return originCity ? `What’s the origin ZIP for ${originCity}?` : "Got it — what’s the pickup ZIP?";
+    return originCity ? `What’s the origin ZIP for ${originCity}?` : "Got it. What’s the pickup ZIP?";
   }
   if (awaiting === "dest_zip") {
     return destCity
@@ -123,7 +123,7 @@ function conversationalAsk(sheet, awaiting) {
   if (awaiting === "commodity") return "What’s the commodity?";
   if (awaiting === "pickup_date") return "What pickup date works?";
   if (awaiting === "accessorials") {
-    return "Any extras — liftgate, residential, inside, protect from freeze — or should I put none?";
+    return "Any extras? Liftgate, residential, inside, protect from freeze, or should I put none?";
   }
   if (awaiting === "liftgate_side") {
     return "Is that liftgate at pickup, delivery, or both?";
@@ -154,10 +154,10 @@ export function composeConversationalReply({
   if (extracted?.flags?.zipClarify) return formalReply || "";
   if (extracted?.flags?.incompleteZip?.digits) return formalReply || "";
   if (extracted?.flags?.incompleteZip) {
-    return "That ZIP is short — I need a full 5-digit ZIP.";
+    return "That ZIP is short. I need a full 5-digit ZIP.";
   }
   if (extracted?.flags?.incompleteTo) {
-    return "That ended at “to” — I still need the destination city, state, or ZIP.";
+    return "That ended at “to”. I still need the destination city, state, or ZIP.";
   }
   if (
     extracted?.flags?.vagueMeasure &&
@@ -165,10 +165,10 @@ export function composeConversationalReply({
     !extracted.freight?.dims &&
     !extracted.freight?.freight_class
   ) {
-    return "If you have pounds, L×W×H, or a known NMFC class, say it — otherwise I’ll keep asking.";
+    return "If you have pounds, L×W×H, or a known NMFC class, say it. Otherwise I’ll keep asking.";
   }
   if (extracted?.flags?.vagueDate && !extracted.pickup?.date) {
-    return "I need a pickup date — today, tomorrow, Friday, or YYYY-MM-DD.";
+    return "I need a pickup date. Today, tomorrow, Friday, or YYYY-MM-DD.";
   }
 
   const have = conversationalHave(sheet, extracted);

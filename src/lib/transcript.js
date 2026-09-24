@@ -29,7 +29,7 @@ export function formatSessionTranscript(messages, session) {
   return [
     ...turns,
     "",
-    "— Sheet snapshot —",
+    "Sheet snapshot:",
     `Request: ${requestId}`,
     `STT: ${sttLabel}`,
     formatJevTranscriptLine(session),

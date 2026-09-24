@@ -232,7 +232,7 @@ function handoffAssistantLine(sheet) {
   if (sheet.status === "quoted") {
     const to = sheet.contact?.email;
     return to
-      ? `Quote is back. I can email it to ${to} from ${MAIL_FROM} — tap Email me this quote.`
+      ? `Quote is back. I can email it to ${to} from ${MAIL_FROM}. Tap Email me this quote.`
       : "Quote is back. Email it if you want a copy.";
   }
   if (sheet.status === "out_of_scope") {
@@ -295,7 +295,7 @@ async function sendTranscriptToTeam(els, state) {
       btn.textContent = "Sent";
       btn.classList.add("sent");
       note.hidden = false;
-      note.textContent = "Thanks — the team will review.";
+      note.textContent = "Thanks. The team will review.";
       restore();
       return;
     }
@@ -314,18 +314,18 @@ async function sendTranscriptToTeam(els, state) {
       btn.textContent = "Opened mail app…";
       note.hidden = false;
       note.textContent = copied
-        ? "Could not send silently — opened mail. A copy is on the clipboard if mail didn’t open."
-        : "Could not send silently — opened mail.";
+        ? "Could not send silently. Opened mail. A copy is on the clipboard if mail didn’t open."
+        : "Could not send silently. Opened mail.";
       restore(4000);
       return;
     }
     btn.textContent = "Send failed";
     note.hidden = false;
-    note.textContent = "Could not send — copy instead.";
+    note.textContent = "Could not send. Copy instead.";
   } catch {
     btn.textContent = "Send failed";
     note.hidden = false;
-    note.textContent = "Could not send — copy instead.";
+    note.textContent = "Could not send. Copy instead.";
   }
   restore();
 }
@@ -367,7 +367,7 @@ function speechError(err) {
   }
   const label = getSttProvider(STT_PROVIDER_IDS.WEB_SPEECH).label;
   if (/empty transcript/i.test(text)) {
-    return `${label} heard nothing. Hold, speak clearly, then release — or type instead.`;
+    return `${label} heard nothing. Hold, speak clearly, then release, or type instead.`;
   }
   return `${label} isn’t available (${text}). Type the lane instead.`;
 }

@@ -80,7 +80,7 @@ export function simulateExfressoRunner(sheet, { now } = {}) {
       quote_sheet: {
         ...structuredClone(sheet),
         status: "error",
-        error_reason: "Sheet is not ready_for_quote — missing required fields. No rate invented.",
+        error_reason: "Sheet is not ready_for_quote. Missing required fields. No rate invented.",
         quote_result: null,
       },
     };
