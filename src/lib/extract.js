@@ -54,6 +54,7 @@ export function extractSlots(text, { now, awaiting, originCity, destCity } = {})
   extractAccessorials(raw, extracted, awaiting);
   extractContact(raw, extracted, awaiting);
   extractHazmat(raw, extracted);
+  applyLabeledFieldDump(raw, extracted);
 
   return extracted;
 }
@@ -437,11 +438,150 @@ function uniqueLaneZips(zipTokens) {
   return seen;
 }
 
+const LABELED_FIELD_RE =
+  /\b(ship\s+from|ship\s+to|pick\s*up|deliver(?:y|ed)?\s+to|destination|origin|commodity|product|goods|weighing|weight|pieces|piece|pallets|pallet|qty|quantity|dimensions|dims|freight\s+class|class|email|dest)\b/gi;
+
+function slotForLabeledField(label) {
+  const key = String(label || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+  if (/^(ship from|pick up|pickup|origin)$/.test(key)) return "origin";
+  if (/^(ship to|deliver to|delivery to|delivered to|destination|dest)$/.test(key)) return "dest";
+  if (/^(commodity|product|goods)$/.test(key)) return "commodity";
+  if (/^(weighing|weight)$/.test(key)) return "weight";
+  if (/^(pieces|piece|qty|quantity)$/.test(key)) return "pieces";
+  if (/^(pallets|pallet)$/.test(key)) return "pallets";
+  if (/^(dimensions|dims)$/.test(key)) return "dims";
+  if (/^(freight class|class)$/.test(key)) return "class";
+  if (key === "email") return "email";
+  return null;
+}
+
+function labeledFieldHits(raw) {
+  const hits = [];
+  const re = new RegExp(LABELED_FIELD_RE.source, "gi");
+  let match;
+  while ((match = re.exec(raw))) {
+    const slot = slotForLabeledField(match[1]);
+    if (!slot) continue;
+    hits.push({ slot, index: match.index, end: match.index + match[0].length });
+  }
+  return hits;
+}
+
+function labeledSpanValue(raw, hits, index) {
+  const start = hits[index].end;
+  const end = index + 1 < hits.length ? hits[index + 1].index : raw.length;
+  return raw
+    .slice(start, end)
+    .replace(/^[\s,:;.-]+/, "")
+    .replace(/^(?:is\s+)+/i, "")
+    .trim();
+}
+
+function placeFromLabeledValue(value) {
+  let text = String(value || "")
+    .replace(/^(?:is\s+)+/i, "")
+    .trim();
+  text = text.replace(/^(?:zip(?:\s*code)?|zipcode|postal(?:\s*code)?)\b[:\s]*/i, "");
+  text = text.replace(/^(?:is\s+)+/i, "").trim();
+  if (!text) return null;
+  const place = takePlace(text);
+  if (!place || isGarbagePlace(place)) return null;
+  const cityOk = Boolean(place.city && isKnownUsCity(place.city));
+  if (place.city && !cityOk) delete place.city;
+  if (!place.city && !place.state && !place.postal_code) return null;
+  if (!place.postal_code && !place.state && !cityOk) return null;
+  return place;
+}
+
+function hasParsedLabeledLane(raw) {
+  const hits = labeledFieldHits(raw);
+  return hits.some((hit, index) => {
+    if (hit.slot !== "origin" && hit.slot !== "dest") return false;
+    return Boolean(placeFromLabeledValue(labeledSpanValue(raw, hits, index)));
+  });
+}
+
+function parseLabeledCount(value, unitHint) {
+  const match = String(value || "").match(
+    new RegExp(String.raw`^(\d{1,4}|${COUNT_WITH_UNIT})(?:\s+(${PIECE_UNIT_WORD}))?\b`, "i"),
+  );
+  if (!match) return null;
+  const count = parseCount(match[1]);
+  if (!count) return null;
+  const unit = (match[2] && mapPieceUnit(match[2])) || unitHint || null;
+  return { count, unit };
+}
+
+function assignLabeledPlace(target, place) {
+  if (place.city) target.city = place.city;
+  if (place.state) target.state = place.state;
+  if (place.postal_code) target.postal_code = place.postal_code;
+}
+
+/**
+ * Stiff field dumps: "Origin Austin destination Atlanta commodity oranges weight 1000 pounds".
+ * Labels name the slot. Only a parsed lane place turns the utterance into a dump,
+ * so "78721 is the destination" stays on the zip path.
+ */
+function applyLabeledFieldDump(raw, extracted) {
+  const hits = labeledFieldHits(raw);
+  if (!hits.length) return;
+  const spans = hits.map((hit, index) => ({
+    slot: hit.slot,
+    value: labeledSpanValue(raw, hits, index),
+  }));
+  const places = {};
+  for (const span of spans) {
+    if (span.slot !== "origin" && span.slot !== "dest") continue;
+    const place = placeFromLabeledValue(span.value);
+    if (place) places[span.slot] = place;
+  }
+  if (!places.origin && !places.dest) return;
+
+  if (places.origin) assignLabeledPlace(extracted.origin, places.origin);
+  if (places.dest) assignLabeledPlace(extracted.destination, places.dest);
+
+  for (const span of spans) {
+    if (span.slot === "commodity") {
+      const commodity = looksLikeCommodity(span.value);
+      if (commodity) extracted.freight.commodity = commodity;
+    } else if (span.slot === "weight") {
+      const tmp = { freight: {}, flags: {} };
+      extractWeight(span.value, tmp);
+      if (tmp.freight.total_weight_lbs) {
+        extracted.freight.total_weight_lbs = tmp.freight.total_weight_lbs;
+        if (tmp.flags.weightFromKg) {
+          extracted.flags.weightFromKg = true;
+          extracted.flags.weightKg = tmp.flags.weightKg;
+        }
+      }
+    } else if (span.slot === "pieces" || span.slot === "pallets") {
+      const parsed = parseLabeledCount(span.value, span.slot === "pallets" ? "pallets" : "pieces");
+      if (parsed) {
+        extracted.freight.pieces = parsed.count;
+        if (parsed.unit) extracted.freight.piece_unit = parsed.unit;
+      }
+    } else if (span.slot === "dims") {
+      const tmp = { freight: {} };
+      extractDims(span.value, tmp);
+      if (tmp.freight.dims) extracted.freight.dims = tmp.freight.dims;
+    } else if (span.slot === "class") {
+      const match = span.value.match(/\b(\d{2,3}(?:\.5)?)\b/);
+      if (match && NMFC_CLASSES.has(match[1])) extracted.freight.freight_class = match[1];
+    } else if (span.slot === "email") {
+      const email = extractContactEmail(span.value);
+      if (email) extracted.contact.email = email;
+    }
+  }
+}
+
 function extractLane(raw, extracted, awaiting, sheetCities = {}) {
   const zipOnly = /^\s*\d{5}(?:-\d{4})?\s*$/.test(raw);
   const labeledLaneZip = isLabeledLaneZipPhrase(raw);
 
-  if (!LEADING_FILLER.test(raw) && !zipOnly && !labeledLaneZip) {
+  if (!LEADING_FILLER.test(raw) && !zipOnly && !labeledLaneZip && !hasParsedLabeledLane(raw)) {
     const leading = dropNoiseCityBeforeZip(takePlace(raw), sheetCities.originCity);
     if (leading?.postal_code && (leading.city || leading.state || awaiting === "origin_zip")) {
       Object.assign(extracted.origin, leading);
@@ -1115,7 +1255,7 @@ function extractClass(raw, extracted) {
 }
 
 const COMMODITY_STOP =
-  /\s*(?:,|$|\b(?:from|to|weighing|weight|class|pickup|email|liftgate|residential|none|tomorrow|today)\b)/i;
+  /\s*(?:,|$|\b(?:from|to|weighing|weight|class|pickup|email|liftgate|residential|none|tomorrow|today|origin|destination|dest|pieces|piece|pallets|pallet|dims|dimensions)\b)/i;
 
 function extractCommodity(raw, extracted, awaiting) {
   const labeled = raw.match(
@@ -1237,7 +1377,10 @@ function sanitizeCommodity(value) {
     .replace(/\b(please|thanks|thank you|need a quote|get a quote)\b/gi, "")
     .replace(/\s+/g, " ")
     .trim();
-  s = s.replace(/\s+\b(from|to|weighing|class|on|pickup|email|liftgate).*$/i, "").trim();
+  s = s.replace(
+    /\s+\b(from|to|weighing|weight|class|on|pickup|email|liftgate|origin|destination|dest|pieces|dims).*$/i,
+    "",
+  ).trim();
   s = s.replace(/[,\.;:]+$/g, "").trim();
   if (s.length < 2 || s.length > 48) return null;
   if (/^\d+$/.test(s)) return null;
