@@ -5,8 +5,10 @@
  * Worker isolate). This Map does not survive deploys or multi-isolate traffic;
  * add KV / D1 later if needed.
  *
- * Never put SMTP_PASS or the plaintext code in a client response.
+ * Never put RESEND_API_KEY or the plaintext code in a client response.
  */
+
+import { mailFromAddress, resendConfigured } from "./resend.js";
 
 export const MAIL_FROM_DEFAULT = "john@freightlodge.com";
 export const CODE_DIGITS = 6;
@@ -31,24 +33,12 @@ export function isValidEmailAddress(value) {
   return email.length > 0 && EMAIL_RE.test(email);
 }
 
-export function smtpSettings(env = {}) {
-  return {
-    host: String(env.SMTP_HOST || "smtp.hostinger.com").trim() || "smtp.hostinger.com",
-    port: Number(env.SMTP_PORT || 465) || 465,
-    user: String(env.SMTP_USER || MAIL_FROM_DEFAULT).trim() || MAIL_FROM_DEFAULT,
-    pass: String(env.SMTP_PASS || "").trim(),
-    from: String(env.MAIL_FROM || MAIL_FROM_DEFAULT).trim() || MAIL_FROM_DEFAULT,
-  };
-}
-
 export function isDevVerifyMode(env = {}) {
   const raw = String(env.EMAIL_VERIFY_DEV_MODE || "").trim().toLowerCase();
   return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
 }
 
-export function smtpPasswordSet(env = {}) {
-  return Boolean(smtpSettings(env).pass);
-}
+export { resendConfigured };
 
 function hex(bytes) {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
@@ -205,14 +195,14 @@ export async function startEmailVerification({
 
   const normalized = normalizeEmail(email);
   const dev = isDevVerifyMode(env);
-  const hasPass = smtpPasswordSet(env);
-  if (!dev && !hasPass) {
+  const configured = resendConfigured(env);
+  if (!dev && !configured) {
     return {
       status: 503,
       body: { ok: false, error: "Email send is not configured." },
     };
   }
-  if (!dev && hasPass && typeof sendMail !== "function") {
+  if (!dev && configured && typeof sendMail !== "function") {
     return {
       status: 503,
       body: {
@@ -229,7 +219,7 @@ export async function startEmailVerification({
     return { status: 429, body: { ok: false, error: GENERIC_RATE } };
   }
 
-  const smtp = smtpSettings(env);
+  const from = mailFromAddress(env);
   const code = generateVerifyCode(getRandomValues);
   const salt = newSalt(getRandomValues);
   const challengeId = newChallengeId(getRandomValues);
@@ -251,11 +241,11 @@ export async function startEmailVerification({
   }
 
   if (!dev) {
-    const mail = formatVerifyEmail({ code, from: smtp.from });
+    const mail = formatVerifyEmail({ code, from });
     try {
       await sendMail({
         to: normalized,
-        from: smtp.from,
+        from,
         subject: mail.subject,
         text: mail.text,
       });
@@ -338,7 +328,7 @@ export async function confirmEmailVerification({
 }
 
 /**
- * SMTP send of a formatted quote. Text + HTML come from the client
+ * Resend send of a formatted quote. Text + HTML come from the client
  * (`formatQuoteEmail` / `formatQuoteEmailHtml`). Quote send does not
  * require a prior verify challenge.
  */
@@ -350,7 +340,6 @@ export async function sendQuoteEmail({
   env = {},
   sendMail,
 } = {}) {
-  const smtp = smtpSettings(env);
   const dest = normalizeEmail(to);
   if (!isValidEmailAddress(dest)) {
     return { status: 400, body: { ok: false, error: "Need an email on the sheet." } };
@@ -359,16 +348,16 @@ export async function sendQuoteEmail({
   const subj = String(subject || "Freight Lodge quote").trim() || "Freight Lodge quote";
   const bodyText = String(text || "").trim();
   const bodyHtml = String(html || "").trim();
-  const from = smtp.from;
+  const from = mailFromAddress(env);
   const dev = isDevVerifyMode(env);
 
-  if (!dev && !smtp.pass) {
+  if (!dev && !resendConfigured(env)) {
     return {
       status: 503,
       body: { ok: false, error: "Email send is not configured.", from, to: dest, subject: subj },
     };
   }
-  if (!dev && smtp.pass && typeof sendMail !== "function") {
+  if (!dev && resendConfigured(env) && typeof sendMail !== "function") {
     return {
       status: 503,
       body: {
@@ -382,7 +371,7 @@ export async function sendQuoteEmail({
   }
 
   if (dev && typeof sendMail !== "function") {
-    console.log("[email-quote] DEV — logged, not SMTP-sent", { to: dest, subject: subj, html: Boolean(bodyHtml) });
+    console.log("[email-quote] DEV logged, not sent", { to: dest, subject: subj, html: Boolean(bodyHtml) });
     return {
       status: 200,
       body: { ok: true, mode: "dev", sent: true, from, to: dest, subject: subj, dev: true },
@@ -399,7 +388,7 @@ export async function sendQuoteEmail({
     });
     return {
       status: 200,
-      body: { ok: true, mode: "smtp", sent: true, from, to: dest, subject: subj },
+      body: { ok: true, mode: "resend", sent: true, from, to: dest, subject: subj },
     };
   } catch {
     return {

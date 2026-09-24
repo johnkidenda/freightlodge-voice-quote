@@ -1,8 +1,8 @@
 import { corsHeaders } from "./cors.js";
 import { evaluateUtteranceJev } from "./jev.js";
 import { evaluateDomAction } from "./jev-action.js";
-import { dispatchEmailApi, isEmailApiPath, smtpPasswordSet } from "./email-verify.js";
-import { sendSmtpMailWorker } from "./smtp-worker.js";
+import { dispatchEmailApi, isEmailApiPath } from "./email-verify.js";
+import { resendConfigured, sendResendMail } from "./resend.js";
 
 function json(body, status, origin) {
   return new Response(JSON.stringify(body), {
@@ -28,17 +28,8 @@ async function readJson(request) {
 }
 
 function mailSender(env) {
-  if (!smtpPasswordSet(env || {})) return undefined;
-  return async (msg) => {
-    try {
-      await sendSmtpMailWorker(msg, env || {});
-    } catch (err) {
-      const code = err?.code || "SMTP_FAIL";
-      const message = String(err?.message || err).slice(0, 180);
-      console.error("smtp_send_failed", code, message);
-      throw err;
-    }
-  };
+  if (!resendConfigured(env || {})) return undefined;
+  return (msg) => sendResendMail(msg, env || {});
 }
 
 export default {
@@ -56,7 +47,7 @@ export default {
           ok: true,
           service: "freightlodge-stt-token",
           jev: Boolean(env?.TYPESAFE_API_KEY),
-          email: smtpPasswordSet(env || {}),
+          email: resendConfigured(env || {}),
         },
         200,
         origin,

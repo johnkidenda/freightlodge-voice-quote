@@ -1,6 +1,6 @@
 # Freight Lodge API proxy (Jev + email)
 
-Cloudflare Worker / local Node stub that proxies **Jev** (TypeSafe System One) and Hostinger **SMTP email** so the GitHub Pages SPA never sees `TYPESAFE_API_KEY` or `SMTP_PASS`.
+Cloudflare Worker / local Node stub that proxies **Jev** (TypeSafe System One) and **Resend email** so the GitHub Pages SPA never sees `TYPESAFE_API_KEY` or `RESEND_API_KEY`.
 
 Mic → text is **Web Speech only**. Spoken agent replies use browser `speechSynthesis`. This proxy does not mint STT tokens or serve TTS audio.
 
@@ -12,18 +12,17 @@ Mic → text is **Web Speech only**. Spoken agent replies use browser `speechSyn
 
 ## Deploy (Cloudflare Worker)
 
-Needs this directory’s `wrangler.toml` plus secrets **`TYPESAFE_API_KEY`** and SMTP fields (values from the box, do not commit them).
+Needs this directory’s `wrangler.toml` plus secrets **`TYPESAFE_API_KEY`** and **`RESEND_API_KEY`** (values from the box, do not commit them). `MAIL_FROM` is optional.
 
-Live Worker: `https://freightlodge-stt-token.johnkidenda.workers.dev`. Jev and email-verify validation work there. Actual SMTP sending from the Worker currently fails because smtp.hostinger.com sits on Cloudflare IPs, which Workers cannot open TCP to. An email-provider decision is pending.
+Live Worker: `https://freightlodge-stt-token.johnkidenda.workers.dev`.
+
+Verify domain `freightlodge.com` in Resend before mail will send: DKIM TXT `resend._domainkey`, plus MX and SPF TXT on the `send` subdomain.
 
 ```bash
 cd token-proxy
 npx wrangler secret put TYPESAFE_API_KEY
-npx wrangler secret put SMTP_PASS
-npx wrangler secret put SMTP_HOST    # optional
-npx wrangler secret put SMTP_PORT    # optional (465)
-npx wrangler secret put SMTP_USER
-npx wrangler secret put MAIL_FROM
+npx wrangler secret put RESEND_API_KEY
+npx wrangler secret put MAIL_FROM    # optional
 npx wrangler deploy
 ```
 
@@ -43,7 +42,7 @@ CORS allows `https://johnkidenda.github.io` and any `http://localhost:*` / `http
 ## Local stub
 
 ```bash
-TYPESAFE_API_KEY= SMTP_PASS= node token-proxy/local-stub.mjs
+TYPESAFE_API_KEY= RESEND_API_KEY= node token-proxy/local-stub.mjs
 ```
 
 Set keys in the environment only. Listens on `http://127.0.0.1:8787` (`PORT` / `HOST` override).
@@ -53,7 +52,7 @@ Set keys in the environment only. Listens on `http://127.0.0.1:8787` (`PORT` / `
 - `POST /jev-action` — DOM action helper for the Exfresso pilot
 - `POST /email/verify/start` / `confirm` / `POST /email/quote` (body may include `html?`)
 
-Email routes need `SMTP_PASS` (or `EMAIL_VERIFY_DEV_MODE=1` in local/test). The Worker tries SMTP over `cloudflare:sockets` (implicit TLS, then STARTTLS). Challenge storage is in-memory (per isolate). Live SMTP send currently fails: smtp.hostinger.com sits on Cloudflare IPs, which Workers cannot open TCP to. Jev and email-verify validation still work. An email-provider decision is pending.
+Email routes need `RESEND_API_KEY` (or `EMAIL_VERIFY_DEV_MODE=1` in local/test). The Worker POSTs to `https://api.resend.com/emails`. Default From is `Freight Lodge <john@freightlodge.com>` unless `MAIL_FROM` is set. Challenge storage is in-memory (per isolate).
 
 `/jev` and `/jev-action` work when `TYPESAFE_API_KEY` is set. Missing key → `503 { jev: "off" }`; the voice SPA falls back to heuristics.
 
@@ -79,6 +78,7 @@ curl -sS -X POST "${VITE_API_BASE_URL:-http://127.0.0.1:8787}/jev-action" \
 | Name | Where | Notes |
 | --- | --- | --- |
 | `TYPESAFE_API_KEY` | Worker secret / local stub / Vite server env | TypeSafe key. **Never** `VITE_*`. |
-| `SMTP_PASS` / `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `MAIL_FROM` | Worker secrets / stub | Hostinger SMTP. **Never** `VITE_*`. |
+| `RESEND_API_KEY` | Worker secret / local stub / Vite server env | Resend key. **Never** `VITE_*`. |
+| `MAIL_FROM` | Worker secret / stub, optional | From address. Default `Freight Lodge <john@freightlodge.com>`. |
 | `VITE_API_BASE_URL` | Pages build / `.env` for local | Public URL of this proxy. Safe to bake into the SPA. Client calls `{base}/jev` and `{base}/email/verify/*`. |
-| `EMAIL_VERIFY_DEV_MODE` | Local/test only | Skip SMTP; log code server-side. |
+| `EMAIL_VERIFY_DEV_MODE` | Local/test only | Skip sending; log code server-side. |

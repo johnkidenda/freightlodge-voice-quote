@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Local Node stub for Jev + email (Hostinger SMTP).
+ * Local Node stub for Jev + email (Resend).
  *
- *   TYPESAFE_API_KEY= SMTP_PASS= node token-proxy/local-stub.mjs
+ *   TYPESAFE_API_KEY= RESEND_API_KEY= node token-proxy/local-stub.mjs
  *
  * Then point the Vite app at it:
  *   VITE_API_BASE_URL=http://127.0.0.1:8787 npm run dev
@@ -15,8 +15,8 @@ import { createServer } from "node:http";
 import { corsHeaders } from "./src/cors.js";
 import { evaluateUtteranceJev } from "./src/jev.js";
 import { evaluateDomAction } from "./src/jev-action.js";
-import { dispatchEmailApi, isEmailApiPath, smtpPasswordSet } from "./src/email-verify.js";
-import { sendSmtpMail } from "./src/smtp-send.js";
+import { dispatchEmailApi, isEmailApiPath } from "./src/email-verify.js";
+import { resendConfigured, sendResendMail } from "./src/resend.js";
 
 const PORT = Number(process.env.PORT) || 8787;
 const HOST = process.env.HOST || "127.0.0.1";
@@ -65,7 +65,7 @@ const server = createServer(async (req, res) => {
         ok: true,
         service: "freightlodge-stt-token",
         jev: Boolean(typesafeKey),
-        email: smtpPasswordSet(process.env),
+        email: resendConfigured(process.env),
       },
       origin,
     );
@@ -117,7 +117,7 @@ const server = createServer(async (req, res) => {
       const result = await dispatchEmailApi(path, body, {
         env: process.env,
         ip,
-        sendMail: process.env.SMTP_PASS ? (msg) => sendSmtpMail(msg, process.env) : undefined,
+        sendMail: resendConfigured(process.env) ? (msg) => sendResendMail(msg, process.env) : undefined,
       });
       send(res, result.status, result.body, origin);
     } catch (err) {
@@ -164,5 +164,5 @@ server.listen(PORT, HOST, () => {
   console.log(`Jev + email stub listening on http://${HOST}:${PORT}`);
   console.log("Jev: POST /jev   Jev-action: POST /jev-action");
   console.log("Email: POST /email/verify/start  POST /email/verify/confirm  POST /email/quote");
-  console.log("TYPESAFE_API_KEY and SMTP_PASS stay on this process only.");
+  console.log("TYPESAFE_API_KEY and RESEND_API_KEY stay on this process only.");
 });

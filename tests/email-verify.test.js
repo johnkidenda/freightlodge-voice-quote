@@ -42,7 +42,7 @@ describe("verify code hash / expiry / attempts", () => {
     const result = await startEmailVerification({
       email: " Shipper@Example.COM ",
       ip: "1.1.1.1",
-      env: { SMTP_PASS: "secret" },
+      env: { RESEND_API_KEY: "re_test" },
       store,
       sendMail: async (msg) => {
         sent.push(msg);
@@ -55,7 +55,7 @@ describe("verify code hash / expiry / attempts", () => {
     expect(JSON.stringify(result.body)).not.toMatch(/\b\d{6}\b/);
     expect(result.body.code).toBeUndefined();
     expect(sent).toHaveLength(1);
-    expect(sent[0].from).toBe("john@freightlodge.com");
+    expect(sent[0].from).toBe("Freight Lodge <john@freightlodge.com>");
     expect(sent[0].to).toBe("shipper@example.com");
     expect(sent[0].subject).toMatch(/Freight Lodge code/i);
     expect(sent[0].text).toMatch(/\b\d{6}\b/);
@@ -73,7 +73,7 @@ describe("verify code hash / expiry / attempts", () => {
     let code = "";
     const start = await startEmailVerification({
       email: "a@b.com",
-      env: { SMTP_PASS: "x" },
+      env: { RESEND_API_KEY: "re_test" },
       store,
       sendMail: async (msg) => {
         code = msg.text.match(/\b(\d{6})\b/)[1];
@@ -102,7 +102,7 @@ describe("verify code hash / expiry / attempts", () => {
     let code = "";
     const start = await startEmailVerification({
       email: "a@b.com",
-      env: { SMTP_PASS: "x" },
+      env: { RESEND_API_KEY: "re_test" },
       store,
       now: () => now,
       sendMail: async (msg) => {
@@ -126,7 +126,7 @@ describe("verify code hash / expiry / attempts", () => {
     let code = "";
     const start = await startEmailVerification({
       email: "a@b.com",
-      env: { SMTP_PASS: "x" },
+      env: { RESEND_API_KEY: "re_test" },
       store,
       sendMail: async (msg) => {
         code = msg.text.match(/\b(\d{6})\b/)[1];
@@ -151,7 +151,7 @@ describe("verify code hash / expiry / attempts", () => {
     expect(JSON.stringify(late.body)).not.toContain(code);
   });
 
-  it("production without SMTP_PASS is 503; DEV mode logs but omits the code from JSON", async () => {
+  it("production without RESEND_API_KEY is 503; DEV mode logs but omits the code from JSON", async () => {
     const store = createEmailStore();
     const prod = await startEmailVerification({
       email: "a@b.com",
@@ -197,7 +197,7 @@ describe("verify code hash / expiry / attempts", () => {
 });
 
 describe("quote email send — no mailto success", () => {
-  it("emailQuote reports SMTP success without a mailto field and posts HTML", async () => {
+  it("emailQuote reports Resend success without a mailto field and posts HTML", async () => {
     const sheet = {
       status: "quoted",
       quote_request_id: "q1",
@@ -223,14 +223,14 @@ describe("quote email send — no mailto success", () => {
         expect(payload.html).toMatch(/60601/);
         return {
           ok: true,
-          json: async () => ({ ok: true, sent: true, mode: "smtp", to: payload.to, from: payload.from }),
+          json: async () => ({ ok: true, sent: true, mode: "resend", to: payload.to, from: payload.from }),
         };
       },
     });
     expect(result.ok).toBe(true);
     expect(result.sent).toBe(true);
     expect(result.mailto).toBeUndefined();
-    expect(result.mode).toBe("smtp");
+    expect(result.mode).toBe("resend");
     expect(result.html).toContain("<!DOCTYPE html>");
   });
 
@@ -253,7 +253,7 @@ describe("quote email send — no mailto success", () => {
     expect(result.error).toMatch(/could not send/i);
   });
 
-  it("sendQuoteEmail uses SMTP multipart when html is provided", async () => {
+  it("sendQuoteEmail sends HTML through the mail hook", async () => {
     const sent = [];
     const sheet = { status: "quoted", quote_request_id: "q3", quote_result: { quote_id: "R3", carrier: "Y", total_usd: 42 } };
     const result = await sendQuoteEmail({
@@ -261,13 +261,13 @@ describe("quote email send — no mailto success", () => {
       subject: "Freight Lodge quote",
       text: formatQuoteEmail(sheet).body,
       html: formatQuoteEmailHtml(sheet).html,
-      env: { SMTP_PASS: "secret" },
+      env: { RESEND_API_KEY: "re_test" },
       sendMail: async (msg) => sent.push(msg),
     });
     expect(result.status).toBe(200);
     expect(result.body.sent).toBe(true);
-    expect(result.body.mode).toBe("smtp");
-    expect(sent[0].from).toBe("john@freightlodge.com");
+    expect(result.body.mode).toBe("resend");
+    expect(sent[0].from).toBe("Freight Lodge <john@freightlodge.com>");
     expect(sent[0].html).toContain("Freight Lodge");
     expect(sent[0].html).toContain("$42.00");
     expect(mailtoHref({ contact: { email: "x@y.com" } })).toMatch(/^mailto:/);
@@ -453,7 +453,7 @@ describe("quote path does not require a verify challenge", () => {
     expect(vite).toContain("/api/email/verify/start");
     expect(vite).toContain("formatQuoteEmailHtml");
     expect(readme).toContain("POST /email/verify/start");
-    expect(readme).toContain("SMTP_PASS");
+    expect(readme).toContain("RESEND_API_KEY");
     expect(readme).toContain("html?");
   });
 });

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Composite public/assets/logo-b.png onto an opaque cream plate for SMTP HTML.
+ * Composite public/assets/logo-b.png onto an opaque cream plate for HTML email.
  * Gmail dark mode inverts HTML through transparency; an RGB (no-alpha) plate
  * keeps “Lodge” readable. Run: node scripts/bake-email-logo.mjs
  */

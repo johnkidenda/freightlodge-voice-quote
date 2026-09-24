@@ -85,7 +85,7 @@ export function formatQuoteEmail(sheet) {
 }
 
 /**
- * Quote-card HTML for SMTP (cream / navy / serif). Inline styles for mail clients.
+ * Quote-card HTML for mail clients (cream / navy / serif). Inline styles.
  * Returns `{ subject, html }`. Send `html` only — never the whole object.
  */
 export function formatQuoteEmailHtml(sheet) {
@@ -163,7 +163,7 @@ export async function emailQuote(sheet, { fetchFn, apiBase, env } = {}) {
       return {
         ok: true,
         sent: true,
-        mode: data.mode || "smtp",
+        mode: data.mode || "resend",
         from: data.from || MAIL_FROM,
         to: data.to || to,
         subject: data.subject || subject,

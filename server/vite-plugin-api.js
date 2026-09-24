@@ -3,7 +3,7 @@ import { MAIL_FROM, formatQuoteEmail, formatQuoteEmailHtml } from "../src/lib/em
 import { evaluateUtteranceJev } from "../token-proxy/src/jev.js";
 import { evaluateDomAction } from "../token-proxy/src/jev-action.js";
 import { dispatchEmailApi, isEmailApiPath } from "../token-proxy/src/email-verify.js";
-import { sendSmtpMail } from "../token-proxy/src/smtp-send.js";
+import { resendConfigured, sendResendMail } from "../token-proxy/src/resend.js";
 
 function readJson(req) {
   return new Promise((resolve, reject) => {
@@ -151,7 +151,7 @@ async function handler(req, res, next) {
       const result = await dispatchEmailApi(path, body, {
         env: process.env,
         ip,
-        sendMail: process.env.SMTP_PASS ? (msg) => sendSmtpMail(msg, process.env) : undefined,
+        sendMail: resendConfigured(process.env) ? (msg) => sendResendMail(msg, process.env) : undefined,
       });
       send(res, result.status, result.body);
     } catch (err) {

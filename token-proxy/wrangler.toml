@@ -6,11 +6,8 @@ account_id = "253d98a60b2c63dece54145bb507065d"
 
 # Production:
 #   npx wrangler secret put TYPESAFE_API_KEY
-#   npx wrangler secret put SMTP_PASS
-#   npx wrangler secret put SMTP_HOST   # optional (default smtp.hostinger.com)
-#   npx wrangler secret put SMTP_PORT   # optional (default 465)
-#   npx wrangler secret put SMTP_USER
-#   npx wrangler secret put MAIL_FROM
+#   npx wrangler secret put RESEND_API_KEY
+#   npx wrangler secret put MAIL_FROM   # optional
 #   npx wrangler deploy
 # → https://freightlodge-stt-token.johnkidenda.workers.dev
 #
