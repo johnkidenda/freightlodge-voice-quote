@@ -35,8 +35,11 @@ export async function sendResendMail(msg, env = {}, fetchImpl = globalThis.fetch
   const from = String(msg?.from || "").trim() || mailFromAddress(env);
   const to = String(msg?.to || "").trim();
   const subject = String(msg?.subject || "");
-  const text = String(msg?.text || "");
-  const html = msg?.html == null ? "" : String(msg.html);
+  const text = String(msg?.text || "").trim();
+  const html = String(msg?.html || "").trim();
+  const payload = { from, to: [to], subject };
+  if (text) payload.text = text;
+  if (html) payload.html = html;
   let response;
   try {
     response = await fetchImpl(RESEND_EMAILS_URL, {
@@ -45,7 +48,7 @@ export async function sendResendMail(msg, env = {}, fetchImpl = globalThis.fetch
         Authorization: `Bearer ${key}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ from, to: [to], subject, text, html }),
+      body: JSON.stringify(payload),
     });
   } catch (err) {
     const message = String(err?.message || err).replaceAll(key, "[redacted]").slice(0, 180);

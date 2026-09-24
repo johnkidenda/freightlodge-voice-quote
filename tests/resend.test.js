@@ -54,7 +54,25 @@ describe("sendResendMail", () => {
       },
     );
     expect(body.from).toBe(RESEND_FROM_DEFAULT);
-    expect(body.html).toBe("");
+    expect(body).not.toHaveProperty("html");
+    expect(body.text).toBe("T");
+  });
+
+  it("omits empty html and text, and includes html when it has content", async () => {
+    const bodies = [];
+    const fetchImpl = async (_url, init) => {
+      bodies.push(JSON.parse(init.body));
+      return { status: 200, json: async () => ({}) };
+    };
+    const env = { RESEND_API_KEY: "re_test_key" };
+    await sendResendMail({ to: "a@b.com", subject: "S", text: "Only text", html: "   " }, env, fetchImpl);
+    await sendResendMail({ to: "a@b.com", subject: "S", html: "<p>Only html</p>", text: "" }, env, fetchImpl);
+    await sendResendMail({ to: "a@b.com", subject: "S", text: "Both", html: "<p>Both</p>" }, env, fetchImpl);
+    expect(bodies[0]).not.toHaveProperty("html");
+    expect(bodies[0].text).toBe("Only text");
+    expect(bodies[1]).not.toHaveProperty("text");
+    expect(bodies[1].html).toBe("<p>Only html</p>");
+    expect(bodies[2]).toMatchObject({ text: "Both", html: "<p>Both</p>" });
   });
 
   it("logs status plus Resend name and message on non-2xx, never the key", async () => {
