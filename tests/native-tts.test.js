@@ -74,9 +74,9 @@ describe("native speak / cancel", () => {
         this.onerror = null;
       }
     }
-    expect(speakBrowserReply("What’s the origin ZIP?", { synth, utteranceClass: FakeUtterance })).toBe(true);
+    expect(speakBrowserReply("What’s the origin zip code?", { synth, utteranceClass: FakeUtterance })).toBe(true);
     expect(synth.cancelCalls).toBe(1);
-    expect(spoken[0].text).toMatch(/origin ZIP/);
+    expect(spoken[0].text).toMatch(/origin zip code/i);
     expect(spoken[0].lang).toBe("en-US");
     expect(spoken[0].voice.name).toBe("Samantha");
     cancelBrowserSpeech(synth);

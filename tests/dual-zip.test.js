@@ -25,7 +25,7 @@ describe("dual ZIP while awaiting one ZIP slot", () => {
     expect(result.session.sheet.lanes.origin.postal_code).toBe("60601");
     expect(result.session.sheet.lanes.destination.postal_code).toBe("75201");
     expect(result.session.zipClarify).toBeFalsy();
-    expect(result.reply).not.toMatch(/same ZIP both ends/i);
+    expect(result.reply).not.toMatch(/same zip(?: code)? both ends/i);
   });
 
   it.each(PAIRS)("dialog parks both ZIPs from %s while awaiting dest_zip and origin is empty", (text) => {
@@ -85,7 +85,7 @@ describe("dual ZIP while awaiting one ZIP slot", () => {
     expect(result.session.sheet.lanes.destination.city).toBe("Atlanta");
     expect(result.session.awaiting).toBe("dest_zip");
     expect(result.reply).toBe(
-      "I heard 3030 for the destination, which is only four digits. What’s the full ZIP?",
+      "I heard 3030 for the destination, which is only four digits. What’s the full zip code?",
     );
     expect(result.reply).not.toMatch(/\u2014/);
     expect(presentAgentReply(result, true)).toBe(result.reply);
@@ -99,7 +99,7 @@ describe("dual ZIP while awaiting one ZIP slot", () => {
     expect(result.session.sheet.lanes.origin.postal_code).toBeNull();
     expect(result.session.awaiting).toBe("origin_zip");
     expect(result.reply).toBe(
-      "I heard 7872 for the origin, which is only four digits. What’s the full ZIP?",
+      "I heard 7872 for the origin, which is only four digits. What’s the full zip code?",
     );
   });
 

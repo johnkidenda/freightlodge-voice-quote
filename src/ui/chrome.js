@@ -25,7 +25,7 @@ export function renderChrome(els, state) {
   if (els.input) {
     els.input.placeholder = awaitingEmail
       ? "Type the email address…"
-      : "Type origin ZIP, dest ZIP, pieces…";
+      : "Type origin zip code, dest zip code, pieces…";
     els.input.setAttribute("inputmode", awaitingEmail ? "email" : "text");
     els.input.setAttribute("autocomplete", awaitingEmail ? "email" : "off");
   }

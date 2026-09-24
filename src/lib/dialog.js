@@ -30,15 +30,15 @@ import {
 } from "./jev-core.js";
 
 export const GREETING =
-  "Freight Lodge. I’ll take a US domestic LTL quote. Where are we picking up? What’s the origin ZIP?";
+  "Freight Lodge. I’ll take a US domestic LTL quote. Where are we picking up? What’s the origin zip code?";
 
 const PROMPTS = {
-  origin_zip: "What’s the origin ZIP? City is helpful, but I need the five-digit ZIP.",
-  dest_zip: "Where is this going? I need a destination city, state, or ZIP.",
-  dest_incomplete: "That ended at “to”. I still need the destination city, state, or ZIP.",
-  incomplete_zip: "That ZIP is short. I need a full 5-digit ZIP.",
-  incomplete_dest_zip: "That destination ZIP is short. I need a full 5-digit ZIP.",
-  incomplete_origin_zip: "That origin ZIP is short. I need a full 5-digit ZIP.",
+  origin_zip: "What’s the origin zip code? City is helpful, but I need the 5-digit zip code.",
+  dest_zip: "Where is this going? I need a destination city, state, or zip code.",
+  dest_incomplete: "That ended at “to”. I still need the destination city, state, or zip code.",
+  incomplete_zip: "That zip code is short. I need a full 5-digit zip code.",
+  incomplete_dest_zip: "That destination zip code is short. I need a full 5-digit zip code.",
+  incomplete_origin_zip: "That origin zip code is short. I need a full 5-digit zip code.",
   piece_unit: "Are you shipping pallets or pieces?",
   pieces: "How many pieces or pallets?",
   measure:
@@ -50,7 +50,7 @@ const PROMPTS = {
   liftgate_side: "Liftgate at pickup, delivery, or both?",
   inside_side: "Inside pickup, inside delivery, or both?",
   email:
-    "What email should I put on the sheet so we can send the quote? Typing the address is safer than saying it. Voice often mangles emails.",
+    "What email should I put on the sheet so we can send the quote? Please type it in.",
 };
 
 export function createSession({ id, now } = {}) {
@@ -83,7 +83,7 @@ export function zipClarifyQuestion(clarify, sheet) {
     return `${clarify.zip} looks like ${zipName}, but ${side} is ${placeName}. Which is right?`;
   }
   if (clarify?.kind === "same" && clarify.zip) {
-    return `Origin and destination would both be ${clarify.zip}. Same ZIP both ends. Is that right?`;
+    return `Origin and destination would both be ${clarify.zip}. Same zip code both ends. Is that right?`;
   }
   if (!clarify?.zip || !clarify?.metro?.city) return PROMPTS.origin_zip;
   if (clarify.kind === "metro") {
@@ -99,15 +99,15 @@ export function zipClarifyQuestion(clarify, sheet) {
     return `${clarify.zip} looks like ${place}. Did you mean ${destCity} ${clarify.altZip}?`;
   }
   if (destConflicts && destCity) {
-    return `${clarify.zip} looks like ${place}. Dest is ${destCity}. Is ${clarify.zip} the origin ZIP?`;
+    return `${clarify.zip} looks like ${place}. Dest is ${destCity}. Is ${clarify.zip} the origin zip code?`;
   }
   if (clarify.suggestedRole === "dest") {
-    return `${clarify.zip} looks like ${place}. Is that the destination ZIP?`;
+    return `${clarify.zip} looks like ${place}. Is that the destination zip code?`;
   }
   if (clarify.suggestedRole === "origin") {
-    return `${clarify.zip} looks like ${place}. Is that the origin ZIP?`;
+    return `${clarify.zip} looks like ${place}. Is that the origin zip code?`;
   }
-  return `${clarify.zip} looks like ${place}. Origin ZIP or destination ZIP?`;
+  return `${clarify.zip} looks like ${place}. Origin zip code or destination zip code?`;
 }
 
 function stateTokenRe(code) {
@@ -222,7 +222,7 @@ function incompleteZipReply(flag) {
     const n = digits.length;
     const word = DIGIT_WORDS[n] || String(n);
     const unit = n === 1 ? "digit" : "digits";
-    return `I heard ${digits} for the ${side}, which is only ${word} ${unit}. What’s the full ZIP?`;
+    return `I heard ${digits} for the ${side}, which is only ${word} ${unit}. What’s the full zip code?`;
   }
   if (role === "dest") return PROMPTS.incomplete_dest_zip;
   if (role === "origin") return PROMPTS.incomplete_origin_zip;
@@ -610,7 +610,7 @@ export function handleUtterance(session, text, { now, jev } = {}) {
   let reply;
   if (extracted.flags.incompleteTo && !hasRealDest(sheet.lanes.destination)) {
     reply = addedNothing
-      ? "Still no destination after “to”. Say the city, state, or ZIP you’re going to."
+      ? "Still no destination after “to”. Say the city, state, or zip code you’re going to."
       : PROMPTS.dest_incomplete;
   } else {
     const ack = acknowledge(extracted, sheet);
@@ -619,8 +619,8 @@ export function handleUtterance(session, text, { now, jev } = {}) {
     if (addedNothing && reply === session.lastReply) {
       reply =
         awaiting === "dest_zip"
-          ? "Still need the destination city, state, or ZIP. That last message didn’t add one."
-          : `I didn’t catch a new ${awaiting?.replaceAll("_", " ") || "detail"} in that. ${ask}`;
+          ? "Still need the destination city, state, or zip code. That last message didn’t add one."
+          : `I didn’t catch a new ${spokenSlot(awaiting)} in that. ${ask}`;
     }
   }
   return finish(session, sheet, askedAccessorials, reply, extracted, awaiting, extractKey, lastBareZip, zipClarify, jevAfter, accessorialClarify);
@@ -635,11 +635,11 @@ function placeLabel(place) {
 function promptFor(slot, sheet) {
   if (slot === "dest_zip") {
     const label = placeLabel(sheet.lanes?.destination);
-    if (label) return `I have dest ${label}. What’s the destination ZIP?`;
+    if (label) return `I have dest ${label}. What’s the destination zip code?`;
   }
   if (slot === "origin_zip") {
     const label = placeLabel(sheet.lanes?.origin);
-    if (label) return `I have origin ${label}. What’s the origin ZIP?`;
+    if (label) return `I have origin ${label}. What’s the origin zip code?`;
   }
   if (slot === "pieces") return piecesCountPrompt(sheet);
   return slot ? PROMPTS[slot] : PROMPTS.email;
@@ -649,6 +649,12 @@ function piecesCountPrompt(sheet) {
   if (sheet?.freight?.piece_unit === "pallets") return "How many pallets?";
   if (sheet?.freight?.piece_unit === "pieces") return "How many pieces?";
   return PROMPTS.pieces;
+}
+
+function spokenSlot(slot) {
+  if (slot === "origin_zip") return "origin zip code";
+  if (slot === "dest_zip") return "destination zip code";
+  return slot?.replaceAll("_", " ") || "detail";
 }
 
 function zip5(code) {
@@ -769,12 +775,12 @@ function hasRealDest(place) {
 function acknowledge(extracted, sheet) {
   const bits = [];
   if (extracted.origin?.postal_code) bits.push(`origin ${extracted.origin.postal_code}`);
-  else if (extracted.origin?.city) bits.push(`origin ${extracted.origin.city} (still need ZIP)`);
-  else if (extracted.origin?.state) bits.push(`origin ${extracted.origin.state} (still need ZIP)`);
+  else if (extracted.origin?.city) bits.push(`origin ${extracted.origin.city} (still need zip code)`);
+  else if (extracted.origin?.state) bits.push(`origin ${extracted.origin.state} (still need zip code)`);
   if (!isGarbagePlace(extracted.destination)) {
     if (extracted.destination?.postal_code) bits.push(`dest ${extracted.destination.postal_code}`);
-    else if (extracted.destination?.city) bits.push(`dest ${extracted.destination.city} (still need ZIP)`);
-    else if (extracted.destination?.state) bits.push(`dest ${extracted.destination.state} (still need ZIP)`);
+    else if (extracted.destination?.city) bits.push(`dest ${extracted.destination.city} (still need zip code)`);
+    else if (extracted.destination?.state) bits.push(`dest ${extracted.destination.state} (still need zip code)`);
   }
   if (extracted.freight?.pieces) {
     const unit = pieceUnitForAck(extracted.freight, sheet?.freight);

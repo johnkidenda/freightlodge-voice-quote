@@ -91,9 +91,11 @@ describe("city vs ZIP metro mismatch — do not silent-keep", () => {
 
 describe("email ask recommends typing", () => {
   it("formal and conversational prompts tell them to type the address", () => {
-    expect(PROMPTS.email).toMatch(/What email should I put on the sheet so we can send the quote\?/);
-    expect(PROMPTS.email).toMatch(/Typing the address is safer than saying it/);
-    expect(PROMPTS.email).toMatch(/voice often mangles emails/i);
+    expect(PROMPTS.email).toBe(
+      "What email should I put on the sheet so we can send the quote? Please type it in.",
+    );
+    expect(PROMPTS.email).not.toMatch(/I recommend typing it in for accuracy/);
+    expect(PROMPTS.email).not.toMatch(/safer than saying/i);
 
     const session = createSession({ id: "email-ask" });
     session.sheet.lanes.origin.postal_code = "30301";
@@ -114,9 +116,9 @@ describe("email ask recommends typing", () => {
       sheet: result.session.sheet,
       awaiting: "email",
     });
-    expect(warm).toBe("What email should I put on the sheet? Typing it is safer than saying it.");
-    expect(presentAgentReply({ ...result, session: { ...result.session, awaiting: "email" } }, true)).toMatch(
-      /Typing it is safer than saying it/,
+    expect(warm).toBe("What email should I put on the sheet? Please type it in.");
+    expect(presentAgentReply({ ...result, session: { ...result.session, awaiting: "email" } }, true)).toBe(
+      "What email should I put on the sheet? Please type it in.",
     );
   });
 

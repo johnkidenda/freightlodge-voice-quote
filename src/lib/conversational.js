@@ -2,7 +2,7 @@ import { isValidZip, pieceUnitForAck, spokenPieceCount } from "./completeness.js
 import { isGarbagePlace } from "./extract.js";
 
 export const CONVERSATIONAL_GREETING =
-  "Hi. I can take a US domestic LTL quote. Where are we picking up? What’s the origin ZIP?";
+  "Hi. I can take a US domestic LTL quote. Where are we picking up? What’s the origin zip code?";
 
 export const CONVERSATIONAL_STORAGE_KEY = "freightlodge.conversational";
 
@@ -99,17 +99,17 @@ function conversationalAsk(sheet, awaiting) {
 
   if (!originZip && !destZip && originCity && destCity) {
     if (!hasMeasure) {
-      return "I still need the origin and destination ZIPs, and the total weight in pounds.";
+      return "I still need the origin and destination zip codes, and the total weight in pounds.";
     }
-    return "I still need the origin and destination ZIPs.";
+    return "I still need the origin and destination zip codes.";
   }
   if (awaiting === "origin_zip") {
-    return originCity ? `What’s the origin ZIP for ${originCity}?` : "Got it. What’s the pickup ZIP?";
+    return originCity ? `What’s the origin zip code for ${originCity}?` : "Got it. What’s the pickup zip code?";
   }
   if (awaiting === "dest_zip") {
     return destCity
-      ? `I have ${destCity}. What’s the destination ZIP?`
-      : "Where is this going? I need a city, state, or ZIP.";
+      ? `I have ${destCity}. What’s the destination zip code?`
+      : "Where is this going? I need a city, state, or zip code.";
   }
   if (awaiting === "piece_unit") return "Are you shipping pallets or pieces?";
   if (awaiting === "pieces") {
@@ -131,7 +131,9 @@ function conversationalAsk(sheet, awaiting) {
   if (awaiting === "inside_side") {
     return "Inside pickup, inside delivery, or both?";
   }
-  if (awaiting === "email") return "What email should I put on the sheet? Typing it is safer than saying it.";
+  if (awaiting === "email") {
+    return "What email should I put on the sheet? Please type it in.";
+  }
   return "";
 }
 
@@ -154,10 +156,10 @@ export function composeConversationalReply({
   if (extracted?.flags?.zipClarify) return formalReply || "";
   if (extracted?.flags?.incompleteZip?.digits) return formalReply || "";
   if (extracted?.flags?.incompleteZip) {
-    return "That ZIP is short. I need a full 5-digit ZIP.";
+    return "That zip code is short. I need a full 5-digit zip code.";
   }
   if (extracted?.flags?.incompleteTo) {
-    return "That ended at “to”. I still need the destination city, state, or ZIP.";
+    return "That ended at “to”. I still need the destination city, state, or zip code.";
   }
   if (
     extracted?.flags?.vagueMeasure &&
