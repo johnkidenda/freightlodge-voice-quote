@@ -132,7 +132,7 @@ function conversationalAsk(sheet, awaiting) {
     return "Inside pickup, inside delivery, or both?";
   }
   if (awaiting === "email") {
-    return "What email should I put on the sheet? Please type it in. I recommend typing it in for accuracy.";
+    return "What email should I put on the sheet? Please type it in.";
   }
   return "";
 }

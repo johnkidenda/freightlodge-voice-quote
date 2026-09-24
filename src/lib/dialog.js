@@ -50,7 +50,7 @@ const PROMPTS = {
   liftgate_side: "Liftgate at pickup, delivery, or both?",
   inside_side: "Inside pickup, inside delivery, or both?",
   email:
-    "What email should I put on the sheet so we can send the quote? Please type it in. I recommend typing it in for accuracy.",
+    "What email should I put on the sheet so we can send the quote? Please type it in.",
 };
 
 export function createSession({ id, now } = {}) {
