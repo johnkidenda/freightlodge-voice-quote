@@ -29,7 +29,16 @@ async function readJson(request) {
 
 function mailSender(env) {
   if (!smtpPasswordSet(env || {})) return undefined;
-  return (msg) => sendSmtpMailWorker(msg, env || {});
+  return async (msg) => {
+    try {
+      await sendSmtpMailWorker(msg, env || {});
+    } catch (err) {
+      const code = err?.code || "SMTP_FAIL";
+      const message = String(err?.message || err).slice(0, 180);
+      console.error("smtp_send_failed", code, message);
+      throw err;
+    }
+  };
 }
 
 export default {
