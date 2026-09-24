@@ -9,6 +9,7 @@
  *
  * Jev: POST /jev
  * Jev-action: POST /jev-action
+ * TTS: POST /tts  (GEMINI_API_KEY stays on this process)
  * Email: POST /email/verify/start|confirm and POST /email/quote
  */
 import { createServer } from "node:http";
@@ -16,6 +17,7 @@ import { corsHeaders } from "./src/cors.js";
 import { evaluateUtteranceJev } from "./src/jev.js";
 import { evaluateDomAction } from "./src/jev-action.js";
 import { dispatchEmailApi, isEmailApiPath } from "./src/email-verify.js";
+import { geminiTtsConfigured, synthesizeGeminiTts } from "./src/gemini-tts.js";
 import { resendConfigured, sendResendMail } from "./src/resend.js";
 
 const PORT = Number(process.env.PORT) || 8787;
@@ -64,6 +66,7 @@ const server = createServer(async (req, res) => {
       {
         ok: true,
         service: "freightlodge-stt-token",
+        tts: geminiTtsConfigured(process.env),
         jev: Boolean(typesafeKey),
         email: resendConfigured(process.env),
       },
@@ -157,12 +160,43 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  if (path === "/tts") {
+    if (req.method !== "POST") {
+      send(res, 405, { error: "method not allowed" }, origin);
+      return;
+    }
+    if (!geminiTtsConfigured(process.env)) {
+      send(res, 503, { error: "Gemini TTS is not configured" }, origin);
+      return;
+    }
+    try {
+      const body = await readJson(req);
+      const audio = await synthesizeGeminiTts({
+        apiKey: process.env.GEMINI_API_KEY,
+        text: body?.text,
+        voice: body?.voice,
+        env: process.env,
+      });
+      res.writeHead(200, {
+        "Content-Type": audio.contentType,
+        "Cache-Control": "no-store",
+        ...corsHeaders(origin),
+      });
+      res.end(Buffer.from(audio.bytes));
+    } catch (err) {
+      const status = err?.code === "TTS_EMPTY" ? 400 : err?.code === "TTS_UNCONFIGURED" ? 503 : 502;
+      const message = status === 503 ? "Gemini TTS is not configured" : String(err?.message || "Gemini TTS failed");
+      send(res, status, { error: message }, origin);
+    }
+    return;
+  }
+
   send(res, 404, { error: "not found" }, origin);
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`Jev + email stub listening on http://${HOST}:${PORT}`);
-  console.log("Jev: POST /jev   Jev-action: POST /jev-action");
+  console.log(`Jev + email + Gemini TTS stub listening on http://${HOST}:${PORT}`);
+  console.log("Jev: POST /jev   Jev-action: POST /jev-action   TTS: POST /tts");
   console.log("Email: POST /email/verify/start  POST /email/verify/confirm  POST /email/quote");
-  console.log("TYPESAFE_API_KEY and RESEND_API_KEY stay on this process only.");
+  console.log("TYPESAFE_API_KEY, RESEND_API_KEY, and GEMINI_API_KEY stay on this process only.");
 });

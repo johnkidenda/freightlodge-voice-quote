@@ -3,6 +3,7 @@ import { MAIL_FROM, formatQuoteEmail, formatQuoteEmailHtml } from "../src/lib/em
 import { evaluateUtteranceJev } from "../token-proxy/src/jev.js";
 import { evaluateDomAction } from "../token-proxy/src/jev-action.js";
 import { dispatchEmailApi, isEmailApiPath } from "../token-proxy/src/email-verify.js";
+import { geminiTtsConfigured, synthesizeGeminiTts } from "../token-proxy/src/gemini-tts.js";
 import { resendConfigured, sendResendMail } from "../token-proxy/src/resend.js";
 
 function readJson(req) {
@@ -43,7 +44,8 @@ async function handler(req, res, next) {
       path === "/api/email/verify/start" ||
       path === "/api/email/verify/confirm" ||
       path === "/api/jev" ||
-      path === "/api/jev-action")
+      path === "/api/jev-action" ||
+      path === "/api/tts")
   ) {
     res.statusCode = 204;
     res.end();
@@ -156,6 +158,31 @@ async function handler(req, res, next) {
       send(res, result.status, result.body);
     } catch (err) {
       send(res, 400, { ok: false, error: String(err.message || err) });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && path === "/api/tts") {
+    if (!geminiTtsConfigured(process.env)) {
+      send(res, 503, { error: "Gemini TTS is not configured" });
+      return;
+    }
+    try {
+      const body = await readJson(req);
+      const audio = await synthesizeGeminiTts({
+        apiKey: process.env.GEMINI_API_KEY,
+        text: body?.text,
+        voice: body?.voice,
+        env: process.env,
+      });
+      res.statusCode = 200;
+      res.setHeader("Content-Type", audio.contentType);
+      res.setHeader("Cache-Control", "no-store");
+      res.end(Buffer.from(audio.bytes));
+    } catch (err) {
+      const status = err?.code === "TTS_EMPTY" ? 400 : err?.code === "TTS_UNCONFIGURED" ? 503 : 502;
+      const message = status === 503 ? "Gemini TTS is not configured" : String(err?.message || "Gemini TTS failed");
+      send(res, status, { error: message });
     }
     return;
   }

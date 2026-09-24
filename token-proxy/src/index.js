@@ -2,6 +2,7 @@ import { corsHeaders } from "./cors.js";
 import { evaluateUtteranceJev } from "./jev.js";
 import { evaluateDomAction } from "./jev-action.js";
 import { dispatchEmailApi, isEmailApiPath } from "./email-verify.js";
+import { geminiTtsConfigured, synthesizeGeminiTts } from "./gemini-tts.js";
 import { resendConfigured, sendResendMail } from "./resend.js";
 
 function json(body, status, origin) {
@@ -46,6 +47,7 @@ export default {
         {
           ok: true,
           service: "freightlodge-stt-token",
+          tts: geminiTtsConfigured(env),
           jev: Boolean(env?.TYPESAFE_API_KEY),
           email: resendConfigured(env || {}),
         },
@@ -105,6 +107,35 @@ export default {
         const message = String(err?.message || err);
         const status = err?.code === "JEV_UNCONFIGURED" ? 503 : err?.code === "JEV_EMPTY" ? 400 : 502;
         return json({ ok: false, jev: "off", error: message }, status, origin);
+      }
+    }
+
+    if (path === "/tts") {
+      if (request.method !== "POST") return json({ error: "method not allowed" }, 405, origin);
+      if (!geminiTtsConfigured(env)) {
+        return json({ error: "Gemini TTS is not configured" }, 503, origin);
+      }
+      const body = await readJson(request);
+      try {
+        const audio = await synthesizeGeminiTts({
+          apiKey: env.GEMINI_API_KEY,
+          text: body?.text,
+          voice: body?.voice,
+          env,
+        });
+        return new Response(audio.bytes, {
+          status: 200,
+          headers: {
+            "Content-Type": audio.contentType,
+            "Cache-Control": "no-store",
+            ...corsHeaders(origin),
+          },
+        });
+      } catch (err) {
+        const status = err?.code === "TTS_UNCONFIGURED" ? 503 : err?.code === "TTS_EMPTY" ? 400 : 502;
+        const message =
+          status === 503 ? "Gemini TTS is not configured" : String(err?.message || "Gemini TTS failed");
+        return json({ error: message }, status, origin);
       }
     }
 

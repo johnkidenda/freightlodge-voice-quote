@@ -22,13 +22,13 @@ npm run dev
 
 Open the printed localhost URL (Chrome or Safari). Hold the mic button to talk, or type. Mic → text is **Web Speech only**. No API keys required for dictation.
 
-**Conversational mode** (separate toggle) rewrites agent bubbles into short customer-service copy and speaks them with the browser `speechSynthesis` API. Mode off = formal prompts + silent. There is no cloud TTS toggle, latency chip, or STT mode badge in the UI.
+**Conversational mode** (separate toggle) rewrites agent bubbles into short customer-service copy and speaks them with Gemini TTS (`POST {VITE_API_BASE_URL}/tts`, model `gemini-3.8-flash-tts`, voice Kore). If that request fails, times out (~5s), or the key is missing, it falls back to browser `speechSynthesis`. Mode off = formal prompts + silent. There is no separate Voice-engine toggle, latency chip, or STT mode badge in the UI.
 
 **App version** is `v0.XX` where XX is `0.01` × (merged change-sets including the current ship). Source of truth: [`VERSION`](VERSION). This ship is **v0.36**. Future PRs that do not bump `VERSION` are incremented by CI (`.github/workflows/version-on-pr.yml`).
 
 `npm run preview` serves the production build plus the same local API stubs.
 
-Optional: copy `.env.example` → `.env` if you later wire `OPENAI_API_KEY` into a local enhance endpoint. Conversational speech uses browser `speechSynthesis` only. The static app must keep working without secrets (toggle still warms the copy; browser TTS no-ops if `speechSynthesis` is missing).
+Optional: copy `.env.example` → `.env` if you later wire `OPENAI_API_KEY` into a local enhance endpoint. Conversational speech prefers the Worker when `GEMINI_API_KEY` is set there; the static app still works without secrets (toggle still warms the copy; browser `speechSynthesis` speaks, or no-ops if that API is missing). Never put `GEMINI_API_KEY` in `VITE_*`.
 
 ### API proxy (Jev + email Worker)
 
@@ -219,7 +219,7 @@ npm test
 ```
 
 - Hold-and-dump: one utterance parks weight + commodity + cities while awaiting origin ZIP
-- Conversational copy + browser `speechSynthesis`; Web Speech only for STT
+- Conversational copy + Gemini TTS (`/tts`) with `speechSynthesis` fallback; Web Speech only for STT
 - Visible `VERSION` (`v0.36` this ship) baked into the footer only
 - Quote-card email (HTML + text) without mailto; no OTP gate on the quote path
 - Post-utterance Jev via `POST /jev` (fallback when the TypeSafe key is absent; `?jev=0` disables)

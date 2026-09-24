@@ -103,9 +103,12 @@ describe("conversational reply copy", () => {
 });
 
 describe("conversational TTS wiring", () => {
-  it("uses browser speechSynthesis only (no cloud TTS)", () => {
+  it("speaker uses speakAgentReply with no Voice-engine toggle", () => {
     expect(DEFAULT_TTS_ENGINE).toBe(TTS_ENGINES.BROWSER);
     expect(typeof speakAgentReply).toBe("function");
+    const speech = readFileSync("src/lib/agent-speech.js", "utf8");
+    expect(speech).toContain("speakBrowserReply");
+    expect(speech).toContain("/tts");
     const app = readClientUi();
     expect(app).toContain("Conversational mode");
     expect(app).toContain("presentAgentReply");
