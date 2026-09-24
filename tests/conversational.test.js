@@ -27,15 +27,15 @@ describe("conversational reply copy", () => {
     const result = handleUtterance(session, "hello");
     expect(presentAgentReply(result, false)).toBe(result.reply);
     expect(result.reply).toContain(PROMPTS.origin_zip);
-    expect(openingMessage()).toMatch(/What’s the origin ZIP/);
+    expect(openingMessage()).toMatch(/What’s the origin zip code/);
     expect(openingMessage()).not.toMatch(/won’t guess|won’t invent|won’t look/i);
   });
 
   it("rewrites the origin-ZIP ask to a short CS line", () => {
     const result = handleUtterance(createSession({ id: "warm-zip" }), "hello");
     const warm = presentAgentReply(result, true);
-    expect(warm).toMatch(/pickup ZIP/i);
-    expect(warm).not.toContain("City is helpful, but I need the five-digit ZIP");
+    expect(warm).toMatch(/pickup zip code/i);
+    expect(warm).not.toContain("City is helpful, but I need the 5-digit zip code");
     expect(warm.length).toBeLessThan(result.reply.length);
   });
 
@@ -68,7 +68,9 @@ describe("conversational reply copy", () => {
       sheet: result.session.sheet,
       awaiting: result.session.awaiting,
     });
-    expect(warm).toBe("I have Austin and Atlanta and 1000 pounds of oranges. I still need the origin and destination ZIPs.");
+    expect(warm).toBe(
+      "I have Austin and Atlanta and 1000 pounds of oranges. I still need the origin and destination zip codes.",
+    );
     expect(warm).not.toMatch(/\bdest\b/);
     expect(warm).not.toMatch(/\bpcs\b/);
     expect(warm).not.toMatch(/\blb\b/);
@@ -97,7 +99,7 @@ describe("conversational reply copy", () => {
     expect(saveConversationalMode(true, store)).toBe(true);
     expect(loadConversationalMode(store)).toBe(true);
     expect(CONVERSATIONAL_GREETING).toMatch(/^Hi\./);
-    expect(CONVERSATIONAL_GREETING).toMatch(/origin ZIP/);
+    expect(CONVERSATIONAL_GREETING).toMatch(/origin zip code/);
     expect(CONVERSATIONAL_GREETING).not.toBe(openingMessage());
   });
 });

@@ -13,7 +13,7 @@ describe("same origin/dest ZIP confirm", () => {
     expect(result.session.sheet.lanes.origin.postal_code).toBe("30301");
     expect(result.session.zipClarify.kind).toBe("same");
     expect(result.reply).toMatch(/both be 30301/i);
-    expect(result.reply).toMatch(/same ZIP both ends/i);
+    expect(result.reply).toMatch(/same zip code both ends/i);
     expect(result.reply).not.toMatch(/won’t|invent|guess/i);
   });
 
@@ -45,6 +45,6 @@ describe("same origin/dest ZIP confirm", () => {
     expect(result.session.sheet.lanes.origin.postal_code).toBe("60601");
     expect(result.session.sheet.lanes.destination.postal_code).toBe("75201");
     expect(result.extracted.flags.zipClarify).toBeFalsy();
-    expect(result.reply).not.toMatch(/same ZIP both ends/i);
+    expect(result.reply).not.toMatch(/same zip(?: code)? both ends/i);
   });
 });

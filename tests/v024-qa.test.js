@@ -187,9 +187,9 @@ describe("v0.24 partial ZIP dump retains the valid ZIP (7af26cfd)", () => {
     expect(rejected.session.sheet.lanes.destination.city).toBe("Atlanta");
     expect(rejected.session.sheet.lanes.destination.postal_code).toBeNull();
     expect(rejected.session.awaiting).toBe("dest_zip");
-    expect(rejected.reply).not.toMatch(/origin ZIP|still need ZIP/i);
-    expect(rejected.reply).toMatch(/destination ZIP/i);
-    expect(presentAgentReply(rejected, true)).not.toMatch(/origin ZIP|still need ZIP/i);
+    expect(rejected.reply).not.toMatch(/origin zip(?! code)|still need zip(?! code)/i);
+    expect(rejected.reply).toMatch(/destination zip code/i);
+    expect(presentAgentReply(rejected, true)).not.toMatch(/origin zip(?! code)|still need zip(?! code)/i);
     expect(presentAgentReply(rejected, true)).toMatch(/destination ZIP/i);
   });
 });

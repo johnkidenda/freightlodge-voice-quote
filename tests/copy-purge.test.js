@@ -24,15 +24,15 @@ describe("reply copy purge — ask, don’t narrate the guardrail", () => {
 
   it("formal + conversational greetings ask for the origin ZIP in plain CS", () => {
     expect(openingMessage()).toBe(
-      "Freight Lodge. I’ll take a US domestic LTL quote. Where are we picking up? What’s the origin ZIP?",
+      "Freight Lodge. I’ll take a US domestic LTL quote. Where are we picking up? What’s the origin zip code?",
     );
     expect(CONVERSATIONAL_GREETING).toBe(
-      "Hi. I can take a US domestic LTL quote. Where are we picking up? What’s the origin ZIP?",
+      "Hi. I can take a US domestic LTL quote. Where are we picking up? What’s the origin zip code?",
     );
-    expect(PROMPTS.origin_zip).toBe("What’s the origin ZIP? City is helpful, but I need the five-digit ZIP.");
-    expect(PROMPTS.dest_zip).toBe("Where is this going? I need a destination city, state, or ZIP.");
+    expect(PROMPTS.origin_zip).toBe("What’s the origin zip code? City is helpful, but I need the 5-digit zip code.");
+    expect(PROMPTS.dest_zip).toBe("Where is this going? I need a destination city, state, or zip code.");
     expect(PROMPTS.pickup_date).toBe("What pickup date works? Say a day or YYYY-MM-DD.");
-    expect(PROMPTS.incomplete_zip).toBe("That ZIP is short. I need a full 5-digit ZIP.");
+    expect(PROMPTS.incomplete_zip).toBe("That zip code is short. I need a full 5-digit zip code.");
   });
 
   it("metro clarify and ASAP still ask without the old won’t-invent tail", () => {
@@ -82,12 +82,12 @@ describe("reply copy purge — ask, don’t narrate the guardrail", () => {
         extracted: { flags: { incompleteZip: { role: "dest" } } },
         formalReply: PROMPTS.incomplete_dest_zip,
       }),
-    ).toBe("That ZIP is short. I need a full 5-digit ZIP.");
+    ).toBe("That zip code is short. I need a full 5-digit zip code.");
     expect(
       composeConversationalReply({
         extracted: { flags: { incompleteTo: true } },
         formalReply: PROMPTS.dest_incomplete,
       }),
-    ).toBe("That ended at “to”. I still need the destination city, state, or ZIP.");
+    ).toBe("That ended at “to”. I still need the destination city, state, or zip code.");
   });
 });

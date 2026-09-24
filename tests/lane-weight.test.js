@@ -69,7 +69,7 @@ describe("C — incomplete ZIP asks for 5 digits", () => {
     expect(result.session.sheet.lanes.destination.postal_code).toBeNull();
     expect(result.session.sheet.lanes.destination.city).toBe("Austin");
     expect(result.reply).toMatch(/I heard 787 for the destination, which is only three digits/i);
-    expect(result.reply).toMatch(/What’s the full ZIP\?/);
+    expect(result.reply).toMatch(/What’s the full zip code\?/);
     expect(result.reply).not.toMatch(/\u2014/);
     expect(result.session.awaiting).toBe("dest_zip");
   });

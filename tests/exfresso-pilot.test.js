@@ -248,6 +248,6 @@ describe("voice quote stays on its own path", () => {
     expect(app).not.toContain("exfresso-pilot");
     expect(app).toContain("fetchJevDecision");
     const dialog = readFileSync("src/lib/dialog.js", "utf8");
-    expect(dialog).toContain("What’s the origin ZIP?");
+    expect(dialog).toContain("What’s the origin zip code?");
   });
 });

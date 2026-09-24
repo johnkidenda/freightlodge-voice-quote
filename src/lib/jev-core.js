@@ -55,8 +55,8 @@ export const JEV_SLOT_TO_AWAITING = Object.freeze({
 
 /** User-facing clarify scripts. No em dashes. */
 export const JEV_CLARIFY_SCRIPTS = Object.freeze({
-  origin_zip: "I want to double-check origin. What’s the five-digit origin ZIP?",
-  dest_zip: "I want to double-check destination. What’s the five-digit destination ZIP?",
+  origin_zip: "I want to double-check origin. What’s the 5-digit origin zip code?",
+  dest_zip: "I want to double-check destination. What’s the 5-digit destination zip code?",
   measure: "I want to double-check the measure. Total weight in pounds, or L×W×H, or a known NMFC class?",
   piece_unit: "Are you shipping pallets or pieces?",
   pieces: "I want to double-check piece count. How many pieces or pallets?",
@@ -64,7 +64,7 @@ export const JEV_CLARIFY_SCRIPTS = Object.freeze({
   pickup_date: "I want to double-check pickup. Say a day (today, tomorrow, Friday) or YYYY-MM-DD.",
   accessorials: "I want to double-check accessorials. Liftgate, residential, inside, or none?",
   email: "I want to double-check the email. Type the address if voice mangled it.",
-  default: "I want to double-check what I heard. Can you repeat the city, ZIP, or date?",
+  default: "I want to double-check what I heard. Can you repeat the city, zip code, or date?",
 });
 
 export function offDecision(reason = "off") {

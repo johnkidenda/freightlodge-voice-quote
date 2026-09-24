@@ -279,7 +279,7 @@ describe("dialog uses Jev for slot focus + gates", () => {
     expect(result.jev.focus).toBeNull();
     expect(result.jev.needsClarify).toBe(false);
     const warm = presentAgentReply(result, true);
-    expect(warm).not.toMatch(/origin ZIP for Austin/i);
+    expect(warm).not.toMatch(/origin zip(?: code)? for Austin/i);
     expect(warm).toMatch(/destination ZIP/i);
   });
 
