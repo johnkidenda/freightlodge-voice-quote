@@ -4,6 +4,7 @@ import {
   RELEASE_TAIL_MS,
   collapseProgressiveFinals,
   createHoldToTalk,
+  speechSupported,
   createTranscriptBuffer,
   isBareCountUtterance,
   pickTranscript,
@@ -431,3 +432,42 @@ describe("pieces prompt accepts a short pallet count", () => {
   });
 });
 
+
+describe("Web Speech short counts on hold-to-talk release", () => {
+  it.each([
+    ["five", "five"],
+    ["um five", "um five"],
+    ["it's five", "it's five"],
+    ["five pallets", "five pallets"],
+    ["5", "5"],
+    ["twenty", "twenty"],
+  ])("releases interim %s while the count slot is open", (spoken, expected) => {
+    const { Recognition, instances } = fakeRecognition();
+    const timers = [];
+    const commits = [];
+    const talk = createHoldToTalk({
+      Recognition,
+      numericSlot: () => true,
+      onCommit: (text) => commits.push(text),
+      schedule: (fn, ms) => {
+        const id = timers.length + 1;
+        timers.push({ id, fn, ms });
+        return id;
+      },
+      unschedule: (id) => {
+        const i = timers.findIndex((t) => t.id === id);
+        if (i >= 0) timers.splice(i, 1);
+      },
+    });
+    talk.start();
+    instances[0].emit([{ transcript: spoken, isFinal: false, confidence: 0.2 }]);
+    talk.stop();
+    expect(commits).toEqual([]);
+    timers[0].fn();
+    expect(commits).toEqual([expected]);
+  });
+
+  it("gracefully reports unsupported when Web Speech is missing", () => {
+    expect(speechSupported()).toBe(false);
+  });
+});

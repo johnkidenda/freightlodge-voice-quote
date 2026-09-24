@@ -1,7 +1,8 @@
-import { corsHeaders, mintCartesiaToken, synthesizeCartesiaTts } from "./mint.js";
+import { corsHeaders } from "./cors.js";
 import { evaluateUtteranceJev } from "./jev.js";
 import { evaluateDomAction } from "./jev-action.js";
 import { dispatchEmailApi, isEmailApiPath } from "./email-verify.js";
+import { resendConfigured, sendResendMail } from "./resend.js";
 
 function json(body, status, origin) {
   return new Response(JSON.stringify(body), {
@@ -15,8 +16,7 @@ function json(body, status, origin) {
 }
 
 function routePath(url) {
-  const path = new URL(url).pathname.replace(/\/$/, "") || "/";
-  return path;
+  return new URL(url).pathname.replace(/\/$/, "") || "/";
 }
 
 async function readJson(request) {
@@ -27,6 +27,11 @@ async function readJson(request) {
   }
 }
 
+function mailSender(env) {
+  if (!resendConfigured(env || {})) return undefined;
+  return (msg) => sendResendMail(msg, env || {});
+}
+
 export default {
   async fetch(request, env) {
     const origin = request.headers.get("Origin") || "";
@@ -35,16 +40,14 @@ export default {
     }
 
     const path = routePath(request.url);
-    const apiKey = env?.CARTESIA_API_KEY;
 
     if (request.method === "GET" && path === "/") {
       return json(
         {
           ok: true,
           service: "freightlodge-stt-token",
-          tts: Boolean(apiKey),
           jev: Boolean(env?.TYPESAFE_API_KEY),
-          email: true,
+          email: resendConfigured(env || {}),
         },
         200,
         origin,
@@ -112,49 +115,14 @@ export default {
         request.headers.get("CF-Connecting-IP") ||
         request.headers.get("X-Forwarded-For")?.split(",")[0].trim() ||
         "unknown";
-      // Worker isolates cannot open smtp.hostinger.com. Pages should call the
-      // Node local-stub (cloudflared) with SMTP_PASS. sendMail stays unset here.
-      const result = await dispatchEmailApi(path, body, { env: env || {}, ip });
+      const result = await dispatchEmailApi(path, body, {
+        env: env || {},
+        ip,
+        sendMail: mailSender(env),
+      });
       return json(result.body, result.status, origin);
     }
 
-    if (path === "/tts") {
-      if (request.method !== "POST") return json({ error: "method not allowed" }, 405, origin);
-      if (!apiKey) return json({ error: "STT token proxy not configured" }, 503, origin);
-      const body = await readJson(request);
-      const transcript = body.transcript || body.text || "";
-      try {
-        const audio = await synthesizeCartesiaTts({ apiKey, transcript, voiceId: body.voice_id });
-        return new Response(audio, {
-          status: 200,
-          headers: {
-            "Content-Type": "audio/mpeg",
-            "Cache-Control": "no-store",
-            ...corsHeaders(origin),
-          },
-        });
-      } catch (err) {
-        const message = String(err?.message || err);
-        const status = err?.code === "STT_TOKEN_UNCONFIGURED" ? 503 : err?.code === "TTS_EMPTY" ? 400 : 502;
-        return json({ error: message }, status, origin);
-      }
-    }
-
-    if (request.method !== "POST" && request.method !== "GET") {
-      return json({ error: "method not allowed" }, 405, origin);
-    }
-
-    if (!apiKey) {
-      return json({ error: "STT token proxy not configured" }, 503, origin);
-    }
-
-    try {
-      const minted = await mintCartesiaToken({ apiKey });
-      return json(minted, 200, origin);
-    } catch (err) {
-      const message = String(err?.message || err);
-      const status = err?.code === "STT_TOKEN_UNCONFIGURED" ? 503 : 502;
-      return json({ error: message }, status, origin);
-    }
+    return json({ error: "not found" }, 404, origin);
   },
 };

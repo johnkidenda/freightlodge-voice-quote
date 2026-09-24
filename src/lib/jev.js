@@ -1,4 +1,4 @@
-import { getSttTokenUrl } from "./stt-providers.js";
+import { getApiBaseUrl } from "./api-base.js";
 import {
   buildJevState,
   formatJevStamp,
@@ -70,14 +70,11 @@ export function isJevDisabled({ search, storage } = {}) {
 
 const JEV_TIMEOUT_MS = 2500;
 
-/** Sibling of the token mint URL. TYPESAFE_API_KEY stays on the proxy. */
+/** `{VITE_API_BASE_URL}/jev`. TYPESAFE_API_KEY stays on the proxy. */
 export function getJevProxyUrl(env = typeof import.meta !== "undefined" ? import.meta.env : undefined) {
-  const tokenUrl = getSttTokenUrl(env);
-  if (!tokenUrl) return "";
-  const trimmed = tokenUrl.replace(/\/$/, "");
-  if (trimmed.endsWith("/stt-token")) return `${trimmed.slice(0, -"/stt-token".length)}/jev`;
-  if (trimmed.endsWith("/token")) return `${trimmed.slice(0, -"/token".length)}/jev`;
-  return `${trimmed}/jev`;
+  const base = getApiBaseUrl(env);
+  if (!base) return "";
+  return `${base}/jev`;
 }
 
 export function recentAssistantReplies(messages, limit = 3) {

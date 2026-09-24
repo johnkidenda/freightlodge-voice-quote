@@ -35,7 +35,7 @@ import { evaluateDomAction } from "../token-proxy/src/jev-action.js";
 import { usageCostUsd } from "../src/lib/jev-action-core.js";
 
 const LIVE_VOICE_JEV =
-  process.env.JEV_VOICE_URL || "https://opens-trio-tune-disciplines.trycloudflare.com/jev";
+  process.env.JEV_VOICE_URL || "https://freightlodge-stt-token.example.workers.dev/jev";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const LIVE_PAGES = "https://johnkidenda.github.io/freightlodge-voice-quote/exfresso-pilot/";

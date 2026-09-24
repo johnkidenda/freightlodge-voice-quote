@@ -20,27 +20,23 @@ npm test
 npm run dev
 ```
 
-Open the printed localhost URL (Chrome or Safari). Hold the mic button to talk, or type. Mic → text is **Web Speech only** (no Cartesia STT). No API keys required for dictation.
+Open the printed localhost URL (Chrome or Safari). Hold the mic button to talk, or type. Mic → text is **Web Speech only**. No API keys required for dictation.
 
-**Conversational mode** (separate toggle) rewrites agent bubbles into short customer-service copy and speaks them with the browser `speechSynthesis` API. Mode off = formal prompts + silent. There is no Cartesia TTS toggle, latency chip, or STT mode badge in the UI. **Never** put `CARTESIA_API_KEY` in `VITE_*` or the Pages bundle.
+**Conversational mode** (separate toggle) rewrites agent bubbles into short customer-service copy and speaks them with the browser `speechSynthesis` API. Mode off = formal prompts + silent. There is no cloud TTS toggle, latency chip, or STT mode badge in the UI.
 
 **App version** is `v0.XX` where XX is `0.01` × (merged change-sets including the current ship). Source of truth: [`VERSION`](VERSION). This ship is **v0.36**. Future PRs that do not bump `VERSION` are incremented by CI (`.github/workflows/version-on-pr.yml`).
 
 `npm run preview` serves the production build plus the same local API stubs.
 
-Optional: copy `.env.example` → `.env` if you later wire `OPENAI_API_KEY` into a local enhance endpoint. Conversational speech does not need a Cartesia key. The static app must keep working without secrets (toggle still warms the copy; browser TTS no-ops if `speechSynthesis` is missing).
+Optional: copy `.env.example` → `.env` if you later wire `OPENAI_API_KEY` into a local enhance endpoint. Conversational speech uses browser `speechSynthesis` only. The static app must keep working without secrets (toggle still warms the copy; browser TTS no-ops if `speechSynthesis` is missing).
 
-### Cartesia TTS token / audio proxy (dormant)
+### API proxy (Jev + email Worker)
 
-The Pages SPA does not call Cartesia TTS. `POST /tts` on the token proxy can stay in place for a later ship. `VITE_STT_TOKEN_URL` is still the public mint URL. **Never** put `CARTESIA_API_KEY` in `VITE_*`.
-
-Default voice: **Skylar** (`db6b0ed5-d5d3-463d-ae85-518a07d3c2b4`, “Friendly Guide” — customer care / sales-leaning). Model: `sonic-3`.
-
-The mint endpoint still returns `{ token, expires_in }` with `{ grants: { tts: true, stt: true } }` so a short-lived token is available; the browser does not embed the API key.
+Point the SPA at the Cloudflare Worker (or local stub) with `VITE_API_BASE_URL`. Live Worker: `https://freightlodge-stt-token.johnkidenda.workers.dev`. Jev and email (Resend) run there. `TYPESAFE_API_KEY` and `RESEND_API_KEY` stay on the Worker, never in `VITE_*`. See [`token-proxy/README.md`](token-proxy/README.md).
 
 ### Jev (TypeSafe System One) post-utterance decisions
 
-After each completed utterance (hold release, turn end, or typed submit) the client POSTs once to `{VITE_STT_TOKEN_URL}/jev` with the current quote sheet JSON, the raw transcript, and a short recent-reply tail. The proxy calls TypeSafe (`POST https://api.typesafe.ai/v1/systemone`, model `jev-latest`) with:
+After each completed utterance (hold release, turn end, or typed submit) the client POSTs once to `{VITE_API_BASE_URL}/jev` with the current quote sheet JSON, the raw transcript, and a short recent-reply tail. The proxy calls TypeSafe (`POST https://api.typesafe.ai/v1/systemone`, model `jev-latest`) with:
 
 1. **Noul** `sheet_ready_for_exfresso` (enough to run Quote without inventing fields)
 2. **Choice** `primary_slot` plus per-slot **Nouls** `touched_*` (origin city/ZIP, dest city/ZIP, weight, pieces, commodity, pickup date, accessorials, email). Candidates only. No invented options.
@@ -84,7 +80,7 @@ Full A/B scorecard and Anthony steps: [`docs/EXFRESSO_PILOT.md`](docs/EXFRESSO_P
 set -a && source /home/box/.secrets/typesafe.env && set +a
 TYPESAFE_API_KEY=$TYPESAFE_API_KEY node token-proxy/local-stub.mjs
 
-curl -sS -X POST "${VITE_STT_TOKEN_URL:-http://127.0.0.1:8787}/jev" \
+curl -sS -X POST "${VITE_API_BASE_URL:-http://127.0.0.1:8787}/jev" \
   -H "Content-Type: application/json" \
   -d '{"utterance":"Chicago 60601 to Dallas 75201, 3 pallets, 1200 pounds","sheet":{"schema_version":"1.0","status":"collecting"},"awaiting":"origin_zip"}'
 ```
@@ -92,36 +88,36 @@ curl -sS -X POST "${VITE_STT_TOKEN_URL:-http://127.0.0.1:8787}/jev" \
 Against the Pages-baked proxy origin:
 
 ```bash
-curl -sS -X POST "https://opens-trio-tune-disciplines.trycloudflare.com/jev" \
+curl -sS -X POST "${VITE_API_BASE_URL}/jev" \
   -H "Content-Type: application/json" \
   -d '{"utterance":"Chicago 60601 to Dallas 75201, 3 pallets, 1200 pounds","sheet":{"schema_version":"1.0","status":"collecting"},"awaiting":"origin_zip"}'
 ```
 
 - Worker + local stub: [`token-proxy/README.md`](token-proxy/README.md)
-- Local Vite (`npm run dev`) exposes `POST /api/stt-token` and `POST /api/tts` when `CARTESIA_API_KEY` is in the server env — point `VITE_STT_TOKEN_URL=/api/stt-token`
+- Local Vite (`npm run dev`) exposes `POST /api/jev` and email routes when keys are in the server env — point `VITE_API_BASE_URL=/api`
 
 Anthony’s production steps (key stays on the box / Worker secret):
 
 ```bash
 cd token-proxy
-npx wrangler secret put CARTESIA_API_KEY
+npx wrangler secret put TYPESAFE_API_KEY
 npx wrangler deploy
 ```
 
-Placeholder to set as the GitHub Actions secret, then rebuild Pages:
+GitHub Actions secret (the Pages workflow falls back to this URL if the secret is unset):
 
 ```
-VITE_STT_TOKEN_URL=https://freightlodge-stt-token.<ACCOUNT>.workers.dev
+VITE_API_BASE_URL=https://freightlodge-stt-token.johnkidenda.workers.dev
 ```
 
-Use the URL `wrangler deploy` prints. Full copy-paste path: [`token-proxy/README.md`](token-proxy/README.md).
+Full copy-paste path: [`token-proxy/README.md`](token-proxy/README.md).
 
 ## What the app does
 
 1. Slot-fills origin/dest + ZIP, pieces, weight **or** L×W×H **or** NMFC class, commodity, pickup date, accessorials, contact email
 2. When the sheet is complete, `status` becomes `ready_for_quote`
 3. `POST /api/quote-handoff` (or the in-browser stub on GitHub Pages) simulates the Exfresso runner and returns `quote_result`
-4. Quote card + **Email me this quote** (server SMTP from `john@freightlodge.com` — never mailto)
+4. Quote card + **Email me this quote** (Resend from `john@freightlodge.com`, never mailto)
 5. **Send transcript** silently POSTs via FormSubmit AJAX to `john@freightlodge.com` (or `VITE_TRANSCRIPT_WEBHOOK_URL` if set). Activate-style replies are treated as failure. Mailto is last-resort only.
 
 ## Handoff contract (Freight Ops / Exfresso)
@@ -174,27 +170,25 @@ window.FREIGHT_OPS_HANDOFF_URL = "https://ops.example.com/api/quote-handoff";
 
 or build-time `VITE_HANDOFF_URL`.
 
-## Email me this quote (SMTP, no mailto)
+## Email me this quote (Resend, no mailto)
 
-The sheet collects contact email like any other slot (type the address — voice often mangles it). Completing the sheet runs the quote and shows the **quote card**. There is **no** 6-digit confirmation-code gate on this path.
+The sheet collects contact email like any other slot (type the address. Voice often mangles it). Completing the sheet runs the quote and shows the **quote card**. There is **no** 6-digit confirmation-code gate on this path.
 
-**Email me this quote** POSTs `{VITE_STT_TOKEN_URL origin}/email/quote` (local Vite: `POST /api/email-quote`) with text + HTML bodies that match the on-screen card. SMTP sends FROM `john@freightlodge.com` TO the sheet address. Success is an in-app note. Failure is an in-app error plus an optional clipboard copy of the text quote. This path never assigns `window.location.href` to a mailto.
+**Email me this quote** POSTs `{VITE_API_BASE_URL origin}/email/quote` (local Vite: `POST /api/email-quote`) with text + HTML bodies that match the on-screen card. The Worker sends through Resend FROM `Freight Lodge <john@freightlodge.com>` (or `MAIL_FROM`) TO the sheet address. Success is an in-app note. Failure is an in-app error plus an optional clipboard copy of the text quote. This path never assigns `window.location.href` to a mailto.
 
 `POST /email/verify/start` and `/email/verify/confirm` stay on the token-proxy for later use. They are not on the quote happy path.
 
-GitHub Pages calls the same `VITE_STT_TOKEN_URL` origin as Jev (today a cloudflared tunnel to the Node stub). Put SMTP secrets on that process, not in `VITE_*`.
+GitHub Pages calls the same `VITE_API_BASE_URL` origin as Jev (the Cloudflare Worker). Put `RESEND_API_KEY` on the Worker, not in `VITE_*`.
 
-| Var | Typical Hostinger value |
+| Var | Where |
 | --- | --- |
-| `SMTP_HOST` | `smtp.hostinger.com` |
-| `SMTP_PORT` | `465` (SSL) |
-| `SMTP_USER` / `MAIL_FROM` | `john@freightlodge.com` |
-| `SMTP_PASS` | mailbox password (server-side only) |
-| `EMAIL_VERIFY_DEV_MODE` | `1` in local/test only — logs quote/verify sends server-side and skips SMTP |
+| `RESEND_API_KEY` | Worker secret. Domain `freightlodge.com` must be verified in Resend. |
+| `MAIL_FROM` | Optional. Default `Freight Lodge <john@freightlodge.com>`. |
+| `EMAIL_VERIFY_DEV_MODE` | `1` in local/test only. Logs quote/verify sends server-side and skips sending. |
 
-Production without `SMTP_PASS` → `503`. Cloudflare Worker source has the same routes but cannot open SMTP; use the Node stub for live send.
+Production without `RESEND_API_KEY` returns `503`.
 
-Do not put SMTP secrets in `VITE_*` or in the GitHub Pages bundle.
+Do not put the Resend key in `VITE_*` or in the GitHub Pages bundle.
 
 ## Deploy (GitHub Pages)
 
@@ -227,7 +221,7 @@ npm test
 - Hold-and-dump: one utterance parks weight + commodity + cities while awaiting origin ZIP
 - Conversational copy + browser `speechSynthesis`; Web Speech only for STT
 - Visible `VERSION` (`v0.36` this ship) baked into the footer only
-- Quote-card SMTP email (HTML + text) without mailto; no OTP gate on the quote path
+- Quote-card email (HTML + text) without mailto; no OTP gate on the quote path
 - Post-utterance Jev via `POST /jev` (fallback when the TypeSafe key is absent; `?jev=0` disables)
 - Completeness rules for `ready_for_quote`
 - Never-invent: cities do not become ZIPs; “standard class” / “a few hundred pounds” stay `null`

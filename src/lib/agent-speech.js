@@ -37,8 +37,7 @@ export function stopAgentSpeech() {
 }
 
 /**
- * Speak an agent reply with browser speechSynthesis.
- * Cartesia TTS stays on the dormant /tts proxy — the UI does not call it.
+ * Speak an agent reply with browser speechSynthesis only.
  */
 export async function speakAgentReply(transcript, opts = {}) {
   stopAgentSpeech();

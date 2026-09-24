@@ -12,7 +12,7 @@ import {
 import { evaluateDomAction } from "../token-proxy/src/jev-action.js";
 import worker from "../token-proxy/src/index.js";
 import { TYPESAFE_SYSTEMONE_URL } from "../src/lib/jev-core.js";
-import { PAGES_ORIGIN } from "../token-proxy/src/mint.js";
+import { PAGES_ORIGIN } from "../token-proxy/src/cors.js";
 
 const CANDIDATES = [
   {
@@ -137,7 +137,7 @@ describe("token-proxy POST /jev-action", () => {
           headers: { Origin: PAGES_ORIGIN, "Content-Type": "application/json" },
           body: JSON.stringify({ candidates: CANDIDATES }),
         }),
-        { CARTESIA_API_KEY: "sk_car_test" },
+        {},
       );
       expect(res.status).toBe(503);
       const body = await res.json();
