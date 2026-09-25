@@ -63,7 +63,7 @@ export function formatSessionTranscript(messages, session) {
     `Request: ${requestId}`,
     `STT: ${sttLabel}`,
     `Origin: ${origin}`,
-    `Dest: ${dest}`,
+    `Destination: ${dest}`,
     `Weight: ${weight}`,
     `Pieces: ${pieces}`,
     `Commodity: ${commodity}`,

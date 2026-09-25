@@ -36,7 +36,8 @@ describe("QA transcript copy", () => {
     expect(text).toContain(`Agent: ${first.reply}`);
     expect(text).toContain("Sheet snapshot:");
     expect(text).toMatch(/Origin:/);
-    expect(text).toMatch(/Dest:.*78721/);
+    expect(text).toMatch(/Destination:.*78721/);
+    expect(text).not.toMatch(/^Dest:/m);
     expect(text).toMatch(/Weight:/);
     expect(text).toMatch(/Pieces:/);
     expect(text).toMatch(/Awaiting:/);

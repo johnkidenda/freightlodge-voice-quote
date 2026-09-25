@@ -10,6 +10,7 @@ import {
   HIDDEN_FOLLOWUP,
   PRICE_DISPLAY,
   estimateSpeech,
+  readPriceDisplay,
 } from "../src/lib/price-display.js";
 import { emptySheet } from "../src/lib/sheet.js";
 import { quoteCard } from "../src/ui/quote-card.js";
@@ -47,6 +48,10 @@ function quotedSheet(total = 258.5) {
 describe("v0.41 estimate display", () => {
   it("defaults to estimate and can hide the dollar amount", () => {
     expect(PRICE_DISPLAY).toBe("estimate");
+    expect(readPriceDisplay("")).toBe("estimate");
+    expect(readPriceDisplay("?price=hidden")).toBe("hidden");
+    expect(readPriceDisplay("?price=estimate")).toBe("estimate");
+    expect(readPriceDisplay("?price=live")).toBe("estimate");
     const sheet = quotedSheet();
     const shown = estimateSpeech(sheet, { mode: "estimate", from: "john@freightlodge.com" });
     expect(shown).toBe(
@@ -164,6 +169,12 @@ describe("v0.41 copy nits", () => {
 
     expect(SHEET_READY_REPLY).toBe("Sheet’s complete. Working out your estimate…");
     expect(SHEET_READY_REPLY).not.toMatch(/live rate|Exfresso/i);
+
+    let session = createSession({ id: "echo-dest", now: NOW });
+    session = handleUtterance(session, "78721", { now: NOW }).session;
+    const dest = handleUtterance(session, "30030", { now: NOW });
+    expect(dest.reply).toContain("Got it: destination 30030.");
+    expect(dest.reply).not.toMatch(/\bdest \d/);
   });
 
   it("keeps live rate, Exfresso runner, and YYYY-MM-DD out of the spoken UI sources", () => {

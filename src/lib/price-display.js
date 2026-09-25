@@ -1,6 +1,13 @@
 /** How a computed rate is shown. The rating formula does not change. */
 export const PRICE_DISPLAY = "estimate";
 
+/** Optional `?price=hidden` or `?price=estimate`. Anything else keeps the default. */
+export function readPriceDisplay(search = "") {
+  const value = new URLSearchParams(String(search || "")).get("price");
+  if (value === "hidden" || value === "estimate") return value;
+  return PRICE_DISPLAY;
+}
+
 export const ESTIMATE_NOTE = "Estimate. Final rate confirmed by Freight Lodge.";
 export const ESTIMATE_LOADING = "Working out your estimate…";
 export const HIDDEN_FOLLOWUP = "The Freight Lodge team will follow up with a quote.";

@@ -99,10 +99,10 @@ export function buildJevQuestions() {
     needs_clarify: {
       type: "noul",
       instructions:
-        "Should the agent ask a clarify question instead of advancing? Yes for city/ZIP mismatch, same ZIP both ends, a soft/vague date (ASAP, soon), or garbled/ambiguous STT that could update the wrong empty slot. No if the focused slot already has a value on quote_sheet unless the utterance clearly corrects it. No if origin ZIP, dest ZIP, and weight/measure are already present; ask the next missing field instead.",
+        "Should the agent ask a clarify question instead of advancing? Yes for city/ZIP mismatch, same ZIP both ends, a soft/vague date (ASAP, soon), or garbled/ambiguous STT that could update the wrong empty slot. No if the focused slot already has a value on quote_sheet unless the utterance clearly corrects it. No if origin ZIP, destination ZIP, and weight/measure are already present; ask the next missing field instead.",
       criteria: {
         true: "City/ZIP mismatch, soft date, or ambiguous STT on a still-empty slot.",
-        false: "Utterance is clear enough to apply extracted slots, or the sheet already has origin ZIP, dest ZIP, and weight.",
+        false: "Utterance is clear enough to apply extracted slots, or the sheet already has origin ZIP, destination ZIP, and weight.",
       },
     },
     primary_slot: {

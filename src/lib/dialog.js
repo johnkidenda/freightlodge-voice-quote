@@ -1048,7 +1048,7 @@ function acknowledge(extracted, sheet) {
   if (extracted.origin?.postal_code) bits.push(`origin ${extracted.origin.postal_code}`);
   else if (!originCity && extracted.origin?.state) bits.push(`from ${extracted.origin.state} (still need zip code)`);
   if (!isGarbagePlace(extracted.destination)) {
-    if (extracted.destination?.postal_code) bits.push(`dest ${extracted.destination.postal_code}`);
+    if (extracted.destination?.postal_code) bits.push(`destination ${extracted.destination.postal_code}`);
     else if (!destCity && extracted.destination?.state) bits.push(`to ${extracted.destination.state} (still need zip code)`);
   }
   if (extracted.freight?.pieces) {

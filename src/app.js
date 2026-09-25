@@ -16,9 +16,9 @@ import { quickRepliesFor } from "./lib/quick-replies.js";
 import { renderChrome, renderTtsWave } from "./ui/chrome.js";
 import { layout } from "./ui/layout.js";
 import { bindMic } from "./ui/mic.js";
-import { ESTIMATE_ERROR, estimateSpeech } from "./lib/price-display.js";
+import { ESTIMATE_ERROR, estimateSpeech, readPriceDisplay } from "./lib/price-display.js";
 import { quoteCard } from "./ui/quote-card.js";
-import { renderThread } from "./ui/thread.js";
+import { renderThread, settleThreadScroll } from "./ui/thread.js";
 
 export { applyQuotedLayout } from "./ui/quoted-layout.js";
 
@@ -267,9 +267,14 @@ async function acceptUserText(els, state, text, { via } = {}) {
   }
 }
 
+function priceMode() {
+  const search = globalThis.location?.search || "";
+  return readPriceDisplay(search);
+}
+
 function handoffAssistantLine(sheet) {
   if (sheet.status === "quoted") {
-    return estimateSpeech(sheet, { from: MAIL_FROM });
+    return estimateSpeech(sheet, { mode: priceMode(), from: MAIL_FROM });
   }
   if (sheet.status === "out_of_scope") {
     return sheet.out_of_scope_reason || "Out of scope. No fake rate.";
@@ -398,10 +403,8 @@ function showSendNote(note, lead, transcript) {
   note.textContent =
     typeof transcript === "string" && transcript ? `${lead}\n\n${transcript}` : lead;
   const thread = note.ownerDocument?.getElementById("thread");
-  if (thread) {
-    void thread.offsetHeight;
-    thread.scrollTop = thread.scrollHeight;
-  }
+  const quote = note.ownerDocument?.getElementById("quote-card");
+  if (thread) settleThreadScroll(thread, quote);
 }
 
 function push(state, role, text, choices, via) {
@@ -417,7 +420,8 @@ function push(state, role, text, choices, via) {
 function render(els, state) {
   renderChrome(els, state);
   renderThread(els.thread, state.messages);
-  els.quote.innerHTML = quoteCard(state.session.sheet, state.emailNote);
+  els.quote.innerHTML = quoteCard(state.session.sheet, state.emailNote, priceMode());
+  settleThreadScroll(els.thread, els.quote);
 }
 
 function speechError(err) {
