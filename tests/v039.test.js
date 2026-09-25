@@ -4,6 +4,7 @@ import { readClientUi } from "./client-ui.js";
 import { createSession, handleUtterance, openingMessage } from "../src/lib/dialog.js";
 import { CONVERSATIONAL_GREETING, presentAgentReply } from "../src/lib/conversational.js";
 import { extractSlots } from "../src/lib/extract.js";
+import { LIFTGATE_CHOICES } from "../src/lib/quick-replies.js";
 import { formatSessionTranscript } from "../src/lib/transcript.js";
 
 /** Thu Sep 24 2026, local calendar. That is the America/Chicago date of the live call. */
@@ -181,14 +182,12 @@ describe("opening asks one question", () => {
 });
 
 describe("liftgate choices", () => {
-  it("Pickup, Delivery, and Both use the same answer path as voice", () => {
+  it("Pickup, Delivery, Both, and No use the same answer path as voice", () => {
+    expect(LIFTGATE_CHOICES.map((choice) => choice.label)).toEqual(["Pickup", "Delivery", "Both", "No"]);
     const ui = readClientUi();
-    expect(ui).toContain('data-choice="pickup"');
-    expect(ui).toContain('data-choice="delivery"');
-    expect(ui).toContain('data-choice="both"');
-    expect(ui).toContain(">Pickup<");
-    expect(ui).toContain(">Delivery<");
-    expect(ui).toContain(">Both<");
+    expect(ui).toContain("data-choice=");
+    expect(ui).toContain("quick-reply");
+    expect(ui).not.toContain('id="choice-row"');
 
     function liftSession() {
       const session = createSession({ id: "lift-choice" });
@@ -223,8 +222,8 @@ describe("liftgate choices", () => {
     expectSide("Both", ["liftgate_pickup", "liftgate_delivery"]);
     expectSide("at both", ["liftgate_pickup", "liftgate_delivery"]);
 
-    const button = ui.match(/data-choice="(delivery)"/)[1];
-    expectSide(button, ["liftgate_delivery"]);
+    expectSide("Delivery", ["liftgate_delivery"]);
+    expectSide("No", []);
   });
 });
 

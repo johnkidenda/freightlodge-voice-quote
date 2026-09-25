@@ -12,6 +12,7 @@ import {
 import { onAgentSpeaking, speakAgentReply, stopAgentSpeech } from "./lib/agent-speech.js";
 import { copyTextToClipboard, sendSessionTranscript } from "./lib/transcript.js";
 import { playListenCue } from "./lib/listen-cue.js";
+import { quickRepliesFor } from "./lib/quick-replies.js";
 import { renderChrome, renderTtsWave } from "./ui/chrome.js";
 import { layout } from "./ui/layout.js";
 import { bindMic } from "./ui/mic.js";
@@ -71,8 +72,9 @@ function createViewState() {
   };
 }
 
-export function mountApp(root) {
+export function mountApp(root, { now } = {}) {
   const state = createViewState();
+  state.now = now || null;
 
   root.innerHTML = layout(state.conversational);
   const els = {
@@ -90,7 +92,6 @@ export function mountApp(root) {
     sample: root.querySelector("#sample"),
     sendTranscript: root.querySelector("#send-transcript"),
     sendNote: root.querySelector("#send-note"),
-    choices: root.querySelector("#choice-row"),
     reset: root.querySelector("#reset"),
     listenHint: root.querySelector("#listen-hint"),
   };
@@ -214,9 +215,11 @@ export function mountApp(root) {
   root.addEventListener("click", (e) => {
     const quoteBtn = e.target.closest("[data-email-quote]");
     if (quoteBtn) void sendEmail(els, state);
-    const choice = e.target.closest("[data-choice]");
-    if (!choice || state.busy) return;
-    if (state.session.awaiting !== "liftgate_side") return;
+    const choice = e.target.closest("#thread .quick-reply[data-choice]");
+    if (!choice || state.busy || choice.disabled) return;
+    const index = Number(choice.closest("article")?.dataset.index);
+    const message = state.messages[index];
+    if (!message || message.role !== "assistant" || !message.choicesOpen) return;
     const text = choice.getAttribute("data-choice") || "";
     if (!text) return;
     interaction.onTyping();
@@ -242,16 +245,18 @@ function speakOrStop(state, reply) {
 }
 
 async function acceptUserText(els, state, text) {
-  if (state.busy) return;
+  const trimmed = String(text || "").trim();
+  if (!trimmed || state.busy) return;
+  closeQuickReplies(state);
   state.listenHint = "";
-  push(state, "user", text);
+  push(state, "user", trimmed);
   render(els, state);
 
-  const result = handleUtterance(state.session, text);
+  const result = handleUtterance(state.session, trimmed, state.now ? { now: state.now } : {});
   state.session = result.session;
   const reply = presentAgentReply(result, state.conversational);
   state.listenHint = "";
-  push(state, "assistant", reply);
+  push(state, "assistant", reply, quickRepliesFor(result, reply));
   render(els, state);
   speakOrStop(state, reply);
 
@@ -382,8 +387,19 @@ async function sendEmail(els, state) {
   render(els, state);
 }
 
-function push(state, role, text) {
-  state.messages.push({ role, text, at: new Date().toISOString() });
+function closeQuickReplies(state) {
+  for (const message of state.messages) {
+    if (message.choicesOpen) message.choicesOpen = false;
+  }
+}
+
+function push(state, role, text, choices) {
+  const message = { role, text, at: new Date().toISOString() };
+  if (Array.isArray(choices) && choices.length) {
+    message.choices = choices.map((choice) => ({ label: String(choice.label) }));
+    message.choicesOpen = true;
+  }
+  state.messages.push(message);
 }
 
 function render(els, state) {

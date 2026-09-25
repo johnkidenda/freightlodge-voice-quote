@@ -208,18 +208,31 @@ button, input { font: inherit; }
   padding: 6px 10px;
   font-size: 0.85rem;
 }
-.choice-row {
+.quick-replies {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  margin-top: 10px;
+  max-width: 100%;
 }
-.choice-row[hidden] { display: none; }
-.choice-row .choice {
+.quick-reply {
+  min-height: 44px;
+  min-width: 44px;
+  max-width: 100%;
+  padding: 10px 14px;
   border: 1px solid var(--line);
+  border-radius: 12px;
   background: #fffdf8;
   color: var(--navy);
   font-weight: 700;
-  padding: 8px 14px;
+  line-height: 1.2;
+  text-align: center;
+  white-space: normal;
+  cursor: pointer;
+}
+.quick-reply:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 .send-transcript {
   align-self: flex-start;

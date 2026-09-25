@@ -41,7 +41,6 @@ export function renderChrome(els, state) {
   }
   renderConvoAudio(els, state);
   renderTtsWave(els, state);
-  renderChoiceRow(els, state);
   renderListenHint(els, state);
 }
 
@@ -50,12 +49,6 @@ function renderListenHint(els, state) {
   const text = state.listenHint || "";
   els.listenHint.hidden = !text;
   els.listenHint.textContent = text;
-}
-
-function renderChoiceRow(els, state) {
-  if (!els.choices) return;
-  const show = state.session?.awaiting === "liftgate_side";
-  els.choices.hidden = !show;
 }
 
 function renderConvoAudio(els, state) {
