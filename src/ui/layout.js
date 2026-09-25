@@ -52,6 +52,7 @@ export function layout(conversational) {
             <button type="button" class="chip choice" data-choice="delivery">Delivery</button>
             <button type="button" class="chip choice" data-choice="both">Both</button>
           </div>
+          <p id="listen-hint" class="listen-hint" hidden></p>
           <button type="button" id="hold" class="hold ${speechOk ? "" : "is-disabled"}" aria-pressed="false">
             <span class="hold-dot"></span>
             <span class="hold-label">Hold to talk</span>

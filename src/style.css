@@ -428,6 +428,12 @@ button, input { font: inherit; }
   font-size: 0.85rem;
   color: #2f6b3a;
 }
+.listen-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  color: var(--muted, #5c6b7a);
+}
 
 .brand-logo {
   display: block;

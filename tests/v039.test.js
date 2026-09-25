@@ -1,11 +1,9 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { readClientUi } from "./client-ui.js";
-import { createMicResultController } from "../src/app.js";
 import { createSession, handleUtterance, openingMessage } from "../src/lib/dialog.js";
 import { CONVERSATIONAL_GREETING, presentAgentReply } from "../src/lib/conversational.js";
 import { extractSlots } from "../src/lib/extract.js";
-import { createNoInputWatch, NO_INPUT_WINDOW_MS } from "../src/lib/no-input.js";
 import { formatSessionTranscript } from "../src/lib/transcript.js";
 
 /** Thu Sep 24 2026, local calendar. That is the America/Chicago date of the live call. */
@@ -182,7 +180,7 @@ describe("opening asks one question", () => {
   });
 });
 
-describe("liftgate choices and post-speech no-input window", () => {
+describe("liftgate choices", () => {
   it("Pickup, Delivery, and Both use the same answer path as voice", () => {
     const ui = readClientUi();
     expect(ui).toContain('data-choice="pickup"');
@@ -227,127 +225,6 @@ describe("liftgate choices and post-speech no-input window", () => {
 
     const button = ui.match(/data-choice="(delivery)"/)[1];
     expectSide(button, ["liftgate_delivery"]);
-  });
-
-  it("does not reprompt until the full window after speech ends, and a new ask resets the timer", () => {
-    expect(NO_INPUT_WINDOW_MS).toBeGreaterThan(0);
-    let t = 0;
-    const timers = [];
-    const fires = [];
-    const watch = createNoInputWatch({
-      now: () => t,
-      schedule: (fn, ms) => {
-        const id = timers.length + 1;
-        timers.push({ id, fn, ms });
-        return id;
-      },
-      unschedule: (id) => {
-        const i = timers.findIndex((timer) => timer.id === id);
-        if (i >= 0) timers.splice(i, 1);
-      },
-      onReprompt: () => fires.push(t),
-    });
-
-    watch.onNewAsk();
-    watch.onSpeakingChange(true);
-    watch.onEmptyListen();
-    expect(fires).toEqual([]);
-    expect(timers).toHaveLength(0);
-
-    t = 4000;
-    watch.onSpeakingChange(false);
-    expect(timers).toHaveLength(1);
-    expect(timers[0].ms).toBe(NO_INPUT_WINDOW_MS);
-    const early = timers[0];
-    watch.onNewAsk();
-    expect(timers).toHaveLength(1);
-    expect(timers[0].ms).toBe(NO_INPUT_WINDOW_MS);
-    early.fn();
-    expect(fires).toEqual([]);
-    timers.splice(0, timers.length);
-
-    watch.onSpeakingChange(true);
-    watch.onEmptyListen();
-    t = 9000;
-    watch.onSpeakingChange(false);
-    expect(timers).toHaveLength(1);
-    expect(timers[0].ms).toBe(NO_INPUT_WINDOW_MS);
-    watch.onUserActivity();
-    expect(timers).toHaveLength(0);
-    expect(fires).toEqual([]);
-  });
-
-  it("an empty mic result after the question rearms listening and does not say it missed that", () => {
-    let t = 0;
-    const timers = [];
-    const state = {
-      busy: false,
-      listening: false,
-      finishing: false,
-      quietListen: false,
-      hold: {
-        start() {
-          state.quietListen = true;
-          state.listening = true;
-        },
-        abort() {
-          state.listening = false;
-          state.quietListen = false;
-        },
-      },
-    };
-    const lines = [];
-    const rearms = [];
-    let mic;
-    const noInput = createNoInputWatch({
-      now: () => t,
-      schedule: (fn, ms) => {
-        const id = timers.length + 1;
-        timers.push({ id, fn, ms });
-        return id;
-      },
-      unschedule: (id) => {
-        const i = timers.findIndex((timer) => timer.id === id);
-        if (i >= 0) timers.splice(i, 1);
-      },
-      onReprompt() {
-        mic.onReprompt();
-      },
-    });
-    mic = createMicResultController({
-      state,
-      noInput,
-      rearmListen() {
-        rearms.push(t);
-        state.quietListen = true;
-        state.hold.start();
-      },
-      abortQuiet() {
-        state.hold.abort();
-      },
-      onReprompt() {
-        lines.push("I didn’t catch that. Say it again, or type it.");
-      },
-    });
-
-    noInput.onNewAsk();
-    noInput.onSpeakingChange(true);
-    t = 1200;
-    noInput.onSpeakingChange(false);
-    mic.onEmpty();
-    expect(lines).toEqual([]);
-    expect(rearms).toEqual([1200]);
-    expect(state.quietListen).toBe(true);
-    expect(timers).toHaveLength(1);
-    expect(timers[0].ms).toBe(NO_INPUT_WINDOW_MS);
-
-    t = 1200 + NO_INPUT_WINDOW_MS;
-    const pending = timers[0];
-    timers.splice(0, timers.length);
-    pending.fn();
-    expect(lines).toEqual(["I didn’t catch that. Say it again, or type it."]);
-    expect(state.quietListen).toBe(false);
-    expect(state.listening).toBe(false);
   });
 });
 

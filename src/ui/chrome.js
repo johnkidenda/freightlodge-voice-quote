@@ -42,6 +42,14 @@ export function renderChrome(els, state) {
   renderConvoAudio(els, state);
   renderTtsWave(els, state);
   renderChoiceRow(els, state);
+  renderListenHint(els, state);
+}
+
+function renderListenHint(els, state) {
+  if (!els.listenHint) return;
+  const text = state.listenHint || "";
+  els.listenHint.hidden = !text;
+  els.listenHint.textContent = text;
 }
 
 function renderChoiceRow(els, state) {

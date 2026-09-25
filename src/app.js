@@ -10,7 +10,6 @@ import {
   saveConversationalMode,
 } from "./lib/conversational.js";
 import { onAgentSpeaking, speakAgentReply, stopAgentSpeech } from "./lib/agent-speech.js";
-import { createNoInputWatch } from "./lib/no-input.js";
 import { copyTextToClipboard, sendSessionTranscript } from "./lib/transcript.js";
 import { playListenCue } from "./lib/listen-cue.js";
 import { renderChrome, renderTtsWave } from "./ui/chrome.js";
@@ -21,41 +20,25 @@ import { renderThread } from "./ui/thread.js";
 
 export { applyQuotedLayout } from "./ui/quoted-layout.js";
 
+/** Quiet inline note only. Never spoken, never repeated as a chat line, never starts the mic. */
+export const EMPTY_MIC_HINT = "Didn’t hear anything. Hold to talk or type.";
+
 /**
- * Consumes STT start/empty results for one quote session.
- * An empty result does not say "I didn't catch that". It rearms the mic.
- * The reprompt is only the silence-window callback.
+ * Quote-session mic wiring used by mountApp.
+ * There is no post-question silence timer and no automatic re-listen.
+ * An empty recognition result only sets the inline hint.
  */
-export function createMicResultController({ state, noInput, rearmListen, abortQuiet, onReprompt }) {
+export function createQuoteInteraction({ state } = {}) {
   return {
-    onStart() {
-      if (state.quietListen) {
-        state.listening = true;
-        state.finishing = false;
-        return;
-      }
-      state.quietListen = false;
-      noInput.onUserActivity();
-      state.listening = true;
-      state.finishing = false;
+    afterAsk() {
+      state.listenHint = "";
     },
-    onEmpty() {
-      if (state.busy) return;
-      if (state.listening && !state.quietListen) return;
-      const action = noInput.onEmptyListen();
-      if (action?.rearm) rearmListen();
+    onTyping() {
+      state.listenHint = "";
     },
-    onReprompt() {
+    onEmptyMic() {
       if (state.busy) return;
-      if (state.listening && !state.quietListen) return;
-      if (state.quietListen) {
-        state.quietListen = false;
-        abortQuiet?.();
-        state.listening = false;
-        state.finishing = false;
-      }
-      noInput.onNewAsk();
-      onReprompt();
+      state.listenHint = EMPTY_MIC_HINT;
     },
   };
 }
@@ -84,7 +67,7 @@ function createViewState() {
     hold: null,
     conversational,
     ttsSpeaking: false,
-    quietListen: false,
+    listenHint: "",
   };
 }
 
@@ -109,39 +92,19 @@ export function mountApp(root) {
     sendNote: root.querySelector("#send-note"),
     choices: root.querySelector("#choice-row"),
     reset: root.querySelector("#reset"),
+    listenHint: root.querySelector("#listen-hint"),
   };
 
-  const noInput = createNoInputWatch({
-    onReprompt() {
-      mic.onReprompt();
-    },
-  });
-
-  const mic = createMicResultController({
-    state,
-    noInput,
-    rearmListen() {
-      state.quietListen = true;
-      state.hold?.start?.();
-    },
-    abortQuiet() {
-      state.hold?.abort?.();
-    },
-    onReprompt() {
-      const text = "I didn’t catch that. Say it again, or type it.";
-      push(state, "assistant", text);
-      render(els, state);
-      speakOrStop(state, text);
-    },
-  });
+  const interaction = createQuoteInteraction({ state });
 
   const sessionRef = { current: null };
 
   function talkCallbacks() {
     return {
       onStart() {
-        mic.onStart();
-        if (!state.quietListen) playListenCue();
+        state.listening = true;
+        state.finishing = false;
+        playListenCue();
         renderChrome(els, state);
       },
       onTailStart() {
@@ -170,7 +133,8 @@ export function mountApp(root) {
         void acceptUserText(els, state, trimmed);
       },
       onEmpty() {
-        mic.onEmpty();
+        interaction.onEmptyMic();
+        render(els, state);
       },
     };
   }
@@ -205,7 +169,6 @@ export function mountApp(root) {
   bindMic(els.hold, sessionRef);
   onAgentSpeaking((speaking) => {
     state.ttsSpeaking = Boolean(speaking);
-    noInput.onSpeakingChange(speaking);
     renderTtsWave(els, state);
   });
 
@@ -226,7 +189,7 @@ export function mountApp(root) {
     const text = els.input.value.trim();
     if (!text || state.busy) return;
     els.input.value = "";
-    noInput.onUserActivity();
+    interaction.onTyping();
     void acceptUserText(els, state, text);
   });
 
@@ -244,7 +207,7 @@ export function mountApp(root) {
     state.messages = [{ role: "assistant", text: greetingFor(state.conversational), at: new Date().toISOString() }];
     stopAgentSpeech();
     state.emailNote = null;
-    noInput.onNewAsk();
+    interaction.afterAsk();
     render(els, state);
   });
 
@@ -256,12 +219,17 @@ export function mountApp(root) {
     if (state.session.awaiting !== "liftgate_side") return;
     const text = choice.getAttribute("data-choice") || "";
     if (!text) return;
-    noInput.onUserActivity();
+    interaction.onTyping();
     void acceptUserText(els, state, text);
   });
 
+  els.input?.addEventListener("input", () => {
+    interaction.onTyping();
+    render(els, state);
+  });
+
   render(els, state);
-  noInput.onNewAsk();
+  interaction.afterAsk();
 }
 
 function pageApiBase() {
@@ -275,16 +243,16 @@ function speakOrStop(state, reply) {
 
 async function acceptUserText(els, state, text) {
   if (state.busy) return;
+  state.listenHint = "";
   push(state, "user", text);
   render(els, state);
 
-  noInput.onUserActivity();
   const result = handleUtterance(state.session, text);
   state.session = result.session;
   const reply = presentAgentReply(result, state.conversational);
+  state.listenHint = "";
   push(state, "assistant", reply);
   render(els, state);
-  noInput.onNewAsk();
   speakOrStop(state, reply);
 
   if (result.outOfScope) return;
