@@ -5,7 +5,7 @@ export const VERIFY_CODE_COOLDOWN_MS = 30_000;
 export const VERIFY_CODE_DIGITS = 6;
 
 /**
- * Origin of VITE_API_BASE_URL — same base as GET /jev.
+ * Origin of VITE_API_BASE_URL.
  * `/api` stays `/api`; a Worker root stays the Worker root.
  */
 export function getTokenProxyOrigin(env = typeof import.meta !== "undefined" ? import.meta.env : undefined) {

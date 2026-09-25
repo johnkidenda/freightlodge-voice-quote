@@ -3,7 +3,7 @@ import { escapeHtml } from "../lib/escape-html.js";
 import { providerSupported } from "../lib/speech-session.js";
 import { speakerIcon } from "./speaker.js";
 
-export function layout(conversational, jevOn = true) {
+export function layout(conversational) {
   const speechOk = providerSupported();
   const assetBase = import.meta.env.BASE_URL || "./";
   return `
@@ -45,9 +45,6 @@ export function layout(conversational, jevOn = true) {
                 <span></span><span></span><span></span><span></span>
               </span>
             </div>
-            <button type="button" id="jev-mode" class="mode-toggle${jevOn ? " is-active" : ""}" aria-pressed="${jevOn ? "true" : "false"}" title="${jevOn ? "Jev is on. Turn Jev off." : "Jev is off. Turn Jev on."}" aria-label="${jevOn ? "Jev is on. Turn Jev off." : "Jev is off. Turn Jev on."}">
-              ${jevOn ? "Jev on" : "Jev off"}
-            </button>
             <button type="button" id="send-transcript" class="send-transcript">Send transcript</button>
           </div>
           <div id="choice-row" class="choice-row" hidden>

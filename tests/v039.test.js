@@ -4,7 +4,6 @@ import { readClientUi } from "./client-ui.js";
 import { createSession, handleUtterance, openingMessage } from "../src/lib/dialog.js";
 import { CONVERSATIONAL_GREETING, presentAgentReply } from "../src/lib/conversational.js";
 import { extractSlots } from "../src/lib/extract.js";
-import { formatJevStamp, guardJevDecision, normalizeJevDecision } from "../src/lib/jev-core.js";
 import { createNoInputWatch, NO_INPUT_WINDOW_MS } from "../src/lib/no-input.js";
 import { formatSessionTranscript } from "../src/lib/transcript.js";
 
@@ -136,18 +135,13 @@ describe("ambiguous next weekday on Thu Sep 24 2026", () => {
   });
 });
 
-describe("transcript snapshot fields and every Jev turn", () => {
-  it("includes commodity, pickup date, email, quote, timestamps, and both Jev stamps", () => {
+describe("transcript snapshot fields", () => {
+  it("includes commodity, pickup date, email, quote, and timestamps, with no Jev lines", () => {
     const session = createSession({ id: "snap-039" });
-    session.jevEnabled = true;
     session.sheet.freight.commodity = "orange juice";
     session.sheet.pickup.date = "2026-09-25";
     session.sheet.contact.email = "shipper@example.com";
     session.sheet.quote_result = { total_usd: 412.5, carrier: "Test" };
-    session.jevLog = [
-      "Jev: on ready=0.40 clarify=0.10 slots=origin_zip gate=not-ready",
-      "Jev: on ready=0.03 clarify=0.18 slots=email gate=not-ready",
-    ];
     const text = formatSessionTranscript(
       [
         { role: "assistant", text: "What’s the origin zip code?", at: "2026-09-25T01:12:00.000Z" },
@@ -159,46 +153,12 @@ describe("transcript snapshot fields and every Jev turn", () => {
     );
     expect(text).toContain("[2026-09-25T01:13:00Z] User: 78721");
     expect(text).toContain("[2026-09-25T01:14:00Z] User: shipper@example.com");
-    expect(text).toContain("Jev: on ready=0.40 clarify=0.10 slots=origin_zip gate=not-ready");
-    expect(text).toContain("Jev: on ready=0.03 clarify=0.18 slots=email gate=not-ready");
-    expect(text).toContain("Jev mode: on");
+    expect(text).not.toMatch(/Jev mode:/);
+    expect(text).not.toMatch(/^Jev:/m);
     expect(text).toContain("Commodity: orange juice");
     expect(text).toContain("Pickup date: 2026-09-25");
     expect(text).toContain("Email: shipper@example.com");
     expect(text).toContain("Quote: $412.50");
-  });
-});
-
-describe("low ready does not advance unless the sheet is complete", () => {
-  it("stamps gate=not-ready at ready=0.03 when email is still the open slot", () => {
-    const sheet = {
-      schema_version: "1.0",
-      lanes: {
-        origin: { postal_code: "78721" },
-        destination: { postal_code: "30030" },
-      },
-      freight: { pieces: 2, total_weight_lbs: 1000, commodity: "oranges" },
-      pickup: { date: "2026-09-25", accessorials: [] },
-      contact: { email: null },
-    };
-    const jev = normalizeJevDecision({
-      on: true,
-      ready: false,
-      needsClarify: false,
-      readyNoul: 0.03,
-      clarifyNoul: 0.18,
-      touchedSlots: ["email"],
-      primarySlot: "email",
-    });
-    const guarded = guardJevDecision(jev, { sheet, utterance: "not an email yet" });
-    expect(guarded.ready).toBe(false);
-    expect(guarded.gateOverride).toBeNull();
-    const stamp = formatJevStamp(guarded);
-    expect(stamp).toContain("ready=0.03");
-    expect(stamp).toContain("clarify=0.18");
-    expect(stamp).toContain("slots=email");
-    expect(stamp).toContain("gate=not-ready");
-    expect(stamp).not.toContain("gate=advance");
   });
 });
 

@@ -354,7 +354,7 @@ describe("formatQuoteEmailHtml mirrors the quote card", () => {
 });
 
 describe("client helpers", () => {
-  it("maps VITE_API_BASE_URL origin the same way as /jev", () => {
+  it("maps VITE_API_BASE_URL origin for email routes", () => {
     expect(getTokenProxyOrigin({ VITE_API_BASE_URL: "https://tunnel.example" })).toBe("https://tunnel.example");
     expect(emailVerifyStartUrl("", { VITE_API_BASE_URL: "https://tunnel.example" })).toBe(
       "https://tunnel.example/email/verify/start",

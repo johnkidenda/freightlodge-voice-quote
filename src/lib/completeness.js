@@ -72,12 +72,7 @@ export function isReadyForQuote(sheet) {
   return missingReadyFields(sheet).length === 0;
 }
 
-/**
- * Lane minimum used to ignore a Jev clarify vote:
- * origin ZIP + dest ZIP + a real measure (weight, dims, or class).
- * Pieces / accessorials / email stay askable after this.
- * A low ready score is separate: it advances only when isReadyForQuote.
- */
+/** Origin ZIP, destination ZIP, and a real measure (weight, dims, or class). */
 export function hasMinimumLane(sheet) {
   return (
     isValidZip(sheet?.lanes?.origin?.postal_code) &&
@@ -92,6 +87,30 @@ export function hasPieceUnit(freight) {
 
 export function hasPieceCount(freight) {
   return Number.isInteger(freight?.pieces) && freight.pieces >= 1;
+}
+
+export function awaitingSlotIsFilled(sheet, slot, { askedAccessorials = false } = {}) {
+  if (slot === "origin_zip") return isValidZip(sheet?.lanes?.origin?.postal_code);
+  if (slot === "dest_zip") return isValidZip(sheet?.lanes?.destination?.postal_code);
+  if (slot === "measure") return hasMeasure(sheet?.freight);
+  if (slot === "piece_unit") return hasPieceUnit(sheet?.freight);
+  if (slot === "pieces") return hasPieceCount(sheet?.freight);
+  if (slot === "commodity") {
+    return typeof sheet?.freight?.commodity === "string" && Boolean(sheet.freight.commodity.trim());
+  }
+  if (slot === "pickup_date") return /^\d{4}-\d{2}-\d{2}$/.test(String(sheet?.pickup?.date || ""));
+  if (slot === "accessorials") {
+    return Boolean(askedAccessorials || (sheet?.pickup?.accessorials || []).length);
+  }
+  if (slot === "email") return isValidEmail(sheet?.contact?.email);
+  return false;
+}
+
+/** Explicit correction, not a restatement of a value already on the sheet. */
+export function utteranceCorrectsSlot(text) {
+  return /\b(actually|correction|correct( that| the)?|change (the )?(origin|dest|destination|pickup)?\s*(zip|city|date)?|instead|wait,? no|not \d{5}|new (origin|dest|destination) zip)\b/i.test(
+    String(text || ""),
+  );
 }
 
 export const SLOT_ORDER = [

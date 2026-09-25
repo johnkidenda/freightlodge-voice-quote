@@ -42,7 +42,8 @@ describe("QA transcript copy", () => {
     expect(text).toMatch(/Awaiting:/);
     expect(text).toMatch(/Status: collecting/);
     expect(text).toContain("STT: Web Speech");
-    expect(text).toContain("Jev: off");
+    expect(text).not.toMatch(/Jev mode:/);
+    expect(text).not.toMatch(/^Jev:/m);
     expect(text).not.toContain("Voice:");
     expect(text).not.toContain("TTS first-audio ms:");
     expect(text).not.toContain("TTS duration ms:");

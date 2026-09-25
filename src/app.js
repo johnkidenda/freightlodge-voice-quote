@@ -13,12 +13,6 @@ import { onAgentSpeaking, speakAgentReply, stopAgentSpeech } from "./lib/agent-s
 import { createNoInputWatch } from "./lib/no-input.js";
 import { copyTextToClipboard, sendSessionTranscript } from "./lib/transcript.js";
 import { playListenCue } from "./lib/listen-cue.js";
-import {
-  fetchJevDecision,
-  isJevDisabled,
-  recentAssistantReplies,
-  saveJevSessionEnabled,
-} from "./lib/jev.js";
 import { renderChrome, renderTtsWave } from "./ui/chrome.js";
 import { layout } from "./ui/layout.js";
 import { bindMic } from "./ui/mic.js";
@@ -34,27 +28,13 @@ function browserStorage() {
   return typeof localStorage !== "undefined" ? localStorage : null;
 }
 
-function browserSessionStore() {
-  return typeof sessionStorage !== "undefined" ? sessionStorage : null;
-}
-
-function jevEnabledNow() {
-  return !isJevDisabled({
-    search: typeof location !== "undefined" ? location.search : "",
-    storage: browserStorage(),
-    sessionStore: browserSessionStore(),
-  });
-}
-
 function greetingFor(conversational) {
   return conversational ? CONVERSATIONAL_GREETING : openingMessage();
 }
 
 function createViewState() {
   const conversational = loadConversationalMode(browserStorage());
-  const jevOn = jevEnabledNow();
   const session = createSession();
-  session.jevEnabled = jevOn;
   return {
     session,
     messages: [{ role: "assistant", text: greetingFor(conversational), at: new Date().toISOString() }],
@@ -64,19 +44,14 @@ function createViewState() {
     emailNote: null,
     hold: null,
     conversational,
-    jevOn,
     ttsSpeaking: false,
   };
 }
 
 export function mountApp(root) {
-  isJevDisabled({
-    search: typeof location !== "undefined" ? location.search : "",
-    storage: browserStorage(),
-  });
   const state = createViewState();
 
-  root.innerHTML = layout(state.conversational, state.jevOn);
+  root.innerHTML = layout(state.conversational);
   const els = {
     thread: root.querySelector("#thread"),
     form: root.querySelector("#composer"),
@@ -84,7 +59,6 @@ export function mountApp(root) {
     hold: root.querySelector("#hold"),
     conversational: root.querySelector("#conversational"),
     convoAudio: root.querySelector("#convo-audio"),
-    jevMode: root.querySelector("#jev-mode"),
     ttsWave: root.querySelector("#tts-wave"),
     quote: root.querySelector("#quote-card"),
     chatCol: root.querySelector(".chat-col"),
@@ -194,15 +168,8 @@ export function mountApp(root) {
     render(els, state);
   }
 
-  function toggleJev() {
-    state.jevOn = saveJevSessionEnabled(!state.jevOn, browserSessionStore());
-    state.session.jevEnabled = state.jevOn;
-    render(els, state);
-  }
-
   els.conversational?.addEventListener("click", toggleConversational);
   els.convoAudio?.addEventListener("click", toggleConversational);
-  els.jevMode?.addEventListener("click", toggleJev);
 
   els.form.addEventListener("submit", (e) => {
     e.preventDefault();
@@ -224,7 +191,6 @@ export function mountApp(root) {
 
   els.reset.addEventListener("click", () => {
     state.session = createSession();
-    state.session.jevEnabled = state.jevOn;
     state.messages = [{ role: "assistant", text: greetingFor(state.conversational), at: new Date().toISOString() }];
     stopAgentSpeech();
     state.emailNote = null;
@@ -263,18 +229,7 @@ async function acceptUserText(els, state, text) {
   render(els, state);
 
   noInput.onUserActivity();
-  state.session.jevEnabled = state.jevOn;
-  const jev = await fetchJevDecision({
-    utterance: text,
-    sheet: state.session.sheet,
-    recentReplies: recentAssistantReplies(state.messages, 3),
-    awaiting: state.session.awaiting,
-    askedAccessorials: state.session.askedAccessorials,
-    search: typeof location !== "undefined" ? location.search : "",
-    storage: browserStorage(),
-    sessionStore: browserSessionStore(),
-  });
-  const result = handleUtterance(state.session, text, { jev });
+  const result = handleUtterance(state.session, text);
   state.session = result.session;
   const reply = presentAgentReply(result, state.conversational);
   push(state, "assistant", reply);

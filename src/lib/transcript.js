@@ -1,5 +1,4 @@
 import { formatPlace, formatStoredPieces } from "./completeness.js";
-import { formatJevTranscriptLine } from "./jev-core.js";
 import { getSttProvider } from "./stt-providers.js";
 
 export const TRANSCRIPT_TO = "john@freightlodge.com";
@@ -25,18 +24,10 @@ function formatQuoteAmount(sheet) {
 }
 
 export function formatSessionTranscript(messages, session) {
-  const jevLog = Array.isArray(session?.jevLog) ? session.jevLog : [];
-  let userTurn = 0;
   const turns = (messages || []).map((m) => {
     const label = m.role === "user" ? "User" : "Agent";
     const stamp = formatTurnStamp(m.at);
-    let line = `${stamp}${label}: ${m.text ?? ""}`;
-    if (m.role === "user") {
-      const jevLine = String(m.jev || jevLog[userTurn] || "").trim();
-      userTurn += 1;
-      if (jevLine) line += `\n${jevLine}`;
-    }
-    return line;
+    return `${stamp}${label}: ${m.text ?? ""}`;
   });
   const sheet = session?.sheet;
   const origin = formatPlace(sheet?.lanes?.origin) || "—";
@@ -58,8 +49,6 @@ export function formatSessionTranscript(messages, session) {
     "Sheet snapshot:",
     `Request: ${requestId}`,
     `STT: ${sttLabel}`,
-    `Jev mode: ${session?.jevEnabled === false ? "off" : "on"}`,
-    formatJevTranscriptLine(session),
     `Origin: ${origin}`,
     `Dest: ${dest}`,
     `Weight: ${weight}`,

@@ -5,14 +5,13 @@
  */
 
 import {
-  hasMeasure,
+  awaitingSlotIsFilled,
   hasMinimumLane,
-  hasPieceCount,
-  hasPieceUnit,
   isReadyForQuote,
-  isValidEmail,
-  isValidZip,
+  utteranceCorrectsSlot,
 } from "./completeness.js";
+
+export { awaitingSlotIsFilled, utteranceCorrectsSlot };
 
 export const JEV_THRESHOLD = 0.5;
 export const JEV_MODEL = "jev-latest";
@@ -256,30 +255,6 @@ export function resolveSlotFocus({ primarySlot, touchedSlots = [] } = {}) {
   const zipHits = awaitingHits.filter((s) => s === "origin_zip" || s === "dest_zip");
   if (zipHits.length === 1) return zipHits[0];
   return null;
-}
-
-export function awaitingSlotIsFilled(sheet, slot, { askedAccessorials = false } = {}) {
-  if (slot === "origin_zip") return isValidZip(sheet?.lanes?.origin?.postal_code);
-  if (slot === "dest_zip") return isValidZip(sheet?.lanes?.destination?.postal_code);
-  if (slot === "measure") return hasMeasure(sheet?.freight);
-  if (slot === "piece_unit") return hasPieceUnit(sheet?.freight);
-  if (slot === "pieces") return hasPieceCount(sheet?.freight);
-  if (slot === "commodity") {
-    return typeof sheet?.freight?.commodity === "string" && Boolean(sheet.freight.commodity.trim());
-  }
-  if (slot === "pickup_date") return /^\d{4}-\d{2}-\d{2}$/.test(String(sheet?.pickup?.date || ""));
-  if (slot === "accessorials") {
-    return Boolean(askedAccessorials || (sheet?.pickup?.accessorials || []).length);
-  }
-  if (slot === "email") return isValidEmail(sheet?.contact?.email);
-  return false;
-}
-
-/** Explicit correction, not a restatement of a value already on the sheet. */
-export function utteranceCorrectsSlot(text) {
-  return /\b(actually|correction|correct( that| the)?|change (the )?(origin|dest|destination|pickup)?\s*(zip|city|date)?|instead|wait,? no|not \d{5}|new (origin|dest|destination) zip)\b/i.test(
-    String(text || ""),
-  );
 }
 
 /**
