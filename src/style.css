@@ -438,8 +438,19 @@ button, input { font: inherit; }
 }
 .send-note {
   margin: 0.35rem 0 0;
-  font-size: 0.85rem;
-  color: #2f6b3a;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: #1b2a4a;
+  white-space: pre-wrap;
+  max-height: 14rem;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.chat-col:has(#send-note:not([hidden])) .voice-tip {
+  display: none;
+}
+.chat-col:has(#send-note:not([hidden])) #quote-card:not(:empty) {
+  max-height: 16vh;
 }
 .listen-hint {
   margin: 0;

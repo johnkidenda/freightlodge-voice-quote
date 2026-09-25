@@ -108,7 +108,7 @@ describe("ambiguous next weekday on Thu Sep 24 2026", () => {
     expect(THU_SEP_24_2026.getDay()).toBe(4);
   });
 
-  it("offers Friday Sep 25 or Friday Oct 2 for next Friday", () => {
+  it("offers Friday, September 25 or Friday, October 2 for next Friday", () => {
     const extracted = extractSlots("next Friday", { now: THU_SEP_24_2026 });
     expect(extracted.pickup.date).toBeUndefined();
     expect(extracted.flags.ambiguousDate.soon).toBe("2026-09-25");
@@ -124,7 +124,9 @@ describe("ambiguous next weekday on Thu Sep 24 2026", () => {
     session.awaiting = "pickup_date";
     const result = handleUtterance(session, "next Friday", { now: THU_SEP_24_2026 });
     expect(result.session.sheet.pickup.date).toBeNull();
-    expect(result.reply).toBe("Friday Sep 25, or Friday Oct 2?");
+    expect(result.reply).toBe("Friday, September 25, or Friday, October 2?");
+    expect(result.reply).not.toContain("2026-09-25");
+    expect(result.reply).not.toContain("2026-10-02");
     expect(result.reply).not.toMatch(/\u2014/);
     expect(presentAgentReply(result, true)).toBe(result.reply);
 

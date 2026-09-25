@@ -1,3 +1,4 @@
+import { formatAppVersionLabel } from "./app-version.js";
 import { formatPlace, formatStoredPieces } from "./completeness.js";
 import { getSttProvider } from "./stt-providers.js";
 
@@ -17,40 +18,52 @@ function formatTurnStamp(at) {
   return `[${d.toISOString().replace(/\.\d{3}Z$/, "Z")}] `;
 }
 
+const BLANK = "-";
+
 function formatQuoteAmount(sheet) {
   const total = sheet?.quote_result?.total_usd;
-  if (typeof total !== "number" || !Number.isFinite(total)) return "—";
+  if (typeof total !== "number" || !Number.isFinite(total)) return BLANK;
   return `$${total.toFixed(2)}`;
+}
+
+function transcriptVersion(sheet) {
+  const raw = String(sheet?.app_version || "").trim();
+  if (/^v\d+\.\d+/.test(raw)) return raw;
+  if (/^\d+\.\d+/.test(raw)) return `v${raw}`;
+  return formatAppVersionLabel();
 }
 
 export function formatSessionTranscript(messages, session) {
   const turns = (messages || []).map((m) => {
-    const label = m.role === "user" ? "User" : "Agent";
+    const label = m.role === "user" ? (m.via === "tap" ? "User [tap]" : "User") : "Agent";
     const stamp = formatTurnStamp(m.at);
     return `${stamp}${label}: ${m.text ?? ""}`;
   });
   const sheet = session?.sheet;
-  const origin = formatPlace(sheet?.lanes?.origin) || "—";
-  const dest = formatPlace(sheet?.lanes?.destination) || "—";
-  const weight = sheet?.freight?.total_weight_lbs ?? "—";
+  const version = transcriptVersion(sheet);
+  const origin = formatPlace(sheet?.lanes?.origin) || BLANK;
+  const dest = formatPlace(sheet?.lanes?.destination) || BLANK;
+  const weight = sheet?.freight?.total_weight_lbs ?? BLANK;
   const pieces = formatPieces(sheet?.freight);
-  const commodity = sheet?.freight?.commodity || "—";
-  const pickupDate = sheet?.pickup?.date || "—";
-  const email = sheet?.contact?.email || "—";
+  const commodity = sheet?.freight?.commodity || BLANK;
+  const pickupDate = sheet?.pickup?.date || BLANK;
+  const email = sheet?.contact?.email || BLANK;
   const quote = formatQuoteAmount(sheet);
-  const awaiting = session?.awaiting || "—";
-  const status = sheet?.status || "—";
-  const accessorials = (sheet?.pickup?.accessorials || []).join(", ") || "—";
-  const requestId = sheet?.quote_request_id || "—";
+  const awaiting = session?.awaiting || BLANK;
+  const status = sheet?.status || BLANK;
+  const accessorials = (sheet?.pickup?.accessorials || []).join(", ") || BLANK;
+  const requestId = sheet?.quote_request_id || BLANK;
   const sttLabel = getSttProvider(session?.sttProvider).label;
   return [
+    `Version: ${version}`,
     ...turns,
     "",
     "Sheet snapshot:",
+    `Version: ${version}`,
     `Request: ${requestId}`,
     `STT: ${sttLabel}`,
     `Origin: ${origin}`,
-    `Dest: ${dest}`,
+    `Destination: ${dest}`,
     `Weight: ${weight}`,
     `Pieces: ${pieces}`,
     `Commodity: ${commodity}`,
@@ -64,7 +77,8 @@ export function formatSessionTranscript(messages, session) {
 }
 
 function formatPieces(freight) {
-  return formatStoredPieces(freight);
+  const stored = formatStoredPieces(freight);
+  return stored === "—" ? BLANK : stored;
 }
 
 /** @deprecated alias */

@@ -34,7 +34,7 @@ export const JEV_SLOT_CRITERIA = Object.freeze({
   piece_unit: "This utterance says the handling unit is pallets or pieces (skids are pallets; boxes, crates, cartons, and pcs are pieces). Not the count by itself.",
   pieces: "This utterance gives piece or pallet count.",
   commodity: "This utterance names the commodity / what is shipping.",
-  pickup_date: "This utterance gives a pickup day or YYYY-MM-DD.",
+  pickup_date: "This utterance gives a pickup day.",
   accessorials: "This utterance lists accessorials (liftgate, residential, inside) or says none.",
   email: "This utterance gives a contact email address.",
 });
@@ -59,9 +59,9 @@ export const JEV_CLARIFY_SCRIPTS = Object.freeze({
   dest_zip: "I want to double-check destination. What’s the 5-digit destination zip code?",
   measure: "I want to double-check the measure. Total weight in pounds, or L×W×H, or a known NMFC class?",
   piece_unit: "Are you shipping pallets or pieces?",
-  pieces: "I want to double-check piece count. How many pieces or pallets? Please type it in.",
+  pieces: "I want to double-check piece count. How many pieces or pallets?",
   commodity: "I want to double-check the commodity. What is shipping?",
-  pickup_date: "I want to double-check pickup. Say a day (today, tomorrow, Friday) or YYYY-MM-DD.",
+  pickup_date: "I want to double-check pickup. Say a day (today, tomorrow, or Friday).",
   accessorials: "I want to double-check accessorials. Liftgate, residential, inside, or none?",
   email: "I want to double-check the email. Type the address if voice mangled it.",
   default: "I want to double-check what I heard. Can you repeat the city, zip code, or date?",
@@ -99,10 +99,10 @@ export function buildJevQuestions() {
     needs_clarify: {
       type: "noul",
       instructions:
-        "Should the agent ask a clarify question instead of advancing? Yes for city/ZIP mismatch, same ZIP both ends, a soft/vague date (ASAP, soon), or garbled/ambiguous STT that could update the wrong empty slot. No if the focused slot already has a value on quote_sheet unless the utterance clearly corrects it. No if origin ZIP, dest ZIP, and weight/measure are already present; ask the next missing field instead.",
+        "Should the agent ask a clarify question instead of advancing? Yes for city/ZIP mismatch, same ZIP both ends, a soft/vague date (ASAP, soon), or garbled/ambiguous STT that could update the wrong empty slot. No if the focused slot already has a value on quote_sheet unless the utterance clearly corrects it. No if origin ZIP, destination ZIP, and weight/measure are already present; ask the next missing field instead.",
       criteria: {
         true: "City/ZIP mismatch, soft date, or ambiguous STT on a still-empty slot.",
-        false: "Utterance is clear enough to apply extracted slots, or the sheet already has origin ZIP, dest ZIP, and weight.",
+        false: "Utterance is clear enough to apply extracted slots, or the sheet already has origin ZIP, destination ZIP, and weight.",
       },
     },
     primary_slot: {

@@ -1196,6 +1196,9 @@ const SPOKEN_COUNT_WORDS = Object.keys(WORD_NUMBERS)
 
 const COUNT_WITH_UNIT = [...SPOKEN_COUNT_WORDS, "won", "too", "ate", "a", "an"].join("|");
 const AWAITING_COUNT = [...SPOKEN_COUNT_WORDS, "won", "too", "to", "for", "ate"].join("|");
+const SPOKEN_TENS = "ninety|eighty|seventy|sixty|fifty|forty|thirty|twenty";
+const SPOKEN_ONES = "nine|eight|seven|six|five|four|three|two|one";
+const SPOKEN_COMPOUND = String.raw`(?:${SPOKEN_TENS})(?:[-\s]+(?:${SPOKEN_ONES}))?`;
 
 function mapPieceUnit(word) {
   const w = String(word || "").toLowerCase();
@@ -1207,7 +1210,7 @@ function mapPieceUnit(word) {
 function extractPieces(raw, extracted, awaiting) {
   const unit = raw.match(
     new RegExp(
-      String.raw`\b(\d{1,4}|${COUNT_WITH_UNIT})\s+(${PIECE_UNIT_WORD}|handling units?)\b`,
+      String.raw`\b(${SPOKEN_COMPOUND}|\d{1,4}|${COUNT_WITH_UNIT})\s+(${PIECE_UNIT_WORD}|handling units?)\b`,
       "i",
     ),
   );
@@ -1253,7 +1256,7 @@ function extractPieces(raw, extracted, awaiting) {
 
 /**
  * A short answer while awaiting pieces: "five", "5", "five.", "it's five",
- * "five pallets", plus STT "won" / "to" / "for" / "ate".
+ * "sixty five", "sixty-five pallets", plus STT "won" / "to" / "for" / "ate".
  */
 function loosePieceCount(raw) {
   let loose = String(raw || "")
@@ -1263,7 +1266,9 @@ function loosePieceCount(raw) {
     /^(?:it(?:'s| is)|its|that(?:'s| is)|there(?:'s| are)|i said|just)\s+/i,
     "",
   );
-  const m = loose.match(new RegExp(String.raw`^(${AWAITING_COUNT}|\d{1,4})(?:\s+(${PIECE_UNIT_WORD}))?$`, "i"));
+  const m = loose.match(
+    new RegExp(String.raw`^(${SPOKEN_COMPOUND}|${AWAITING_COUNT}|\d{1,4})(?:\s+(${PIECE_UNIT_WORD}))?$`, "i"),
+  );
   if (!m) return null;
   const count = parseCount(m[1]);
   if (!count) return null;
@@ -1274,9 +1279,22 @@ function loosePieceCount(raw) {
 function parseCount(token) {
   const lower = String(token)
     .toLowerCase()
-    .replace(/^[.,!?]+|[.,!?]+$/g, "");
+    .replace(/-/g, " ")
+    .replace(/[.,!?]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   if (STT_COUNT_ALIASES[lower] != null) return STT_COUNT_ALIASES[lower];
   if (WORD_NUMBERS[lower] != null) return WORD_NUMBERS[lower];
+  const parts = lower.split(" ");
+  if (
+    parts.length === 2 &&
+    WORD_NUMBERS[parts[0]] >= 20 &&
+    WORD_NUMBERS[parts[0]] % 10 === 0 &&
+    WORD_NUMBERS[parts[1]] >= 1 &&
+    WORD_NUMBERS[parts[1]] <= 9
+  ) {
+    return WORD_NUMBERS[parts[0]] + WORD_NUMBERS[parts[1]];
+  }
   const n = Number(lower);
   return Number.isInteger(n) && n >= 1 ? n : null;
 }

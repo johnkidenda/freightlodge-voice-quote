@@ -125,7 +125,7 @@
       <p class="banner">
         Practice path only. Voice-to-quote stays at
         <a href="../">the Freight Lodge app</a>.
-        Required quote fields: origin ZIP, dest ZIP, weight, pieces, pickup date, accessorials, email.
+        Required quote fields: origin ZIP, destination ZIP, weight, pieces, pickup date, accessorials, email.
       </p>
       <section class="card" id="pilot-root" data-pilot-step="origin" data-pilot-status="collecting">
         <div id="step-origin">
@@ -395,7 +395,7 @@
           raw_summary: `Pilot LTL Standard · $${total} · fake confirmation ${id}`,
         };
         document.getElementById("quote-summary").textContent =
-          `${state.quote.raw_summary}. Origin ${v.origin_zip} to dest ${v.dest_zip}. ${v.weight} lb, ${v.pieces} pcs. Email ${v.email}.`;
+          `${state.quote.raw_summary}. Origin ${v.origin_zip} to destination ${v.dest_zip}. ${v.weight} lb, ${v.pieces} pcs. Email ${v.email}.`;
         setStep("quoted");
       }
 
@@ -559,7 +559,7 @@
         if (id === "get-rates" || id === "get-rates-contact") {
           readDomIntoState();
           if (!requiredReady()) {
-            showError("Get rates needs origin ZIP, dest ZIP, weight, pieces, pickup date, and email.");
+            showError("Get rates needs origin ZIP, destination ZIP, weight, pieces, pickup date, and email.");
             return;
           }
           quoteNow("live");

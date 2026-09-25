@@ -1,3 +1,5 @@
+import { formatAppVersionLabel } from "./app-version.js";
+
 export const SCHEMA_VERSION = "1.0";
 
 export const ACCESSORIALS = [
@@ -28,6 +30,7 @@ export function emptySheet({ id, now } = {}) {
   const created = now ? new Date(now).toISOString() : new Date().toISOString();
   return {
     schema_version: SCHEMA_VERSION,
+    app_version: formatAppVersionLabel(),
     quote_request_id: id || (globalThis.crypto?.randomUUID?.() ?? `qr_${Date.now()}`),
     created_at: created,
     status: "collecting",

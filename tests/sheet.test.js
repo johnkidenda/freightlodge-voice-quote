@@ -143,7 +143,7 @@ describe("handoff stub", () => {
     expect(result.quote_sheet.status).toBe("quoted");
     expect(result.quote_sheet.quote_result.total_usd).toBeGreaterThan(0);
     expect(result.quote_sheet.quote_result.carrier).toBeTruthy();
-    expect(result.quote_sheet.quote_result.quote_id).toMatch(/^FL-STUB-/);
+    expect(result.quote_sheet.quote_result.quote_id).toMatch(/^FL-EST-/);
   });
 
   it("never invents a rate for out_of_scope", () => {
@@ -160,7 +160,8 @@ describe("handoff stub", () => {
     expect(result.ok).toBe(false);
     expect(result.quote_sheet.status).toBe("error");
     expect(result.quote_sheet.quote_result).toBeNull();
-    expect(result.quote_sheet.error_reason).toMatch(/not ready/i);
+    expect(result.quote_sheet.error_reason).toMatch(/couldn’t work out an estimate/i);
+    expect(result.quote_sheet.error_reason).not.toMatch(/HTTP \d+/);
   });
 
   it("mirrors error_reason onto the email body like out_of_scope_reason", () => {

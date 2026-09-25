@@ -72,6 +72,6 @@ function hit(reason) {
   return {
     outOfScope: true,
     reason,
-    message: `${reason} I can take a US domestic LTL lane (origin ZIP, dest ZIP, pieces, weight or dims or class, commodity, pickup date, and email). No fake rate.`,
+    message: `${reason} I can take a US domestic LTL lane (origin ZIP, destination ZIP, pieces, weight or dims or class, commodity, pickup date, and email). No fake rate.`,
   };
 }

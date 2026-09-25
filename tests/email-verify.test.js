@@ -433,7 +433,10 @@ describe("quote path does not require a verify challenge", () => {
     expect(app).not.toContain("Type the 6-digit code");
     expect(app).not.toContain("data-resend-code");
     expect(app).toContain("copyTextToClipboard(result.body");
-    expect(app).toContain("Tap Email me this quote");
+    const priceCopy = readFileSync("src/lib/price-display.js", "utf8");
+    expect(priceCopy).toContain("Your estimate is");
+    expect(`${app}\n${priceCopy}`).toContain("Tap 'Email me this quote'");
+    expect(app).toContain("estimateSpeech");
     const sendEmailFn = app.slice(app.indexOf("async function sendEmail"), app.indexOf("function push("));
     expect(sendEmailFn).not.toMatch(/location\.href/);
     expect(sendEmailFn).not.toMatch(/mailto/);

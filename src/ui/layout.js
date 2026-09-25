@@ -30,7 +30,7 @@ export function layout(conversational) {
           <button type="button" id="sample" class="chip">Try a sample lane</button>
           <label class="sr-only" for="typed">Type a message</label>
           <div class="input-row">
-            <input id="typed" type="text" autocomplete="off" enterkeyhint="send" placeholder="Type origin zip code, dest zip code, pieces…" />
+            <input id="typed" type="text" autocomplete="off" enterkeyhint="send" placeholder="Type origin zip code, destination zip code, pieces…" />
             <button type="submit" class="send">Send</button>
           </div>
           <div class="mode-row">
@@ -47,12 +47,12 @@ export function layout(conversational) {
             </div>
             <button type="button" id="send-transcript" class="send-transcript">Send transcript</button>
           </div>
+          <pre id="send-note" class="send-note" hidden></pre>
           <p id="listen-hint" class="listen-hint" hidden></p>
           <button type="button" id="hold" class="hold ${speechOk ? "" : "is-disabled"}" aria-pressed="false">
             <span class="hold-dot"></span>
             <span class="hold-label">Hold to talk</span>
           </button>
-          <p id="send-note" class="send-note" hidden></p>
         </form>
       </section>
     </main>

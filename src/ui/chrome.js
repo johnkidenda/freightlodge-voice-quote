@@ -34,7 +34,7 @@ export function renderChrome(els, state) {
       els.input.setAttribute("inputmode", "numeric");
       els.input.setAttribute("autocomplete", "off");
     } else {
-      els.input.placeholder = "Type origin zip code, dest zip code, pieces…";
+      els.input.placeholder = "Type origin zip code, destination zip code, pieces…";
       els.input.setAttribute("inputmode", "text");
       els.input.setAttribute("autocomplete", "off");
     }

@@ -16,8 +16,9 @@ import { quickRepliesFor } from "./lib/quick-replies.js";
 import { renderChrome, renderTtsWave } from "./ui/chrome.js";
 import { layout } from "./ui/layout.js";
 import { bindMic } from "./ui/mic.js";
+import { ESTIMATE_ERROR, estimateSpeech, readPriceDisplay } from "./lib/price-display.js";
 import { quoteCard } from "./ui/quote-card.js";
-import { renderThread } from "./ui/thread.js";
+import { renderThread, settleThreadScroll } from "./ui/thread.js";
 
 export { applyQuotedLayout } from "./ui/quoted-layout.js";
 
@@ -223,7 +224,7 @@ export function mountApp(root, { now } = {}) {
     const text = choice.getAttribute("data-choice") || "";
     if (!text) return;
     interaction.onTyping();
-    void acceptUserText(els, state, text);
+    void acceptUserText(els, state, text, { via: "tap" });
   });
 
   els.input?.addEventListener("input", () => {
@@ -244,12 +245,12 @@ function speakOrStop(state, reply) {
   else stopAgentSpeech();
 }
 
-async function acceptUserText(els, state, text) {
+async function acceptUserText(els, state, text, { via } = {}) {
   const trimmed = String(text || "").trim();
   if (!trimmed || state.busy) return;
   closeQuickReplies(state);
   state.listenHint = "";
-  push(state, "user", trimmed);
+  push(state, "user", trimmed, null, via);
   render(els, state);
 
   const result = handleUtterance(state.session, trimmed, state.now ? { now: state.now } : {});
@@ -266,18 +267,20 @@ async function acceptUserText(els, state, text) {
   }
 }
 
+function priceMode() {
+  const search = globalThis.location?.search || "";
+  return readPriceDisplay(search);
+}
+
 function handoffAssistantLine(sheet) {
   if (sheet.status === "quoted") {
-    const to = sheet.contact?.email;
-    return to
-      ? `Quote is back. I can email it to ${to} from ${MAIL_FROM}. Tap Email me this quote.`
-      : "Quote is back. Email it if you want a copy.";
+    return estimateSpeech(sheet, { mode: priceMode(), from: MAIL_FROM });
   }
   if (sheet.status === "out_of_scope") {
     return sheet.out_of_scope_reason || "Out of scope. No fake rate.";
   }
   if (sheet.status === "error") {
-    return sheet.error_reason || "The runner hit an error. No fake rate.";
+    return sheet.error_reason || ESTIMATE_ERROR;
   }
   return "";
 }
@@ -293,14 +296,14 @@ async function runHandoff(els, state) {
     state.session.sheet = payload.quote_sheet;
     const line = handoffAssistantLine(payload.quote_sheet);
     if (line) push(state, "assistant", line);
-  } catch (err) {
+  } catch {
     state.session.sheet = {
       ...state.session.sheet,
       status: "error",
-      error_reason: String(err.message || err),
+      error_reason: ESTIMATE_ERROR,
       quote_result: null,
     };
-    push(state, "assistant", "Handoff failed. No fake rate.");
+    push(state, "assistant", ESTIMATE_ERROR);
   } finally {
     state.busy = false;
     render(els, state);
@@ -332,8 +335,7 @@ async function sendTranscriptToTeam(els, state) {
     if (result.ok && (result.mode === "formsubmit" || result.mode === "webhook")) {
       btn.textContent = "Sent";
       btn.classList.add("sent");
-      note.hidden = false;
-      note.textContent = "Thanks. The team will review.";
+      showSendNote(note, "Thanks. The team will review.", result.transcript);
       restore();
       return;
     }
@@ -350,10 +352,13 @@ async function sendTranscriptToTeam(els, state) {
         /* some WebViews block mailto */
       }
       btn.textContent = "Opened mail app…";
-      note.hidden = false;
-      note.textContent = copied
-        ? "Could not send silently. Opened mail. A copy is on the clipboard if mail didn’t open."
-        : "Could not send silently. Opened mail.";
+      showSendNote(
+        note,
+        copied
+          ? "Could not send silently. Opened mail. A copy is on the clipboard if mail didn’t open."
+          : "Could not send silently. Opened mail.",
+        result.transcript,
+      );
       restore(4000);
       return;
     }
@@ -393,8 +398,18 @@ function closeQuickReplies(state) {
   }
 }
 
-function push(state, role, text, choices) {
+function showSendNote(note, lead, transcript) {
+  note.hidden = false;
+  note.textContent =
+    typeof transcript === "string" && transcript ? `${lead}\n\n${transcript}` : lead;
+  const thread = note.ownerDocument?.getElementById("thread");
+  const quote = note.ownerDocument?.getElementById("quote-card");
+  if (thread) settleThreadScroll(thread, quote);
+}
+
+function push(state, role, text, choices, via) {
   const message = { role, text, at: new Date().toISOString() };
+  if (via) message.via = via;
   if (Array.isArray(choices) && choices.length) {
     message.choices = choices.map((choice) => ({ label: String(choice.label) }));
     message.choicesOpen = true;
@@ -405,7 +420,8 @@ function push(state, role, text, choices) {
 function render(els, state) {
   renderChrome(els, state);
   renderThread(els.thread, state.messages);
-  els.quote.innerHTML = quoteCard(state.session.sheet, state.emailNote);
+  els.quote.innerHTML = quoteCard(state.session.sheet, state.emailNote, priceMode());
+  settleThreadScroll(els.thread, els.quote);
 }
 
 function speechError(err) {
