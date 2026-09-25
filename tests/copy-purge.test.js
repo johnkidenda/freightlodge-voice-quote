@@ -31,7 +31,7 @@ describe("reply copy purge — ask, don’t narrate the guardrail", () => {
     );
     expect(PROMPTS.origin_zip).toBe("What’s the origin zip code? City is helpful, but I need the 5-digit zip code.");
     expect(PROMPTS.dest_zip).toBe("Where is this going? I need a destination city, state, or zip code.");
-    expect(PROMPTS.pickup_date).toBe("What pickup date works? Say a day or YYYY-MM-DD.");
+    expect(PROMPTS.pickup_date).toBe("What pickup date works?");
     expect(PROMPTS.incomplete_zip).toBe("That zip code is short. I need a full 5-digit zip code.");
   });
 

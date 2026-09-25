@@ -40,7 +40,7 @@ const PROMPTS = {
   measure:
     "I need a real measure: total weight in pounds, or L×W×H in inches, or the NMFC class if you already know it.",
   commodity: "What’s the commodity?",
-  pickup_date: "What pickup date works? Say a day or YYYY-MM-DD.",
+  pickup_date: "What pickup date works?",
   accessorials:
     "Any accessorials? Liftgate, residential, inside, limited access, appointment, freeze protect, or say none.",
   liftgate_side: "Liftgate at pickup, delivery, or both?",
@@ -48,6 +48,8 @@ const PROMPTS = {
   email:
     "What email should I put on the sheet so we can send the quote? Please type it in.",
 };
+
+export const SHEET_READY_REPLY = "Sheet’s complete. Working out your estimate…";
 
 export function createSession({ id, now } = {}) {
   return {
@@ -370,7 +372,7 @@ function takePalletSanityAnswer(session, raw) {
           nextSession,
           sheet0,
           true,
-          "Sheet’s complete. Handing this to Freight Ops’ Exfresso runner for a live rate.",
+          SHEET_READY_REPLY,
           null,
           null,
         ),
@@ -838,7 +840,7 @@ export function handleUtterance(session, text, { now } = {}) {
 
   if (isReadyForQuote(sheet) && askedAccessorials) {
     sheet = { ...sheet, status: "ready_for_quote", error_reason: null, out_of_scope_reason: null };
-    const reply = "Sheet’s complete. Handing this to Freight Ops’ Exfresso runner for a live rate.";
+    const reply = SHEET_READY_REPLY;
     return {
       session: {
         ...session,
@@ -1040,14 +1042,14 @@ function acknowledge(extracted, sheet) {
   const bits = [];
   const originCity = extracted.origin?.city || null;
   const destCity = !isGarbagePlace(extracted.destination) ? extracted.destination?.city || null : null;
-  if (originCity && destCity) bits.push(`from ${originCity} to ${destCity}`);
+  if (originCity && destCity) bits.push(`${originCity} to ${destCity}`);
+  else if (originCity) bits.push(`from ${originCity}`);
+  else if (destCity) bits.push(`to ${destCity}`);
   if (extracted.origin?.postal_code) bits.push(`origin ${extracted.origin.postal_code}`);
-  else if (originCity && !destCity) bits.push(`from ${originCity} (still need zip code)`);
-  else if (!originCity && extracted.origin?.state) bits.push(`origin ${extracted.origin.state} (still need zip code)`);
+  else if (!originCity && extracted.origin?.state) bits.push(`from ${extracted.origin.state} (still need zip code)`);
   if (!isGarbagePlace(extracted.destination)) {
     if (extracted.destination?.postal_code) bits.push(`dest ${extracted.destination.postal_code}`);
-    else if (destCity && !originCity) bits.push(`to ${destCity} (still need zip code)`);
-    else if (!destCity && extracted.destination?.state) bits.push(`dest ${extracted.destination.state} (still need zip code)`);
+    else if (!destCity && extracted.destination?.state) bits.push(`to ${extracted.destination.state} (still need zip code)`);
   }
   if (extracted.freight?.pieces) {
     const unit = pieceUnitForAck(extracted.freight, sheet?.freight);
@@ -1055,24 +1057,27 @@ function acknowledge(extracted, sheet) {
   } else if (extracted.freight?.piece_unit === "pallets" || extracted.freight?.piece_unit === "pieces") {
     bits.push(extracted.freight.piece_unit);
   }
-  if (extracted.flags?.weightFromKg && extracted.freight?.total_weight_lbs) {
-    bits.push(`${extracted.flags.weightKg} kg (~${extracted.freight.total_weight_lbs} lb)`);
-  } else if (extracted.freight?.total_weight_lbs) {
-    bits.push(`${extracted.freight.total_weight_lbs} lb`);
-  }
+  const weightText = extracted.flags?.weightFromKg && extracted.freight?.total_weight_lbs
+    ? `${extracted.flags.weightKg} kg (~${extracted.freight.total_weight_lbs} lb)`
+    : extracted.freight?.total_weight_lbs
+      ? `${extracted.freight.total_weight_lbs} lb`
+      : "";
+  const commodity = extracted.freight?.commodity || "";
+  if (weightText && commodity) bits.push(`${weightText} of ${commodity}`);
+  else if (weightText) bits.push(weightText);
+  else if (commodity) bits.push(commodity);
   if (extracted.freight?.dims) {
     const d = extracted.freight.dims;
     bits.push(`${d.length_in}×${d.width_in}×${d.height_in}`);
   }
   if (extracted.freight?.freight_class) bits.push(`class ${extracted.freight.freight_class}`);
-  if (extracted.freight?.commodity) bits.push(extracted.freight.commodity);
   if (extracted.pickup?.date) bits.push(`pickup ${formatSpokenDate(extracted.pickup.date)}`);
   if (extracted.pickup?.accessorials?.length) {
     bits.push(extracted.pickup.accessorials.join(", ").replaceAll("_", " "));
   }
   if (extracted.contact?.email) bits.push(extracted.contact.email);
   if (!bits.length) return "";
-  return `Got ${bits.join(", ")}.`;
+  return `Got it: ${bits.join(", ")}.`;
 }
 
 export { PROMPTS };

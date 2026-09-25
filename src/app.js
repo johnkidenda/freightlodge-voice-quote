@@ -16,6 +16,7 @@ import { quickRepliesFor } from "./lib/quick-replies.js";
 import { renderChrome, renderTtsWave } from "./ui/chrome.js";
 import { layout } from "./ui/layout.js";
 import { bindMic } from "./ui/mic.js";
+import { ESTIMATE_ERROR, estimateSpeech } from "./lib/price-display.js";
 import { quoteCard } from "./ui/quote-card.js";
 import { renderThread } from "./ui/thread.js";
 
@@ -266,29 +267,15 @@ async function acceptUserText(els, state, text, { via } = {}) {
   }
 }
 
-function quotedAmount(sheet) {
-  const total = sheet?.quote_result?.total_usd;
-  if (typeof total !== "number" || !Number.isFinite(total)) return null;
-  return `$${total.toFixed(2)}`;
-}
-
 function handoffAssistantLine(sheet) {
   if (sheet.status === "quoted") {
-    const amount = quotedAmount(sheet);
-    const to = sheet.contact?.email;
-    if (amount && to) {
-      return `Your quote is ${amount}. Tap 'Email me this quote' if you want it sent to ${to} from ${MAIL_FROM}.`;
-    }
-    if (amount) return `Your quote is ${amount}. Email it if you want a copy.`;
-    return to
-      ? `Quote is back. I can email it to ${to} from ${MAIL_FROM}. Tap 'Email me this quote'.`
-      : "Quote is back. Email it if you want a copy.";
+    return estimateSpeech(sheet, { from: MAIL_FROM });
   }
   if (sheet.status === "out_of_scope") {
     return sheet.out_of_scope_reason || "Out of scope. No fake rate.";
   }
   if (sheet.status === "error") {
-    return sheet.error_reason || "The runner hit an error. No fake rate.";
+    return sheet.error_reason || ESTIMATE_ERROR;
   }
   return "";
 }
@@ -304,14 +291,14 @@ async function runHandoff(els, state) {
     state.session.sheet = payload.quote_sheet;
     const line = handoffAssistantLine(payload.quote_sheet);
     if (line) push(state, "assistant", line);
-  } catch (err) {
+  } catch {
     state.session.sheet = {
       ...state.session.sheet,
       status: "error",
-      error_reason: String(err.message || err),
+      error_reason: ESTIMATE_ERROR,
       quote_result: null,
     };
-    push(state, "assistant", "Handoff failed. No fake rate.");
+    push(state, "assistant", ESTIMATE_ERROR);
   } finally {
     state.busy = false;
     render(els, state);

@@ -80,10 +80,11 @@ describe("conversational reply copy", () => {
   it("does not invent a rate or ZIP on ready / OOS", () => {
     const ready = composeConversationalReply({
       ready: true,
-      formalReply: "Sheet’s complete. Handing this to Freight Ops’ Exfresso runner for a live rate.",
+      formalReply: "Sheet’s complete. Working out your estimate…",
     });
     expect(ready).toMatch(/sheet is complete/i);
-    expect(ready).toMatch(/live rate/i);
+    expect(ready).toMatch(/estimate/i);
+    expect(ready).not.toMatch(/live rate/i);
     expect(ready).not.toMatch(/no booking|book or pay/i);
     expect(ready).not.toMatch(/\$\d/);
     const oos = composeConversationalReply({

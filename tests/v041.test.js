@@ -194,7 +194,8 @@ describe("v0.41 date words and city direction", () => {
     expect(result.session.sheet.lanes.origin.city).toBe("Austin");
     expect(result.session.sheet.lanes.destination.city).toBe("Atlanta");
     expect(result.session.sheet.pickup.date).toBe("2026-10-02");
-    expect(result.reply).toContain("from Austin to Atlanta");
+    expect(result.reply).toContain("Got it: Austin to Atlanta");
+    expect(result.reply).not.toContain("from Austin to Atlanta");
     expect(result.reply).toContain("Friday, October 2");
     expect(result.reply).not.toContain("2026-10-02");
     expect(result.reply).not.toMatch(/\borigin Austin\b/);
@@ -220,7 +221,7 @@ describe("v0.41 transcript version and taps", () => {
       [
         { role: "user", text: "Pallets", via: "tap" },
         { role: "user", text: "five" },
-        { role: "assistant", text: "Your quote is $258.50. Tap 'Email me this quote' if you want it sent." },
+        { role: "assistant", text: "Your estimate is $258.50. Tap 'Email me this quote' if you want it sent." },
       ],
       session,
     );
@@ -229,7 +230,7 @@ describe("v0.41 transcript version and taps", () => {
     expect(text).toContain("User [tap]: Pallets");
     expect(text).toContain("User: five");
     expect(text).not.toContain("User [tap]: five");
-    expect(text).toContain("Your quote is $258.50");
+    expect(text).toContain("Your estimate is $258.50");
   });
 });
 

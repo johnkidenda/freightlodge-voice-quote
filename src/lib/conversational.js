@@ -155,7 +155,7 @@ export function composeConversationalReply({
 } = {}) {
   if (outOfScope) return formalReply || "";
   if (ready) {
-    return "The sheet is complete. I’ll hand this to Freight Ops for a live rate.";
+    return "The sheet is complete. I’ll work out an estimate.";
   }
   if (extracted?.flags?.zipClarify) return formalReply || "";
   if (extracted?.flags?.incompleteZips?.length) return formalReply || "";
@@ -177,7 +177,7 @@ export function composeConversationalReply({
     return "If you have pounds, L×W×H, or a known NMFC class, say it. Otherwise I’ll keep asking.";
   }
   if (extracted?.flags?.vagueDate && !extracted.pickup?.date) {
-    return "I need a pickup date. Today, tomorrow, Friday, or YYYY-MM-DD.";
+    return "I need a pickup date. Today, tomorrow, or Friday.";
   }
 
   const have = conversationalHave(sheet, extracted);

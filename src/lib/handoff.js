@@ -1,4 +1,5 @@
 import { isReadyForQuote } from "./completeness.js";
+import { ESTIMATE_ERROR, ESTIMATE_NOTE } from "./price-display.js";
 
 export const HANDOFF_PATH = "/api/quote-handoff";
 
@@ -80,7 +81,7 @@ export function simulateExfressoRunner(sheet, { now } = {}) {
       quote_sheet: {
         ...structuredClone(sheet),
         status: "error",
-        error_reason: "Sheet is not ready_for_quote. Missing required fields. No rate invented.",
+        error_reason: ESTIMATE_ERROR,
         quote_result: null,
       },
     };
@@ -89,12 +90,12 @@ export function simulateExfressoRunner(sheet, { now } = {}) {
   const candidates = buildCandidateRates(sheet);
   const best = pickLowestRate(candidates);
   const quoted_at = now ? new Date(now).toISOString() : new Date().toISOString();
-  const quote_id = `FL-STUB-${(sheet.quote_request_id || "local").slice(0, 8).toUpperCase()}`;
+  const quote_id = `FL-EST-${(sheet.quote_request_id || "local").slice(0, 8).toUpperCase()}`;
   const quote_result = {
     ...best,
     quote_id,
     quoted_at,
-    raw_summary: `${best.carrier} ${best.service} · $${best.total_usd.toFixed(2)} · ${best.transit_days_min}–${best.transit_days_max} day transit (lowest of ${candidates.length} stub rows; Exfresso will replace this).`,
+    raw_summary: ESTIMATE_NOTE,
   };
 
   return {
@@ -136,17 +137,8 @@ export async function requestQuote(sheet, { fetchFn, apiBase, delayMs = 700 } = 
       const data = await res.json();
       if (data?.quote_sheet) return data;
     }
-    if (res.status !== 404 && res.status !== 405) {
-      const errSheet = {
-        ...quoting,
-        status: "error",
-        error_reason: `Handoff endpoint returned HTTP ${res.status}`,
-        quote_result: null,
-      };
-      return { ok: false, mode: "error", quote_sheet: errSheet };
-    }
   } catch {
-    // Static GitHub Pages has no API — fall through to in-browser stub.
+    // Any failed POST, including a static host answering 501, uses the local estimate.
   }
 
   if (delayMs) await sleep(delayMs);

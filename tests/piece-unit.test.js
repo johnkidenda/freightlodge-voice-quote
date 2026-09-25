@@ -40,7 +40,7 @@ describe("piece unit then count", () => {
     expect(result.session.sheet.freight.piece_unit).toBe("pallets");
     expect(result.session.sheet.freight.pieces).toBeNull();
     expect(result.session.awaiting).toBe("pieces");
-    expect(result.reply).toBe("Got pallets. How many pallets?");
+    expect(result.reply).toBe("Got it: pallets. How many pallets?");
     expect(presentAgentReply(result, true)).toBe("Got pallets. How many pallets?");
     expect(result.reply).not.toMatch(/\u2014/);
   });
@@ -51,7 +51,7 @@ describe("piece unit then count", () => {
     const result = handleUtterance(session, "we're shipping pieces");
     expect(result.session.sheet.freight.piece_unit).toBe("pieces");
     expect(result.session.awaiting).toBe("pieces");
-    expect(result.reply).toBe("Got pieces. How many pieces?");
+    expect(result.reply).toBe("Got it: pieces. How many pieces?");
     expect(presentAgentReply(result, true)).toBe("Got pieces. How many pieces?");
   });
 
@@ -113,7 +113,7 @@ describe("piece unit then count", () => {
     const five = handleUtterance(pallets, "five");
     expect(five.session.sheet.freight.pieces).toBe(5);
     expect(five.session.sheet.freight.piece_unit).toBe("pallets");
-    expect(five.reply).toMatch(/Got 5 pallets\./);
+    expect(five.reply).toMatch(/Got it: 5 pallets\./);
     expect(five.reply).not.toMatch(/pieces/);
     expect(presentAgentReply(five, true)).toMatch(/Got 5 pallets\./);
     expect(presentAgentReply(five, true)).not.toMatch(/\bpcs\b/);
@@ -123,14 +123,14 @@ describe("piece unit then count", () => {
       "one",
     );
     expect(one.session.sheet.freight.pieces).toBe(1);
-    expect(one.reply).toMatch(/Got 1 pallet\./);
+    expect(one.reply).toMatch(/Got it: 1 pallet\./);
     expect(presentAgentReply(one, true)).toMatch(/Got 1 pallet\./);
 
     const pieces = zippedSession("ack-pieces");
     pieces.sheet.freight.piece_unit = "pieces";
     pieces.awaiting = "pieces";
     const fivePieces = handleUtterance(pieces, "5");
-    expect(fivePieces.reply).toMatch(/Got 5 pieces\./);
+    expect(fivePieces.reply).toMatch(/Got it: 5 pieces\./);
     expect(presentAgentReply(fivePieces, true)).toMatch(/Got 5 pieces\./);
     const onePiece = handleUtterance(
       {
@@ -139,7 +139,7 @@ describe("piece unit then count", () => {
       },
       "1",
     );
-    expect(onePiece.reply).toMatch(/Got 1 piece\./);
+    expect(onePiece.reply).toMatch(/Got it: 1 piece\./);
 
     const warmUnknown = composeConversationalReply({
       extracted: { freight: { pieces: 5 }, origin: {}, destination: {}, pickup: {}, contact: {}, flags: {} },
@@ -235,7 +235,7 @@ describe("short counts while awaiting pieces", () => {
     const result = handleUtterance(awaitingPieces(`stt-${text}`), text);
     expect(result.session.sheet.freight.pieces, text).toBe(count);
     expect(result.session.sheet.freight.piece_unit).toBe("pallets");
-    expect(result.reply, text).toMatch(new RegExp(`Got ${count} pallet`));
+    expect(result.reply, text).toMatch(new RegExp(`Got it: ${count} pallet`));
   });
 
   it("count ask copy does not demand typing and still accepts a spoken number", () => {

@@ -133,9 +133,14 @@ describe("v0.41 quick replies and spoken quote", () => {
     await Promise.resolve();
     await drive(root, ["5", "1000 pounds", "oranges", "October 2", "none", "shipper@example.com"]);
     await vi.waitFor(() => {
-      expect(bubbleText(lastAssistant(root))).toContain("Your quote is $258.50");
+      expect(bubbleText(lastAssistant(root))).toContain("Your estimate is $258.50");
     });
     expect(bubbleText(lastAssistant(root))).toContain("Tap 'Email me this quote'");
+    expect(root.querySelector(".estimate-note").textContent).toBe(
+      "Estimate. Final rate confirmed by Freight Lodge.",
+    );
+    expect(root.querySelector(".card.wait, .price")).toBeTruthy();
+    expect(root.textContent).not.toMatch(/live rate|Exfresso runner|YYYY-MM-DD/i);
     expect(root.querySelector("[data-email-quote]").textContent).toBe("Email me this quote");
 
     root.querySelector("#send-transcript").click();
@@ -143,6 +148,6 @@ describe("v0.41 quick replies and spoken quote", () => {
     await vi.waitFor(() => expect(note.hidden).toBe(false));
     expect(note.textContent).toContain("Version: v0.41");
     expect(note.textContent).toContain("User [tap]: Pallets");
-    expect(note.textContent).toContain("Your quote is $258.50");
+    expect(note.textContent).toContain("Your estimate is $258.50");
   });
 });
