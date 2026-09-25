@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { readClientUi } from "./client-ui.js";
+import { createMicResultController } from "../src/app.js";
 import { createSession, handleUtterance, openingMessage } from "../src/lib/dialog.js";
 import { CONVERSATIONAL_GREETING, presentAgentReply } from "../src/lib/conversational.js";
 import { extractSlots } from "../src/lib/extract.js";
@@ -25,8 +26,16 @@ describe("repeated ZIP fragments keep the last full ZIP", () => {
     const result = handleUtterance(session, text);
     expect(result.session.sheet.lanes.destination.postal_code).toBe("30030");
     expect(result.session.sheet.lanes.origin.postal_code).toBe("78721");
+    expect(result.session.sheet.freight.commodity).toBeFalsy();
     expect(result.reply).not.toMatch(/I heard 300\b/);
     expect(result.reply).not.toMatch(/only three digits/i);
+    expect(result.reply).not.toMatch(/\bfull\b/i);
+
+    const counted = handleUtterance(result.session, "2 pallets");
+    const weighed = handleUtterance(counted.session, "500 pounds");
+    expect(weighed.session.sheet.freight.commodity).toBeFalsy();
+    expect(weighed.session.awaiting).toBe("commodity");
+    expect(weighed.reply).toMatch(/What’s the commodity\?/);
   });
 });
 
@@ -58,16 +67,16 @@ describe("both short ZIPs are one clarify turn", () => {
 });
 
 describe("ZIP confirm skips when the lookup city matches the stated city", () => {
-  it("30030 on a stated Atlanta destination does not ask for confirmation", () => {
+  it("bare 30030 while origin is still Austin attaches to Atlanta without the destination confirm", () => {
     const session = createSession({ id: "atl-match" });
     session.sheet.lanes.origin = { city: "Austin", state: "TX", postal_code: null, country: "US" };
     session.sheet.lanes.destination = { city: "Atlanta", state: "GA", postal_code: null, country: "US" };
-    session.awaiting = "dest_zip";
+    session.awaiting = "origin_zip";
     const result = handleUtterance(session, "30030");
     expect(result.session.sheet.lanes.destination.postal_code).toBe("30030");
     expect(result.session.sheet.lanes.destination.city).toBe("Atlanta");
-    expect(result.reply).not.toMatch(/looks like Atlanta/i);
     expect(result.session.zipClarify).toBeFalsy();
+    expect(result.reply).not.toBe("30030 looks like Atlanta. Is that the destination zip code?");
   });
 
   it("still confirms when the ZIP city does not match the stated city", () => {
@@ -198,15 +207,26 @@ describe("liftgate choices and post-speech no-input window", () => {
       return session;
     }
 
-    const pickup = handleUtterance(liftSession(), "pickup");
-    expect(pickup.session.sheet.pickup.accessorials).toContain("liftgate_pickup");
-    expect(pickup.session.sheet.pickup.accessorials).not.toContain("liftgate_delivery");
-    expect(pickup.session.awaiting).not.toBe("liftgate_side");
+    function expectSide(text, ids) {
+      const result = handleUtterance(liftSession(), text);
+      expect(result.session.sheet.pickup.accessorials, text).toEqual(expect.arrayContaining(ids));
+      expect(result.session.sheet.pickup.accessorials, text).toHaveLength(ids.length);
+      expect(result.session.awaiting, text).not.toBe("liftgate_side");
+      expect(result.reply, text).not.toBe("Liftgate at pickup, delivery, or both?");
+    }
 
-    const both = handleUtterance(liftSession(), "both");
-    expect(both.session.sheet.pickup.accessorials).toEqual(
-      expect.arrayContaining(["liftgate_pickup", "liftgate_delivery"]),
-    );
+    expectSide("pickup", ["liftgate_pickup"]);
+    expectSide("Pickup", ["liftgate_pickup"]);
+    expectSide("at pickup", ["liftgate_pickup"]);
+    expectSide("delivery", ["liftgate_delivery"]);
+    expectSide("Delivery", ["liftgate_delivery"]);
+    expectSide("at delivery", ["liftgate_delivery"]);
+    expectSide("both", ["liftgate_pickup", "liftgate_delivery"]);
+    expectSide("Both", ["liftgate_pickup", "liftgate_delivery"]);
+    expectSide("at both", ["liftgate_pickup", "liftgate_delivery"]);
+
+    const button = ui.match(/data-choice="(delivery)"/)[1];
+    expectSide(button, ["liftgate_delivery"]);
   });
 
   it("does not reprompt until the full window after speech ends, and a new ask resets the timer", () => {
@@ -240,9 +260,11 @@ describe("liftgate choices and post-speech no-input window", () => {
     expect(timers[0].ms).toBe(NO_INPUT_WINDOW_MS);
     const early = timers[0];
     watch.onNewAsk();
-    expect(timers).toHaveLength(0);
+    expect(timers).toHaveLength(1);
+    expect(timers[0].ms).toBe(NO_INPUT_WINDOW_MS);
     early.fn();
     expect(fires).toEqual([]);
+    timers.splice(0, timers.length);
 
     watch.onSpeakingChange(true);
     watch.onEmptyListen();
@@ -253,6 +275,79 @@ describe("liftgate choices and post-speech no-input window", () => {
     watch.onUserActivity();
     expect(timers).toHaveLength(0);
     expect(fires).toEqual([]);
+  });
+
+  it("an empty mic result after the question rearms listening and does not say it missed that", () => {
+    let t = 0;
+    const timers = [];
+    const state = {
+      busy: false,
+      listening: false,
+      finishing: false,
+      quietListen: false,
+      hold: {
+        start() {
+          state.quietListen = true;
+          state.listening = true;
+        },
+        abort() {
+          state.listening = false;
+          state.quietListen = false;
+        },
+      },
+    };
+    const lines = [];
+    const rearms = [];
+    let mic;
+    const noInput = createNoInputWatch({
+      now: () => t,
+      schedule: (fn, ms) => {
+        const id = timers.length + 1;
+        timers.push({ id, fn, ms });
+        return id;
+      },
+      unschedule: (id) => {
+        const i = timers.findIndex((timer) => timer.id === id);
+        if (i >= 0) timers.splice(i, 1);
+      },
+      onReprompt() {
+        mic.onReprompt();
+      },
+    });
+    mic = createMicResultController({
+      state,
+      noInput,
+      rearmListen() {
+        rearms.push(t);
+        state.quietListen = true;
+        state.hold.start();
+      },
+      abortQuiet() {
+        state.hold.abort();
+      },
+      onReprompt() {
+        lines.push("I didn’t catch that. Say it again, or type it.");
+      },
+    });
+
+    noInput.onNewAsk();
+    noInput.onSpeakingChange(true);
+    t = 1200;
+    noInput.onSpeakingChange(false);
+    mic.onEmpty();
+    expect(lines).toEqual([]);
+    expect(rearms).toEqual([1200]);
+    expect(state.quietListen).toBe(true);
+    expect(timers).toHaveLength(1);
+    expect(timers[0].ms).toBe(NO_INPUT_WINDOW_MS);
+
+    t = 1200 + NO_INPUT_WINDOW_MS;
+    const pending = timers[0];
+    timers.splice(0, timers.length);
+    pending.fn();
+    expect(lines).toEqual(["I didn’t catch that. Say it again, or type it."]);
+    expect(state.quietListen).toBe(false);
+    expect(state.listening).toBe(false);
   });
 });
 

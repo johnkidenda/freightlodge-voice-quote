@@ -21,6 +21,45 @@ import { renderThread } from "./ui/thread.js";
 
 export { applyQuotedLayout } from "./ui/quoted-layout.js";
 
+/**
+ * Consumes STT start/empty results for one quote session.
+ * An empty result does not say "I didn't catch that". It rearms the mic.
+ * The reprompt is only the silence-window callback.
+ */
+export function createMicResultController({ state, noInput, rearmListen, abortQuiet, onReprompt }) {
+  return {
+    onStart() {
+      if (state.quietListen) {
+        state.listening = true;
+        state.finishing = false;
+        return;
+      }
+      state.quietListen = false;
+      noInput.onUserActivity();
+      state.listening = true;
+      state.finishing = false;
+    },
+    onEmpty() {
+      if (state.busy) return;
+      if (state.listening && !state.quietListen) return;
+      const action = noInput.onEmptyListen();
+      if (action?.rearm) rearmListen();
+    },
+    onReprompt() {
+      if (state.busy) return;
+      if (state.listening && !state.quietListen) return;
+      if (state.quietListen) {
+        state.quietListen = false;
+        abortQuiet?.();
+        state.listening = false;
+        state.finishing = false;
+      }
+      noInput.onNewAsk();
+      onReprompt();
+    },
+  };
+}
+
 const SAMPLE =
   "Chicago IL 60601 to Dallas TX 75201, 3 pallets, 1200 pounds, auto parts, pickup tomorrow, liftgate delivery, email shipper@example.com";
 
@@ -45,6 +84,7 @@ function createViewState() {
     hold: null,
     conversational,
     ttsSpeaking: false,
+    quietListen: false,
   };
 }
 
@@ -73,8 +113,21 @@ export function mountApp(root) {
 
   const noInput = createNoInputWatch({
     onReprompt() {
-      if (state.busy || state.listening || state.finishing) return;
-      noInput.onNewAsk();
+      mic.onReprompt();
+    },
+  });
+
+  const mic = createMicResultController({
+    state,
+    noInput,
+    rearmListen() {
+      state.quietListen = true;
+      state.hold?.start?.();
+    },
+    abortQuiet() {
+      state.hold?.abort?.();
+    },
+    onReprompt() {
       const text = "I didn’t catch that. Say it again, or type it.";
       push(state, "assistant", text);
       render(els, state);
@@ -87,10 +140,8 @@ export function mountApp(root) {
   function talkCallbacks() {
     return {
       onStart() {
-        noInput.onUserActivity();
-        state.listening = true;
-        state.finishing = false;
-        playListenCue();
+        mic.onStart();
+        if (!state.quietListen) playListenCue();
         renderChrome(els, state);
       },
       onTailStart() {
@@ -119,8 +170,7 @@ export function mountApp(root) {
         void acceptUserText(els, state, trimmed);
       },
       onEmpty() {
-        if (state.busy || state.listening) return;
-        noInput.onEmptyListen();
+        mic.onEmpty();
       },
     };
   }

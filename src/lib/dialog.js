@@ -169,7 +169,7 @@ function decideLiftgateSide(raw) {
     return "both";
   }
   const pick = /\b(pick\s*-?\s*up|pickup|origin)\b/.test(t);
-  const deliv = /\b(deliv|destination|dest)\b/.test(t);
+  const deliv = /\b(deliver\w*|destination|dest)\b/.test(t);
   if (pick && deliv) return "both";
   if (pick) return "pickup";
   if (deliv) return "delivery";

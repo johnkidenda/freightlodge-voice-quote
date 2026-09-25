@@ -1,8 +1,10 @@
 /**
- * No-input reprompt ("I didn't catch that").
- * The window starts when the agent finishes speaking, or when the ask is
- * shown if this turn is not spoken. A timer that began before TTS, or that
- * belonged to the previous ask, cannot fire.
+ * Silence window after a question ("I didn't catch that").
+ *
+ * On main, an empty mic result said that line immediately. Here the window
+ * starts when the agent finishes speaking, or when the ask is shown if this
+ * turn is not spoken. An empty result inside that window is ignored. The
+ * reprompt runs only when the window ends with no speech.
  */
 
 export const NO_INPUT_WINDOW_MS = 6000;
@@ -57,6 +59,7 @@ export function createNoInputWatch({
       pendingGen = null;
       speechEndedAt = null;
       askAt = now();
+      if (!speaking) arm(generation);
     },
     onSpeakingChange(isSpeaking) {
       const next = Boolean(isSpeaking);
@@ -70,18 +73,17 @@ export function createNoInputWatch({
       speaking = false;
       if (!wasSpeaking) return;
       speechEndedAt = now();
-      if (pendingGen === generation) arm(generation);
+      arm(generation);
     },
     /**
-     * Mic ended with no words. Reprompt only after the full post-speech window.
-     * An empty result during TTS waits until speech ends, then the full window.
+     * Mic ended with no words. Never reprompts from this event.
+     * Inside the post-question window, the caller should re-arm listening.
+     * If no window is running, start one.
      */
     onEmptyListen() {
-      if (speaking || speechEndedAt == null) {
-        arm(generation);
-        return;
-      }
-      arm(generation);
+      if (speaking) return { rearm: false };
+      if (timer == null) arm(generation);
+      return { rearm: true };
     },
     onUserActivity() {
       clearTimer();

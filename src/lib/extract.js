@@ -1514,7 +1514,35 @@ function sanitizeCommodity(value) {
   ) {
     return null;
   }
+  if (isZipPhraseFiller(s)) return null;
   return s;
+}
+
+/** Words that show up in a repeated ZIP phrase, not a commodity. */
+const ZIP_PHRASE_FILLER = new Set([
+  "a",
+  "an",
+  "code",
+  "codes",
+  "dest",
+  "destination",
+  "digit",
+  "digits",
+  "full",
+  "is",
+  "origin",
+  "the",
+  "zip",
+  "zipcode",
+  "zips",
+]);
+
+function isZipPhraseFiller(value) {
+  const words = String(value || "")
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+  return words.length > 0 && words.every((word) => ZIP_PHRASE_FILLER.has(word));
 }
 
 function hasExplicitDate(raw) {
