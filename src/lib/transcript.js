@@ -1,5 +1,4 @@
 import { formatPlace, formatStoredPieces } from "./completeness.js";
-import { formatJevTranscriptLine } from "./jev-core.js";
 import { getSttProvider } from "./stt-providers.js";
 
 export const TRANSCRIPT_TO = "john@freightlodge.com";
@@ -11,16 +10,34 @@ const ACTIVATE_RE =
 /**
  * Plain-text dump of the current sheet conversation for team delivery.
  */
+function formatTurnStamp(at) {
+  if (!at) return "";
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) return "";
+  return `[${d.toISOString().replace(/\.\d{3}Z$/, "Z")}] `;
+}
+
+function formatQuoteAmount(sheet) {
+  const total = sheet?.quote_result?.total_usd;
+  if (typeof total !== "number" || !Number.isFinite(total)) return "—";
+  return `$${total.toFixed(2)}`;
+}
+
 export function formatSessionTranscript(messages, session) {
   const turns = (messages || []).map((m) => {
     const label = m.role === "user" ? "User" : "Agent";
-    return `${label}: ${m.text ?? ""}`;
+    const stamp = formatTurnStamp(m.at);
+    return `${stamp}${label}: ${m.text ?? ""}`;
   });
   const sheet = session?.sheet;
   const origin = formatPlace(sheet?.lanes?.origin) || "—";
   const dest = formatPlace(sheet?.lanes?.destination) || "—";
   const weight = sheet?.freight?.total_weight_lbs ?? "—";
   const pieces = formatPieces(sheet?.freight);
+  const commodity = sheet?.freight?.commodity || "—";
+  const pickupDate = sheet?.pickup?.date || "—";
+  const email = sheet?.contact?.email || "—";
+  const quote = formatQuoteAmount(sheet);
   const awaiting = session?.awaiting || "—";
   const status = sheet?.status || "—";
   const accessorials = (sheet?.pickup?.accessorials || []).join(", ") || "—";
@@ -32,12 +49,14 @@ export function formatSessionTranscript(messages, session) {
     "Sheet snapshot:",
     `Request: ${requestId}`,
     `STT: ${sttLabel}`,
-    `Jev mode: ${session?.jevEnabled === false ? "off" : "on"}`,
-    formatJevTranscriptLine(session),
     `Origin: ${origin}`,
     `Dest: ${dest}`,
     `Weight: ${weight}`,
     `Pieces: ${pieces}`,
+    `Commodity: ${commodity}`,
+    `Pickup date: ${pickupDate}`,
+    `Email: ${email}`,
+    `Quote: ${quote}`,
     `Accessorials: ${accessorials}`,
     `Awaiting: ${awaiting}`,
     `Status: ${status}`,

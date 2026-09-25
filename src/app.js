@@ -12,12 +12,6 @@ import {
 import { onAgentSpeaking, speakAgentReply, stopAgentSpeech } from "./lib/agent-speech.js";
 import { copyTextToClipboard, sendSessionTranscript } from "./lib/transcript.js";
 import { playListenCue } from "./lib/listen-cue.js";
-import {
-  fetchJevDecision,
-  isJevDisabled,
-  recentAssistantReplies,
-  saveJevSessionEnabled,
-} from "./lib/jev.js";
 import { renderChrome, renderTtsWave } from "./ui/chrome.js";
 import { layout } from "./ui/layout.js";
 import { bindMic } from "./ui/mic.js";
@@ -26,23 +20,34 @@ import { renderThread } from "./ui/thread.js";
 
 export { applyQuotedLayout } from "./ui/quoted-layout.js";
 
+/** Quiet inline note only. Never spoken, never repeated as a chat line, never starts the mic. */
+export const EMPTY_MIC_HINT = "Didn’t hear anything. Hold to talk or type.";
+
+/**
+ * Quote-session mic wiring used by mountApp.
+ * There is no post-question silence timer and no automatic re-listen.
+ * An empty recognition result only sets the inline hint.
+ */
+export function createQuoteInteraction({ state } = {}) {
+  return {
+    afterAsk() {
+      state.listenHint = "";
+    },
+    onTyping() {
+      state.listenHint = "";
+    },
+    onEmptyMic() {
+      if (state.busy) return;
+      state.listenHint = EMPTY_MIC_HINT;
+    },
+  };
+}
+
 const SAMPLE =
   "Chicago IL 60601 to Dallas TX 75201, 3 pallets, 1200 pounds, auto parts, pickup tomorrow, liftgate delivery, email shipper@example.com";
 
 function browserStorage() {
   return typeof localStorage !== "undefined" ? localStorage : null;
-}
-
-function browserSessionStore() {
-  return typeof sessionStorage !== "undefined" ? sessionStorage : null;
-}
-
-function jevEnabledNow() {
-  return !isJevDisabled({
-    search: typeof location !== "undefined" ? location.search : "",
-    storage: browserStorage(),
-    sessionStore: browserSessionStore(),
-  });
 }
 
 function greetingFor(conversational) {
@@ -51,31 +56,25 @@ function greetingFor(conversational) {
 
 function createViewState() {
   const conversational = loadConversationalMode(browserStorage());
-  const jevOn = jevEnabledNow();
   const session = createSession();
-  session.jevEnabled = jevOn;
   return {
     session,
-    messages: [{ role: "assistant", text: greetingFor(conversational) }],
+    messages: [{ role: "assistant", text: greetingFor(conversational), at: new Date().toISOString() }],
     listening: false,
     finishing: false,
     busy: false,
     emailNote: null,
     hold: null,
     conversational,
-    jevOn,
     ttsSpeaking: false,
+    listenHint: "",
   };
 }
 
 export function mountApp(root) {
-  isJevDisabled({
-    search: typeof location !== "undefined" ? location.search : "",
-    storage: browserStorage(),
-  });
   const state = createViewState();
 
-  root.innerHTML = layout(state.conversational, state.jevOn);
+  root.innerHTML = layout(state.conversational);
   const els = {
     thread: root.querySelector("#thread"),
     form: root.querySelector("#composer"),
@@ -83,7 +82,6 @@ export function mountApp(root) {
     hold: root.querySelector("#hold"),
     conversational: root.querySelector("#conversational"),
     convoAudio: root.querySelector("#convo-audio"),
-    jevMode: root.querySelector("#jev-mode"),
     ttsWave: root.querySelector("#tts-wave"),
     quote: root.querySelector("#quote-card"),
     chatCol: root.querySelector(".chat-col"),
@@ -92,8 +90,12 @@ export function mountApp(root) {
     sample: root.querySelector("#sample"),
     sendTranscript: root.querySelector("#send-transcript"),
     sendNote: root.querySelector("#send-note"),
+    choices: root.querySelector("#choice-row"),
     reset: root.querySelector("#reset"),
+    listenHint: root.querySelector("#listen-hint"),
   };
+
+  const interaction = createQuoteInteraction({ state });
 
   const sessionRef = { current: null };
 
@@ -131,8 +133,7 @@ export function mountApp(root) {
         void acceptUserText(els, state, trimmed);
       },
       onEmpty() {
-        if (state.busy) return;
-        push(state, "assistant", "I didn’t catch that. Say it again, or type it.");
+        interaction.onEmptyMic();
         render(els, state);
       },
     };
@@ -180,21 +181,15 @@ export function mountApp(root) {
     render(els, state);
   }
 
-  function toggleJev() {
-    state.jevOn = saveJevSessionEnabled(!state.jevOn, browserSessionStore());
-    state.session.jevEnabled = state.jevOn;
-    render(els, state);
-  }
-
   els.conversational?.addEventListener("click", toggleConversational);
   els.convoAudio?.addEventListener("click", toggleConversational);
-  els.jevMode?.addEventListener("click", toggleJev);
 
   els.form.addEventListener("submit", (e) => {
     e.preventDefault();
     const text = els.input.value.trim();
     if (!text || state.busy) return;
     els.input.value = "";
+    interaction.onTyping();
     void acceptUserText(els, state, text);
   });
 
@@ -209,19 +204,32 @@ export function mountApp(root) {
 
   els.reset.addEventListener("click", () => {
     state.session = createSession();
-    state.session.jevEnabled = state.jevOn;
-    state.messages = [{ role: "assistant", text: greetingFor(state.conversational) }];
+    state.messages = [{ role: "assistant", text: greetingFor(state.conversational), at: new Date().toISOString() }];
     stopAgentSpeech();
     state.emailNote = null;
+    interaction.afterAsk();
     render(els, state);
   });
 
   root.addEventListener("click", (e) => {
     const quoteBtn = e.target.closest("[data-email-quote]");
     if (quoteBtn) void sendEmail(els, state);
+    const choice = e.target.closest("[data-choice]");
+    if (!choice || state.busy) return;
+    if (state.session.awaiting !== "liftgate_side") return;
+    const text = choice.getAttribute("data-choice") || "";
+    if (!text) return;
+    interaction.onTyping();
+    void acceptUserText(els, state, text);
+  });
+
+  els.input?.addEventListener("input", () => {
+    interaction.onTyping();
+    render(els, state);
   });
 
   render(els, state);
+  interaction.afterAsk();
 }
 
 function pageApiBase() {
@@ -235,23 +243,14 @@ function speakOrStop(state, reply) {
 
 async function acceptUserText(els, state, text) {
   if (state.busy) return;
+  state.listenHint = "";
   push(state, "user", text);
   render(els, state);
 
-  state.session.jevEnabled = state.jevOn;
-  const jev = await fetchJevDecision({
-    utterance: text,
-    sheet: state.session.sheet,
-    recentReplies: recentAssistantReplies(state.messages, 3),
-    awaiting: state.session.awaiting,
-    askedAccessorials: state.session.askedAccessorials,
-    search: typeof location !== "undefined" ? location.search : "",
-    storage: browserStorage(),
-    sessionStore: browserSessionStore(),
-  });
-  const result = handleUtterance(state.session, text, { jev });
+  const result = handleUtterance(state.session, text);
   state.session = result.session;
   const reply = presentAgentReply(result, state.conversational);
+  state.listenHint = "";
   push(state, "assistant", reply);
   render(els, state);
   speakOrStop(state, reply);
@@ -384,7 +383,7 @@ async function sendEmail(els, state) {
 }
 
 function push(state, role, text) {
-  state.messages.push({ role, text });
+  state.messages.push({ role, text, at: new Date().toISOString() });
 }
 
 function render(els, state) {

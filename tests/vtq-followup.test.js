@@ -75,17 +75,18 @@ describe("city vs ZIP metro mismatch — do not silent-keep", () => {
     expect(zip.session.sheet.lanes.origin.state).toBe("GA");
   });
 
-  it("Atlanta origin + 78721 dest Austin still asks role, not city-vs-ZIP", () => {
-    const session = createSession({ id: "role-still" });
+  it("Atlanta origin + 78721 with dest city Austin parks on Austin without a confirm", () => {
+    const session = createSession({ id: "role-match" });
     session.sheet.lanes.origin.city = "Atlanta";
     session.sheet.lanes.destination.city = "Austin";
     session.sheet.lanes.destination.state = "TX";
     session.awaiting = "origin_zip";
     const result = handleUtterance(session, "78721");
     expect(result.session.sheet.lanes.origin.postal_code).toBeNull();
-    expect(result.reply).toMatch(/78721 looks like Austin/i);
-    expect(result.reply).toMatch(/destination ZIP/i);
-    expect(result.extracted.flags.zipClarify.kind).toBe("role");
+    expect(result.session.sheet.lanes.destination.postal_code).toBe("78721");
+    expect(result.session.sheet.lanes.destination.city).toBe("Austin");
+    expect(result.reply).not.toMatch(/looks like/i);
+    expect(result.extracted.flags.zipClarify).toBeFalsy();
   });
 });
 

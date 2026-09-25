@@ -246,7 +246,8 @@ describe("voice quote stays on its own path", () => {
   it("does not register the pilot form inside the VTQ app bundle", () => {
     const app = readClientUi();
     expect(app).not.toContain("exfresso-pilot");
-    expect(app).toContain("fetchJevDecision");
+    expect(app).not.toContain("fetchJevDecision");
+    expect(app).not.toContain("jev-mode");
     const dialog = readFileSync("src/lib/dialog.js", "utf8");
     expect(dialog).toContain("What’s the origin zip code?");
   });

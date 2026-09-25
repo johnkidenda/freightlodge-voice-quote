@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { extractSlots } from "../src/lib/extract.js";
 import { createSession, handleUtterance } from "../src/lib/dialog.js";
 import { nextRequiredSlot } from "../src/lib/completeness.js";
-import { normalizeJevDecision } from "../src/lib/jev-core.js";
 import { presentAgentReply } from "../src/lib/conversational.js";
 
 function readyForAccessorials(id = "acc") {
@@ -17,18 +16,6 @@ function readyForAccessorials(id = "acc") {
   session.awaiting = "accessorials";
   session.askedAccessorials = false;
   return session;
-}
-
-function jevAccessorialsClarify() {
-  return normalizeJevDecision({
-    on: true,
-    ready: false,
-    needsClarify: true,
-    focus: "accessorials",
-    touchedSlots: ["accessorials"],
-    readyNoul: 0.1,
-    clarifyNoul: 0.8,
-  });
 }
 
 describe("inside without a side asks which end", () => {
@@ -95,10 +82,8 @@ describe("inside without a side asks which end", () => {
     expect(result.reply).not.toMatch(/didn[’']t catch a new accessorials/i);
   });
 
-  it("asks which side even when Jev wants a generic accessorials clarify", () => {
-    const result = handleUtterance(readyForAccessorials("in-jev"), "inside", {
-      jev: jevAccessorialsClarify(),
-    });
+  it("asks which side for a bare inside", () => {
+    const result = handleUtterance(readyForAccessorials("in-side"), "inside");
     expect(result.session.sheet.pickup.accessorials).toEqual([]);
     expect(result.session.awaiting).toBe("inside_side");
     expect(result.reply).toBe("Inside pickup, inside delivery, or both?");

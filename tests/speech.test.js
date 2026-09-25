@@ -410,25 +410,11 @@ describe("pieces prompt accepts a short pallet count", () => {
     expect(result.session.sheet.lanes.destination.postal_code).toBe("60101");
   });
 
-  it("still advances when Jev marks the short answer low-parse", () => {
-    const result = handleUtterance(piecesSession(), "one pallet", {
-      jev: {
-        on: true,
-        needsClarify: true,
-        lowParse: true,
-        parseScore: 0.2,
-        clarifyNoul: 0.9,
-        ready: false,
-        readyNoul: 0.1,
-        touchedSlots: ["pieces"],
-        primarySlot: "pieces",
-        focus: "pieces",
-      },
-    });
+  it("still advances on a short pallet count", () => {
+    const result = handleUtterance(piecesSession(), "one pallet");
     expect(result.session.sheet.freight.pieces).toBe(1);
     expect(result.session.awaiting).not.toBe("pieces");
-    expect(result.jev.needsClarify).toBe(false);
-    expect(result.jev.gateOverride).toBe("min-fields");
+    expect(result.jev).toBeUndefined();
   });
 });
 

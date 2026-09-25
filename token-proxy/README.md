@@ -4,11 +4,12 @@ Cloudflare Worker / local Node stub that proxies **Jev** (TypeSafe System One) a
 
 Mic → text is **Web Speech only**. Spoken agent replies use browser `speechSynthesis`. This proxy does not mint STT tokens or serve TTS audio.
 
-## What the SPA calls
+## What the quote app calls
 
 1. Reads `VITE_API_BASE_URL` (this Worker or the local stub / Vite `/api`)
-2. POSTs to `{base}/jev` after each utterance
-3. POSTs to `{base}/email/verify/*` and `{base}/email/quote` for email flows
+2. POSTs to `{base}/email/verify/*` and `{base}/email/quote` for email flows
+
+The quote app does not call `/jev`. `POST /jev` and `POST /jev-action` are still on this Worker. The Exfresso pilot uses `/jev-action`.
 
 ## Deploy (Cloudflare Worker)
 

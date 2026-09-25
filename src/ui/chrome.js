@@ -39,20 +39,23 @@ export function renderChrome(els, state) {
       els.input.setAttribute("autocomplete", "off");
     }
   }
-  renderJevMode(els, state);
   renderConvoAudio(els, state);
   renderTtsWave(els, state);
+  renderChoiceRow(els, state);
+  renderListenHint(els, state);
 }
 
-function renderJevMode(els, state) {
-  if (!els.jevMode) return;
-  const on = state.jevOn !== false;
-  els.jevMode.classList.toggle("is-active", on);
-  els.jevMode.setAttribute("aria-pressed", on ? "true" : "false");
-  els.jevMode.textContent = on ? "Jev on" : "Jev off";
-  const label = on ? "Jev is on. Turn Jev off." : "Jev is off. Turn Jev on.";
-  els.jevMode.title = label;
-  els.jevMode.setAttribute("aria-label", label);
+function renderListenHint(els, state) {
+  if (!els.listenHint) return;
+  const text = state.listenHint || "";
+  els.listenHint.hidden = !text;
+  els.listenHint.textContent = text;
+}
+
+function renderChoiceRow(els, state) {
+  if (!els.choices) return;
+  const show = state.session?.awaiting === "liftgate_side";
+  els.choices.hidden = !show;
 }
 
 function renderConvoAudio(els, state) {

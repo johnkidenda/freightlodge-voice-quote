@@ -1,44 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { createSession, handleUtterance } from "../src/lib/dialog.js";
-import { presentAgentReply } from "../src/lib/conversational.js";
+import { existsSync, readFileSync } from "node:fs";
+import { createSession } from "../src/lib/dialog.js";
+import { formatSessionTranscript } from "../src/lib/transcript.js";
 import {
-  JEV_SESSION_KEY,
   JEV_SLOT_IDS,
-  JEV_STORAGE_KEY,
   buildJevQuestions,
   buildJevState,
-  fetchJevDecision,
   formatJevStamp,
-  formatJevTranscriptLine,
-  getJevProxyUrl,
   guardJevDecision,
   interpretJevAnswers,
-  isJevDisabled,
-  normalizeJevDecision,
-  readJevSessionFlag,
-  saveJevSessionEnabled,
   offDecision,
-} from "../src/lib/jev.js";
-import { formatSessionTranscript } from "../src/lib/transcript.js";
-import { TYPESAFE_SYSTEMONE_URL } from "../src/lib/jev-core.js";
+  TYPESAFE_SYSTEMONE_URL,
+} from "../src/lib/jev-core.js";
 import { evaluateUtteranceJev } from "../token-proxy/src/jev.js";
 import worker from "../token-proxy/src/index.js";
 import { PAGES_ORIGIN } from "../token-proxy/src/cors.js";
-
-function readySheet() {
-  const session = createSession({ id: "ready-jev" });
-  session.sheet.lanes.origin.postal_code = "60601";
-  session.sheet.lanes.destination.postal_code = "75201";
-  session.sheet.freight.pieces = 3;
-  session.sheet.freight.total_weight_lbs = 1200;
-  session.sheet.freight.commodity = "auto parts";
-  session.sheet.pickup.date = "2026-09-20";
-  session.sheet.contact.email = "shipper@example.com";
-  session.askedAccessorials = true;
-  session.awaiting = null;
-  return session;
-}
 
 function jevAnswers({
   ready = 0.1,
@@ -155,283 +131,6 @@ describe("Jev filled-slot guard", () => {
   });
 });
 
-describe("dialog uses Jev for slot focus + gates", () => {
-  it("focuses extract awaiting when Jev is confident about dest ZIP", () => {
-    const session = createSession({ id: "jev-focus" });
-    session.sheet.lanes.origin.city = "Atlanta";
-    session.sheet.lanes.origin.postal_code = "30301";
-    session.sheet.lanes.destination.city = "Dallas";
-    session.sheet.lanes.destination.state = "TX";
-    session.awaiting = "origin_zip";
-    const jev = normalizeJevDecision({
-      on: true,
-      touchedSlots: ["dest_zip"],
-      primarySlot: "dest_zip",
-      focus: "dest_zip",
-      ready: false,
-      needsClarify: false,
-    });
-    const result = handleUtterance(session, "75201", { jev });
-    expect(result.session.sheet.lanes.destination.postal_code).toBe("75201");
-    expect(result.session.sheet.lanes.origin.postal_code).toBe("30301");
-    expect(result.session.awaiting).not.toBe("origin_zip");
-    expect(result.session.jevLog.at(-1)).toMatch(/^Jev: on /);
-  });
-
-  it("does not re-focus or re-ask a filled dest ZIP (7c4fd9ff)", () => {
-    const session = createSession({ id: "filled-dest" });
-    session.sheet.lanes.origin = { city: "Austin", state: "TX", postal_code: "78721" };
-    session.sheet.lanes.destination = { city: "Atlanta", state: "GA", postal_code: "30030" };
-    session.sheet.freight.total_weight_lbs = 1000;
-    session.sheet.freight.commodity = "oranges";
-    session.awaiting = "dest_zip";
-    const jev = normalizeJevDecision({
-      on: true,
-      ready: false,
-      needsClarify: true,
-      focus: "dest_zip",
-      touchedSlots: ["dest_zip"],
-      readyNoul: 0.03,
-      clarifyNoul: 0.8,
-      parseScore: 0.37,
-    });
-    const result = handleUtterance(session, "30030", { jev });
-    expect(result.session.sheet.lanes.destination.postal_code).toBe("30030");
-    expect(result.session.awaiting).toBe("piece_unit");
-    expect(result.jev.focus).toBeNull();
-    expect(result.jev.needsClarify).toBe(false);
-    expect(result.reply).toMatch(/pieces|pallets/i);
-    expect(result.reply).not.toMatch(/destination ZIP/i);
-    expect(result.session.jevLog.at(-1)).toContain("gate=advance");
-    expect(result.session.jevLog.at(-1)).not.toContain("gate=clarify");
-    expect(result.session.jevLog.at(-1)).not.toContain("focus=dest_zip");
-  });
-
-  it("ignores clarify gate when origin ZIP, dest ZIP, and weight are filled", () => {
-    const session = readySheet();
-    const jev = normalizeJevDecision({
-      on: true,
-      ready: true,
-      needsClarify: true,
-      focus: "pickup_date",
-      readyNoul: 0.8,
-      clarifyNoul: 0.86,
-    });
-    const result = handleUtterance(session, "that date is fine I think", { jev });
-    expect(result.ready).toBe(true);
-    expect(result.session.sheet.status).toBe("ready_for_quote");
-    expect(result.reply).toMatch(/Handing this to Freight Ops/i);
-    expect(result.session.jevLog.at(-1)).toContain("gate=advance");
-  });
-
-  it("does not block Exfresso ready when heuristics are complete and ready noul is low", () => {
-    const session = readySheet();
-    const jev = normalizeJevDecision({
-      on: true,
-      ready: false,
-      needsClarify: false,
-      readyNoul: 0.03,
-      clarifyNoul: 0.1,
-    });
-    const result = handleUtterance(session, "looks good", { jev });
-    expect(result.ready).toBe(true);
-    expect(result.session.sheet.status).toBe("ready_for_quote");
-    expect(result.reply).toMatch(/Handing this to Freight Ops/i);
-  });
-
-  it("still clarifies when dest ZIP is missing and Jev asks dest_zip", () => {
-    const session = createSession({ id: "jev-clarify-empty" });
-    session.sheet.lanes.origin = { city: "Austin", state: "TX", postal_code: "78721" };
-    session.sheet.lanes.destination = { city: "Atlanta", state: "GA", postal_code: null };
-    session.awaiting = "dest_zip";
-    const jev = normalizeJevDecision({
-      on: true,
-      ready: false,
-      needsClarify: true,
-      focus: "dest_zip",
-      readyNoul: 0.1,
-      clarifyNoul: 0.8,
-    });
-    const result = handleUtterance(session, "I think so", { jev });
-    expect(result.ready).toBe(false);
-    expect(result.session.awaiting).toBe("dest_zip");
-    expect(result.reply).toMatch(/double-check destination/i);
-    expect(result.reply).not.toMatch(/\u2014/);
-    expect(result.session.jevLog.at(-1)).toContain("gate=clarify");
-  });
-
-  it("does not re-ask origin ZIP after it is parked", () => {
-    let session = createSession({ id: "origin-once" });
-    session = handleUtterance(
-      session,
-      "want to ship a thousand pounds of oranges from Austin Texas to Atlanta Georgia",
-    ).session;
-    expect(session.sheet.lanes.origin.postal_code).toBeNull();
-    const jev = normalizeJevDecision({
-      on: true,
-      ready: false,
-      needsClarify: true,
-      focus: "origin_zip",
-      touchedSlots: ["origin_zip"],
-      readyNoul: 0.1,
-      clarifyNoul: 0.7,
-    });
-    const result = handleUtterance(session, "78721", { jev });
-    expect(result.session.sheet.lanes.origin.postal_code).toBe("78721");
-    expect(result.session.awaiting).toBe("dest_zip");
-    expect(result.jev.focus).toBeNull();
-    expect(result.jev.needsClarify).toBe(false);
-    const warm = presentAgentReply(result, true);
-    expect(warm).not.toMatch(/origin zip(?: code)? for Austin/i);
-    expect(warm).toMatch(/destination ZIP/i);
-  });
-
-  it("falls back to heuristics when Jev is off", () => {
-    const session = readySheet();
-    const result = handleUtterance(session, "go ahead", { jev: offDecision("no key") });
-    expect(result.ready).toBe(true);
-    expect(result.session.jevLog.at(-1)).toBe("Jev: off (no key)");
-  });
-});
-
-describe("client Jev proxy helper", () => {
-  it("derives /jev from VITE_API_BASE_URL", () => {
-    expect(getJevProxyUrl({ VITE_API_BASE_URL: "/api" })).toBe("/api/jev");
-    expect(getJevProxyUrl({ VITE_API_BASE_URL: "https://freightlodge-stt-token.example.workers.dev" })).toBe(
-      "https://freightlodge-stt-token.example.workers.dev/jev",
-    );
-    expect(getJevProxyUrl({ VITE_API_BASE_URL: "https://proxy.example" })).toBe("https://proxy.example/jev");
-    expect(getJevProxyUrl({ VITE_API_BASE_URL: "" })).toBe("");
-  });
-
-  it("?jev=0 skips Jev and never calls the proxy", async () => {
-    const storage = new Map();
-    const mem = {
-      getItem: (k) => (storage.has(k) ? storage.get(k) : null),
-      setItem: (k, v) => storage.set(k, String(v)),
-    };
-    expect(isJevDisabled({ search: "?jev=0", storage: mem })).toBe(true);
-    expect(mem.getItem(JEV_STORAGE_KEY)).toBe("0");
-    const decision = await fetchJevDecision({
-      utterance: "78721",
-      url: "https://proxy.example/jev",
-      search: "?jev=0",
-      storage: mem,
-      fetchImpl: async () => {
-        throw new Error("should not fetch");
-      },
-    });
-    expect(decision).toEqual(offDecision("disabled"));
-    expect(isJevDisabled({ search: "", storage: mem })).toBe(true);
-    expect(isJevDisabled({ search: "?jev=1", storage: mem, sessionStore: mem })).toBe(false);
-    expect(
-      await fetchJevDecision({
-        utterance: "78721",
-        url: "https://proxy.example/jev",
-        search: "?jev=1",
-        storage: mem,
-        fetchImpl: async () => ({
-          ok: true,
-          status: 200,
-          json: async () => ({ ok: true, jev: "on", answers: jevAnswers() }),
-        }),
-      }),
-    ).toMatchObject({ on: true });
-  });
-
-  it("session toggle skips Jev without writing the long-lived flag", async () => {
-    const storage = new Map();
-    const local = {
-      getItem: (k) => (storage.has(k) ? storage.get(k) : null),
-      setItem: (k, v) => storage.set(k, String(v)),
-    };
-    const session = new Map();
-    const tab = {
-      getItem: (k) => (session.has(k) ? session.get(k) : null),
-      setItem: (k, v) => session.set(k, String(v)),
-    };
-    expect(readJevSessionFlag(tab)).toBeNull();
-    expect(isJevDisabled({ search: "", storage: local, sessionStore: tab })).toBe(false);
-    expect(saveJevSessionEnabled(false, tab)).toBe(false);
-    expect(tab.getItem(JEV_SESSION_KEY)).toBe("off");
-    expect(local.getItem(JEV_STORAGE_KEY)).toBeNull();
-    expect(isJevDisabled({ search: "", storage: local, sessionStore: tab })).toBe(true);
-    const decision = await fetchJevDecision({
-      utterance: "78721",
-      url: "https://proxy.example/jev",
-      search: "",
-      storage: local,
-      sessionStore: tab,
-      fetchImpl: async () => {
-        throw new Error("should not fetch");
-      },
-    });
-    expect(decision).toEqual(offDecision("disabled"));
-
-    expect(saveJevSessionEnabled(true, tab)).toBe(true);
-    local.setItem(JEV_STORAGE_KEY, "0");
-    expect(isJevDisabled({ search: "", storage: local, sessionStore: tab })).toBe(false);
-    expect(
-      await fetchJevDecision({
-        utterance: "78721",
-        url: "https://proxy.example/jev",
-        search: "",
-        storage: local,
-        sessionStore: tab,
-        fetchImpl: async () => ({
-          ok: true,
-          status: 200,
-          json: async () => ({ ok: true, jev: "on", answers: jevAnswers() }),
-        }),
-      }),
-    ).toMatchObject({ on: true });
-  });
-
-  it("returns off on 503 / timeout and never throws", async () => {
-    const none = await fetchJevDecision({ utterance: "hi", url: "" });
-    expect(none.on).toBe(false);
-    const noKey = await fetchJevDecision({
-      utterance: "hi",
-      url: "https://proxy.example/jev",
-      fetchImpl: async () => ({ status: 503, ok: false }),
-    });
-    expect(noKey).toEqual(offDecision("no key"));
-    const failed = await fetchJevDecision({
-      utterance: "hi",
-      url: "https://proxy.example/jev",
-      fetchImpl: async () => {
-        throw new Error("network");
-      },
-    });
-    expect(failed.reason).toBe("proxy failed");
-  });
-
-  it("maps a successful proxy body to a decision", async () => {
-    const decision = await fetchJevDecision({
-      utterance: "75201",
-      sheet: { schema_version: "1.0" },
-      url: "https://proxy.example/jev",
-      fetchImpl: async (url, init) => {
-        expect(url).toBe("https://proxy.example/jev");
-        const body = JSON.parse(init.body);
-        expect(body.utterance).toBe("75201");
-        expect(body.sheet.schema_version).toBe("1.0");
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            ok: true,
-            jev: "on",
-            answers: jevAnswers({ touched: { dest_zip: 0.95 } }),
-          }),
-        };
-      },
-    });
-    expect(decision.on).toBe(true);
-    expect(decision.touchedSlots).toContain("dest_zip");
-  });
-});
-
 describe("token-proxy POST /jev", () => {
   it("returns jev off without TYPESAFE_API_KEY and does not call TypeSafe", async () => {
     const calls = [];
@@ -499,33 +198,18 @@ describe("token-proxy POST /jev", () => {
   });
 });
 
-describe("transcript + source guards", () => {
-  it("stamps Jev on the Send transcript snapshot", () => {
-    const session = createSession({ id: "jev-tx" });
-    const result = handleUtterance(session, "78721", {
-      jev: normalizeJevDecision({
-        on: true,
-        touchedSlots: ["dest_zip"],
-        focus: "dest_zip",
-        readyNoul: 0.08,
-        clarifyNoul: 0.2,
-      }),
-    });
+describe("quote app no longer calls Jev", () => {
+  it("leaves Jev mode and Jev stamps off the Send transcript", () => {
     const text = formatSessionTranscript(
       [
         { role: "user", text: "78721" },
-        { role: "assistant", text: result.reply },
+        { role: "assistant", text: "Where is this going?" },
       ],
-      result.session,
+      createSession({ id: "no-jev" }),
     );
     expect(text).toContain("STT: Web Speech");
-    expect(text).toContain("Jev mode: on");
-    expect(text).toMatch(/Jev: on /);
-    expect(text).toContain("slots=dest_zip");
-    expect(formatJevTranscriptLine(createSession({ id: "empty" }))).toBe("Jev: off");
-    const off = formatSessionTranscript([], { ...result.session, jevEnabled: false });
-    expect(off).toContain("Jev mode: off");
-    expect(off).not.toContain("Jev mode: on");
+    expect(text).not.toMatch(/Jev mode:/);
+    expect(text).not.toMatch(/^Jev:/m);
   });
 
   it("keeps TYPESAFE_API_KEY off the Pages client and out of VITE_*", () => {
@@ -536,11 +220,11 @@ describe("transcript + source guards", () => {
       "src/ui/mic.js",
       "src/ui/quote-card.js",
       "src/lib/quote-email-html.js",
-      "src/lib/jev.js",
+      "src/lib/dialog.js",
+      "src/lib/transcript.js",
       "src/lib/jev-core.js",
       "src/lib/jev-action-core.js",
       "token-proxy/src/jev-action.js",
-      "src/lib/transcript.js",
       "src/lib/stt-providers.js",
     ];
     for (const file of files) {
@@ -548,22 +232,26 @@ describe("transcript + source guards", () => {
       expect(src, file).not.toMatch(/VITE_TYPESAFE/);
       expect(src, file).not.toMatch(/TYPESAFE_API_KEY\s*=/);
     }
+    expect(existsSync("src/lib/jev.js")).toBe(false);
     const app = readFileSync("src/app.js", "utf8");
-    expect(app).toContain("fetchJevDecision");
-    expect(app).toContain("isJevDisabled");
-    expect(app).toContain("handleUtterance(state.session, text, { jev })");
-    expect(app).toContain("saveJevSessionEnabled");
-    expect(app).toContain("sessionStorage");
-    expect(app).toContain("jevEnabled");
+    expect(app).not.toContain("fetchJevDecision");
+    expect(app).not.toContain("isJevDisabled");
+    expect(app).not.toContain("saveJevSessionEnabled");
+    expect(app).not.toContain("freightlodge.jev");
+    expect(app).not.toContain("sessionStorage");
     const layout = readFileSync("src/ui/layout.js", "utf8");
-    expect(layout).toContain('id="jev-mode"');
-    expect(layout).toContain("Jev on");
-    expect(layout).toContain("Jev off");
+    expect(layout).not.toContain('id="jev-mode"');
+    expect(layout).not.toContain("Jev on");
+    expect(layout).not.toContain("Jev off");
+    const dialog = readFileSync("src/lib/dialog.js", "utf8");
+    expect(dialog).not.toContain("jev-core");
+    expect(dialog).not.toContain("guardJevDecision");
     const chrome = readFileSync("src/ui/chrome.js", "utf8");
     expect(chrome).toContain("is-count-ask");
     expect(chrome).toContain("Type the number…");
     const css = readFileSync("src/style.css", "utf8");
     expect(css).toMatch(/\.composer\.is-count-ask/);
+    expect(css).not.toContain("#jev-mode");
     expect(app).not.toMatch(/openrouter/i);
     expect(app).not.toMatch(/api\.anthropic|api\.x\.ai|openai\.com\/v1\/chat/i);
   });

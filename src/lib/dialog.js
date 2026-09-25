@@ -1,10 +1,12 @@
 import { emptySheet } from "./sheet.js";
 import {
+  awaitingSlotIsFilled,
   isReadyForQuote,
   isValidZip,
   nextRequiredSlot,
   pieceUnitForAck,
   spokenPieceCount,
+  utteranceCorrectsSlot,
 } from "./completeness.js";
 import {
   applyCityZipChoice,
@@ -21,17 +23,9 @@ import {
 } from "./extract.js";
 import { detectOutOfScope } from "./scope.js";
 import { stateDisplayName } from "./zip-state.js";
-import {
-  appendJevLog,
-  awaitingSlotIsFilled,
-  guardJevDecision,
-  jevClarifyScript,
-  normalizeJevDecision,
-  utteranceCorrectsSlot,
-} from "./jev-core.js";
 
 export const GREETING =
-  "Freight Lodge. I’ll take a US domestic LTL quote. Where are we picking up? What’s the origin zip code?";
+  "Freight Lodge. I’ll take a US domestic LTL quote. What’s the origin zip code?";
 
 const PROMPTS = {
   origin_zip: "What’s the origin zip code? City is helpful, but I need the 5-digit zip code.",
@@ -65,8 +59,8 @@ export function createSession({ id, now } = {}) {
     lastBareZip: null,
     zipClarify: null,
     accessorialClarify: null,
+    dateClarify: null,
     sameZipConfirmed: false,
-    jevLog: [],
   };
 }
 
@@ -175,7 +169,7 @@ function decideLiftgateSide(raw) {
     return "both";
   }
   const pick = /\b(pick\s*-?\s*up|pickup|origin)\b/.test(t);
-  const deliv = /\b(deliv|destination|dest)\b/.test(t);
+  const deliv = /\b(deliver\w*|destination|dest)\b/.test(t);
   if (pick && deliv) return "both";
   if (pick) return "pickup";
   if (deliv) return "delivery";
@@ -215,19 +209,75 @@ function insideIdsForSide(side) {
 
 const DIGIT_WORDS = ["", "one", "two", "three", "four", "five", "six"];
 
-function incompleteZipReply(flag) {
+function incompleteZipPhrase(flag) {
   const digits = String(flag?.digits || "");
   const role = flag?.role;
-  if (flag?.labeled && digits && (role === "dest" || role === "origin")) {
-    const side = role === "dest" ? "destination" : "origin";
-    const n = digits.length;
-    const word = DIGIT_WORDS[n] || String(n);
-    const unit = n === 1 ? "digit" : "digits";
-    return `I heard ${digits} for the ${side}, which is only ${word} ${unit}. What’s the full zip code?`;
-  }
+  if (!flag?.labeled || !digits || (role !== "dest" && role !== "origin")) return "";
+  const side = role === "dest" ? "destination" : "origin";
+  const n = digits.length;
+  const word = DIGIT_WORDS[n] || String(n);
+  const unit = n === 1 ? "digit" : "digits";
+  return `${digits} for the ${side}, which is only ${word} ${unit}`;
+}
+
+function incompleteZipReply(flag) {
+  const phrase = incompleteZipPhrase(flag);
+  if (phrase) return `I heard ${phrase}. What’s the full zip code?`;
+  const role = flag?.role;
   if (role === "dest") return PROMPTS.incomplete_dest_zip;
   if (role === "origin") return PROMPTS.incomplete_origin_zip;
   return PROMPTS.incomplete_zip;
+}
+
+function incompleteZipsReply(flags) {
+  const phrases = (flags || []).map(incompleteZipPhrase).filter(Boolean);
+  if (phrases.length < 2) return incompleteZipReply(flags?.[0]);
+  return `I heard ${phrases[0]} and ${phrases[1]}. What are the full 5-digit zip codes?`;
+}
+
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+export function formatSpokenDate(iso) {
+  const [y, m, d] = String(iso || "").split("-").map(Number);
+  if (!y || !m || !d) return String(iso || "");
+  const dt = new Date(y, m - 1, d);
+  if (Number.isNaN(dt.getTime())) return String(iso || "");
+  return `${WEEKDAY_NAMES[dt.getDay()]} ${MONTH_ABBR[m - 1]} ${d}`;
+}
+
+/** Readback when "next <weekday>" is only a day or two away. */
+export function ambiguousDateQuestion(flag) {
+  return `${formatSpokenDate(flag?.soon)}, or ${formatSpokenDate(flag?.later)}?`;
+}
+
+function isoDay(iso) {
+  const n = Number(String(iso || "").slice(8, 10));
+  return Number.isInteger(n) ? n : null;
+}
+
+export function resolveAmbiguousDateChoice(raw, flag) {
+  if (!flag?.soon || !flag?.later) return null;
+  const t = String(raw || "")
+    .toLowerCase()
+    .replace(/['’]/g, "");
+  if (!t.trim()) return null;
+  if (t.includes(flag.soon)) return flag.soon;
+  if (t.includes(flag.later)) return flag.later;
+  if (/\b(later|second|other one|week after|next week|the following)\b/.test(t)) return flag.later;
+  if (/\b(sooner|earlier|first one|this week|tomorrow)\b/.test(t)) return flag.soon;
+  const soonLabel = formatSpokenDate(flag.soon).toLowerCase();
+  const laterLabel = formatSpokenDate(flag.later).toLowerCase();
+  if (t.includes(soonLabel)) return flag.soon;
+  if (t.includes(laterLabel)) return flag.later;
+  const soonDay = isoDay(flag.soon);
+  const laterDay = isoDay(flag.later);
+  const days = [...t.matchAll(/\b(\d{1,2})(?:st|nd|rd|th)?\b/g)].map((m) => Number(m[1]));
+  const soonHit = days.includes(soonDay);
+  const laterHit = days.includes(laterDay);
+  if (soonHit && !laterHit) return flag.soon;
+  if (laterHit && !soonHit) return flag.later;
+  return null;
 }
 
 function addAccessorials(extracted, ids) {
@@ -261,17 +311,9 @@ export function openingMessage() {
  * Advance the quote sheet from one user utterance.
  * Never invents ZIPs, dims, weights, or freight class.
  */
-export function handleUtterance(session, text, { now, jev } = {}) {
+export function handleUtterance(session, text, { now } = {}) {
   const raw = (text || "").trim();
   const sheet0 = session.sheet;
-  const jevRaw = jev ? normalizeJevDecision(jev) : null;
-  const jevDecision = jevRaw
-    ? guardJevDecision(jevRaw, {
-        sheet: sheet0,
-        utterance: raw,
-        askedAccessorials: session.askedAccessorials,
-      })
-    : null;
   const scope = detectOutOfScope(raw, sheet0);
   if (scope.outOfScope) {
     const sheet = {
@@ -285,13 +327,11 @@ export function handleUtterance(session, text, { now, jev } = {}) {
         ...session,
         sheet,
         awaiting: null,
-        jevLog: appendJevLog(session, jevDecision),
       },
       reply: scope.message,
       extracted: null,
       ready: false,
       outOfScope: true,
-      jev: jevDecision,
     };
   }
 
@@ -306,9 +346,7 @@ export function handleUtterance(session, text, { now, jev } = {}) {
       : session.zipClarify.attemptedRole === "origin"
         ? "origin_zip"
         : awaitingNow
-    : jevDecision?.on && jevDecision.focus
-      ? jevDecision.focus
-      : awaitingNow;
+    : awaitingNow;
 
   let sheetFromClarify = sheet0;
   let zipClarify = session.zipClarify || null;
@@ -340,12 +378,21 @@ export function handleUtterance(session, text, { now, jev } = {}) {
     }
   }
 
+  const pendingDateChoice = session.dateClarify
+    ? resolveAmbiguousDateChoice(raw, session.dateClarify)
+    : null;
+  session = { ...session, dateClarify: null };
+
   const extracted = extractSlots(raw, {
     now,
     awaiting: extractAwaiting,
     originCity: sheetFromClarify.lanes?.origin?.city,
     destCity: sheetFromClarify.lanes?.destination?.city,
   });
+  if (pendingDateChoice && !extracted.pickup?.date) extracted.pickup.date = pendingDateChoice;
+  if (extracted.flags?.ambiguousDate && extracted.pickup?.date) {
+    extracted.flags.ambiguousDate = null;
+  }
   if (
     zipClarifyDecided &&
     !firstBareZip(raw) &&
@@ -409,7 +456,9 @@ export function handleUtterance(session, text, { now, jev } = {}) {
   const zipForIntent =
     zipIntent === "origin" ? extracted.origin.postal_code : zipIntent === "dest" ? extracted.destination.postal_code : null;
   if (zipIntent && zipForIntent) {
-    const verdict = resolveZipAttachment(sheetFromClarify, zipForIntent, zipIntent, extracted);
+    const verdict = resolveZipAttachment(sheetFromClarify, zipForIntent, zipIntent, extracted, {
+      explicit: roleWasLabeled(raw, zipIntent),
+    });
     if (verdict.clarify) {
       const uttered = [...String(raw).matchAll(/\b(\d{5})(?:-\d{4})?\b/g)].map((m) => m[1]);
       const altZip = uttered.find((z) => z !== zipForIntent) || null;
@@ -417,7 +466,9 @@ export function handleUtterance(session, text, { now, jev } = {}) {
       if (zipIntent === "dest") delete extracted.destination.postal_code;
       if (altZip) {
         const otherRole = zipIntent === "origin" ? "dest" : "origin";
-        const altVerdict = resolveZipAttachment(sheetFromClarify, altZip, otherRole, extracted);
+        const altVerdict = resolveZipAttachment(sheetFromClarify, altZip, otherRole, extracted, {
+          explicit: roleWasLabeled(raw, otherRole),
+        });
         if (!altVerdict.clarify && altVerdict.attach) {
           applyZipRoleMove(extracted, altZip, altVerdict.attach);
         }
@@ -434,7 +485,9 @@ export function handleUtterance(session, text, { now, jev } = {}) {
     for (const role of roles) {
       const zip = role === "origin" ? extracted.origin.postal_code : extracted.destination.postal_code;
       if (!zip) continue;
-      const verdict = resolveZipAttachment(sheetFromClarify, zip, role, extracted);
+      const verdict = resolveZipAttachment(sheetFromClarify, zip, role, extracted, {
+        explicit: roleWasLabeled(raw, role),
+      });
       if (verdict.clarify) {
         if (role === "origin") delete extracted.origin.postal_code;
         if (role === "dest") delete extracted.destination.postal_code;
@@ -532,10 +585,6 @@ export function handleUtterance(session, text, { now, jev } = {}) {
     askedAccessorials = true;
   }
 
-  const jevAfter = jevRaw
-    ? guardJevDecision(jevRaw, { sheet, utterance: raw, askedAccessorials })
-    : null;
-
   if (extracted.flags.zipClarify) {
     const reply = zipClarifyQuestion(extracted.flags.zipClarify, sheet);
     const clarified =
@@ -543,7 +592,7 @@ export function handleUtterance(session, text, { now, jev } = {}) {
     const stay = awaitingSlotIsFilled(sheet, clarified)
       ? nextRequiredSlot(sheet, { askedAccessorials }) || clarified
       : clarified;
-    return finish(session, sheet, askedAccessorials, reply, extracted, stay, undefined, lastBareZip, zipClarify, jevAfter, accessorialClarify);
+    return finish(session, sheet, askedAccessorials, reply, extracted, stay, undefined, lastBareZip, zipClarify, accessorialClarify);
   }
 
   if (extracted.flags.ambiguousInside || accessorialClarify?.kind === "inside") {
@@ -551,14 +600,14 @@ export function handleUtterance(session, text, { now, jev } = {}) {
     accessorialClarify = { kind: "inside", pendingLiftgate };
     const ack = acknowledge(extracted, sheet);
     const reply = ack ? `${ack} ${PROMPTS.inside_side}` : PROMPTS.inside_side;
-    return finish(session, sheet, askedAccessorials, reply, extracted, "inside_side", undefined, lastBareZip, zipClarify, jevAfter, accessorialClarify);
+    return finish(session, sheet, askedAccessorials, reply, extracted, "inside_side", undefined, lastBareZip, zipClarify, accessorialClarify);
   }
 
   if (extracted.flags.ambiguousLiftgate || accessorialClarify?.kind === "liftgate") {
     accessorialClarify = { kind: "liftgate" };
     const ack = acknowledge(extracted, sheet);
     const reply = ack ? `${ack} ${PROMPTS.liftgate_side}` : PROMPTS.liftgate_side;
-    return finish(session, sheet, askedAccessorials, reply, extracted, "liftgate_side", undefined, lastBareZip, zipClarify, jevAfter, accessorialClarify);
+    return finish(session, sheet, askedAccessorials, reply, extracted, "liftgate_side", undefined, lastBareZip, zipClarify, accessorialClarify);
   }
 
   if (
@@ -573,7 +622,14 @@ export function handleUtterance(session, text, { now, jev } = {}) {
       awaitingNow === "piece_unit"
         ? "Got the weight; are you shipping pallets or pieces?"
         : "Got the weight; I still need piece/pallet count.";
-    return finish(session, sheet, askedAccessorials, reply, extracted, awaitingNow, undefined, lastBareZip, zipClarify, jevAfter, accessorialClarify);
+    return finish(session, sheet, askedAccessorials, reply, extracted, awaitingNow, undefined, lastBareZip, zipClarify, accessorialClarify);
+  }
+
+  if (extracted.flags.incompleteZips?.length > 1) {
+    const reply = incompleteZipsReply(extracted.flags.incompleteZips);
+    const hasOrigin = extracted.flags.incompleteZips.some((flag) => flag.role === "origin");
+    const stay = hasOrigin ? "origin_zip" : "dest_zip";
+    return finish(session, sheet, askedAccessorials, reply, extracted, stay, undefined, undefined, zipClarify, accessorialClarify);
   }
 
   if (extracted.flags.incompleteZip) {
@@ -581,30 +637,38 @@ export function handleUtterance(session, text, { now, jev } = {}) {
     const reply = incompleteZipReply(extracted.flags.incompleteZip);
     const stay =
       role === "dest" ? "dest_zip" : role === "origin" ? "origin_zip" : session.awaiting;
-    return finish(session, sheet, askedAccessorials, reply, extracted, stay, undefined, undefined, zipClarify, jevAfter, accessorialClarify);
+    return finish(session, sheet, askedAccessorials, reply, extracted, stay, undefined, undefined, zipClarify, accessorialClarify);
+  }
+
+  if (extracted.flags.ambiguousDate && !extracted.pickup?.date) {
+    const dateClarify = extracted.flags.ambiguousDate;
+    const reply = ambiguousDateQuestion(dateClarify);
+    return finish(
+      { ...session, dateClarify },
+      sheet,
+      askedAccessorials,
+      reply,
+      extracted,
+      "pickup_date",
+      undefined,
+      lastBareZip,
+      zipClarify,
+      accessorialClarify,
+    );
   }
 
   if (extracted.flags.vagueMeasure && !extracted.freight.total_weight_lbs && !extracted.freight.dims && !extracted.freight.freight_class) {
     const reply =
       "If you have pounds, L×W×H, or a known NMFC class, say it. Otherwise I’ll keep asking.";
-    return finish(session, sheet, askedAccessorials, reply, extracted, undefined, undefined, lastBareZip, zipClarify, jevAfter, accessorialClarify);
+    return finish(session, sheet, askedAccessorials, reply, extracted, undefined, undefined, lastBareZip, zipClarify, accessorialClarify);
   }
 
   if (extracted.flags.vagueDate && !extracted.pickup.date) {
     const reply = "I need a pickup date (today, tomorrow, Friday, or 2026-09-20).";
-    return finish(session, sheet, askedAccessorials, reply, extracted, undefined, undefined, lastBareZip, zipClarify, jevAfter, accessorialClarify);
+    return finish(session, sheet, askedAccessorials, reply, extracted, undefined, undefined, lastBareZip, zipClarify, accessorialClarify);
   }
 
-  const jevWantsClarify = Boolean(jevAfter?.on && jevAfter.needsClarify);
-  const jevBlocksReady = Boolean(jevAfter?.on && (jevAfter.needsClarify || jevAfter.ready === false));
-
-  if (jevWantsClarify) {
-    const stay = jevAfter.focus || nextRequiredSlot(sheet, { askedAccessorials }) || extractAwaiting;
-    const reply = jevClarifyScript(jevAfter, stay);
-    return finish(session, sheet, askedAccessorials, reply, extracted, stay, undefined, lastBareZip, zipClarify, jevAfter, accessorialClarify);
-  }
-
-  if (isReadyForQuote(sheet) && askedAccessorials && !jevBlocksReady) {
+  if (isReadyForQuote(sheet) && askedAccessorials) {
     sheet = { ...sheet, status: "ready_for_quote", error_reason: null, out_of_scope_reason: null };
     const reply = "Sheet’s complete. Handing this to Freight Ops’ Exfresso runner for a live rate.";
     return {
@@ -616,13 +680,11 @@ export function handleUtterance(session, text, { now, jev } = {}) {
         lastBareZip,
         zipClarify: null,
         accessorialClarify: null,
-        jevLog: appendJevLog(session, jevAfter),
       },
       reply,
       extracted,
       ready: true,
       outOfScope: false,
-      jev: jevAfter,
     };
   }
 
@@ -652,7 +714,7 @@ export function handleUtterance(session, text, { now, jev } = {}) {
           : `I didn’t catch a new ${spokenSlot(awaiting)} in that. ${ask}`;
     }
   }
-  return finish(session, sheet, askedAccessorials, reply, extracted, awaiting, extractKey, lastBareZip, zipClarify, jevAfter, accessorialClarify);
+  return finish(session, sheet, askedAccessorials, reply, extracted, awaiting, extractKey, lastBareZip, zipClarify, accessorialClarify);
 }
 
 function placeLabel(place) {
@@ -685,6 +747,13 @@ function spokenSlot(slot) {
   if (slot === "origin_zip") return "origin zip code";
   if (slot === "dest_zip") return "destination zip code";
   return slot?.replaceAll("_", " ") || "detail";
+}
+
+function roleWasLabeled(raw, role) {
+  const t = String(raw || "");
+  if (role === "dest") return /\b(?:destination|dest|delivery|deliver(?:y|ed)?\s+to|ship\s+to)\b/i.test(t);
+  if (role === "origin") return /\b(?:origins?|pickup|pick\s*up|ship\s+from)\b/i.test(t);
+  return false;
 }
 
 function zip5(code) {
@@ -749,11 +818,10 @@ function detectSameZipClarify(sheet0, sheet) {
   };
 }
 
-function finish(session, sheet, askedAccessorials, reply, extracted, awaiting, extractKey, lastBareZip, zipClarify, jevDecision, accessorialClarify) {
+function finish(session, sheet, askedAccessorials, reply, extracted, awaiting, extractKey, lastBareZip, zipClarify, accessorialClarify) {
   const nextAwait = awaiting ?? nextRequiredSlot(sheet, { askedAccessorials });
-  const jevBlocksReady = Boolean(jevDecision?.on && (jevDecision.needsClarify || jevDecision.ready === false));
   const nextSheet =
-    isReadyForQuote(sheet) && askedAccessorials && !jevBlocksReady
+    isReadyForQuote(sheet) && askedAccessorials
       ? { ...sheet, status: "ready_for_quote" }
       : { ...sheet, status: sheet.status === "out_of_scope" ? "out_of_scope" : "collecting" };
   const stillSame = zip5(nextSheet.lanes?.origin?.postal_code) && zip5(nextSheet.lanes?.origin?.postal_code) === zip5(nextSheet.lanes?.destination?.postal_code);
@@ -775,13 +843,11 @@ function finish(session, sheet, askedAccessorials, reply, extracted, awaiting, e
       zipClarify: nextSheet.status === "ready_for_quote" ? null : zipClarify ?? null,
       accessorialClarify: nextAccessorialClarify,
       sameZipConfirmed: stillSame ? Boolean(session.sameZipConfirmed) : false,
-      jevLog: appendJevLog(session, jevDecision),
     },
     reply,
     extracted,
     ready: nextSheet.status === "ready_for_quote",
     outOfScope: false,
-    jev: jevDecision,
   };
 }
 

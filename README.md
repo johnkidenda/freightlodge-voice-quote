@@ -10,7 +10,7 @@ Playable URL (GitHub Pages project site):
 - Out of scope (hard international, ocean/air) → `status=out_of_scope` + honest message, never a fake rate
 - Sheet contract: [`docs/QUOTE_SHEET_V1.json`](docs/QUOTE_SHEET_V1.json) (`schema_version: "1.0"`)
 - v1.0.1 additives: optional `error_reason`, default `mode: "LTL"`, lowest `total_usd` if multiple rates
-- Post-utterance **Jev** (TypeSafe System One) behind the token proxy: slot focus + ready/clarify gate. Missing key or Jev failure falls back to the current heuristics. **Never** put `TYPESAFE_API_KEY` in `VITE_*`.
+- The quote conversation is rule-based. It does not call Jev. **Never** put `TYPESAFE_API_KEY` in `VITE_*`.
 
 ## Run locally
 
@@ -30,28 +30,11 @@ Open the printed localhost URL (Chrome or Safari). Hold the mic button to talk, 
 
 Optional: copy `.env.example` → `.env` if you later wire `OPENAI_API_KEY` into a local enhance endpoint. Conversational speech uses browser `speechSynthesis` only. The static app must keep working without secrets (toggle still warms the copy; browser TTS no-ops if `speechSynthesis` is missing).
 
-### API proxy (Jev + email Worker)
+### API proxy (email Worker)
 
-Point the SPA at the Cloudflare Worker (or local stub) with `VITE_API_BASE_URL`. Live Worker: `https://freightlodge-stt-token.johnkidenda.workers.dev`. Jev and email (Resend) run there. `TYPESAFE_API_KEY` and `RESEND_API_KEY` stay on the Worker, never in `VITE_*`. See [`token-proxy/README.md`](token-proxy/README.md).
+Point the SPA at the Cloudflare Worker (or local stub) with `VITE_API_BASE_URL`. Live Worker: `https://freightlodge-stt-token.johnkidenda.workers.dev`. Quote email (Resend) runs there. `RESEND_API_KEY` stays on the Worker, never in `VITE_*`. See [`token-proxy/README.md`](token-proxy/README.md).
 
-### Jev (TypeSafe System One) post-utterance decisions
-
-After each completed utterance (hold release, turn end, or typed submit) the client POSTs once to `{VITE_API_BASE_URL}/jev` with the current quote sheet JSON, the raw transcript, and a short recent-reply tail. The proxy calls TypeSafe (`POST https://api.typesafe.ai/v1/systemone`, model `jev-latest`) with:
-
-1. **Noul** `sheet_ready_for_exfresso` (enough to run Quote without inventing fields)
-2. **Choice** `primary_slot` plus per-slot **Nouls** `touched_*` (origin city/ZIP, dest city/ZIP, weight, pieces, commodity, pickup date, accessorials, email). Candidates only. No invented options.
-3. **Noul** `needs_clarify` (city/ZIP mismatch, soft date, ambiguous STT)
-4. **Score** `parse_confidence`
-
-Act only when confidence is about `>= 0.5`. Otherwise the existing rule-based parse / clarify stays in charge. Opus/Grok are not on this path. Reply copy stays as today.
-
-Send transcript stamps a quiet QA line: `Jev: on|off` plus a short decision summary.
-
-Hard rules on top of Jev: never re-ask or focus a slot that already has a value unless the user explicitly corrects it; if origin ZIP, dest ZIP, and weight are present, ignore a clarify / ready-low gate and ask the next missing field. ZIP-state checks compare a ZIP only to its own city/state (not origin vs dest).
-
-Kill switch: `?jev=0` (also `off` / `false`) skips Jev and persists in `localStorage`. `?jev=1` turns it back on.
-
-If `TYPESAFE_API_KEY` is unset, Jev fails, or the kill switch is on, the app uses heuristics only.
+The quote app does not call Jev. The Worker still exposes `POST /jev` and `POST /jev-action` for the Exfresso pilot. `TYPESAFE_API_KEY` stays on the Worker. Those routes were not removed in this change.
 
 ### Fake Exfresso computer-use pilot (v0.26)
 
@@ -178,7 +161,7 @@ The sheet collects contact email like any other slot (type the address. Voice of
 
 `POST /email/verify/start` and `/email/verify/confirm` stay on the token-proxy for later use. They are not on the quote happy path.
 
-GitHub Pages calls the same `VITE_API_BASE_URL` origin as Jev (the Cloudflare Worker). Put `RESEND_API_KEY` on the Worker, not in `VITE_*`.
+GitHub Pages calls the same `VITE_API_BASE_URL` origin (the Cloudflare Worker) for quote email. Put `RESEND_API_KEY` on the Worker, not in `VITE_*`.
 
 | Var | Where |
 | --- | --- |
@@ -222,7 +205,6 @@ npm test
 - Conversational copy + browser `speechSynthesis`; Web Speech only for STT
 - Visible `VERSION` (`v0.36` this ship) baked into the footer only
 - Quote-card email (HTML + text) without mailto; no OTP gate on the quote path
-- Post-utterance Jev via `POST /jev` (fallback when the TypeSafe key is absent; `?jev=0` disables)
 - Completeness rules for `ready_for_quote`
 - Never-invent: cities do not become ZIPs; “standard class” / “a few hundred pounds” stay `null`
 - Out of scope does not produce `quote_result`
@@ -232,4 +214,4 @@ npm test
 
 Booking, payment, live Exfresso credentials, and hard international / ocean / air quoting.
 
-Voice Jev is still the post-utterance slot / ready / clarify gate. A **fake** Exfresso multi-step form plus `POST /jev-action` DOM Choice lives at [`/exfresso-pilot/`](https://johnkidenda.github.io/freightlodge-voice-quote/exfresso-pilot/) for the computer-use A/B. It does not log into real Exfresso. Runbook: [`docs/EXFRESSO_PILOT.md`](docs/EXFRESSO_PILOT.md).
+The quote conversation does not call Jev. A **fake** Exfresso multi-step form plus `POST /jev-action` DOM Choice lives at [`/exfresso-pilot/`](https://johnkidenda.github.io/freightlodge-voice-quote/exfresso-pilot/) for the computer-use A/B. It does not log into real Exfresso. Runbook: [`docs/EXFRESSO_PILOT.md`](docs/EXFRESSO_PILOT.md).

@@ -69,28 +69,27 @@ describe("PR6 phone — origin ZIP never wipes dest", () => {
 });
 
 describe("PR6 phone — ZIP/city conflict is not a silent invert", () => {
-  it("78721 on Atlanta origin with dest Austin/TX asks before pairing", () => {
+  it("78721 on Atlanta origin with dest Austin attaches without asking", () => {
     const session = sessionAtlantaToTx();
     session.sheet.lanes.destination.city = "Austin";
     const result = handleUtterance(session, "78721");
     expect(result.session.sheet.lanes.origin.postal_code).toBeNull();
-    expect(result.session.sheet.lanes.destination.postal_code).toBeNull();
+    expect(result.session.sheet.lanes.destination.postal_code).toBe("78721");
     expect(result.session.sheet.lanes.origin.city).toBe("Atlanta");
     expect(result.session.sheet.lanes.destination.city).toBe("Austin");
     expect(result.session.sheet.lanes.destination.state).toBe("TX");
-    expect(result.reply).toMatch(/78721 looks like Austin/i);
-    expect(result.reply).toMatch(/destination ZIP/i);
+    expect(result.reply).not.toMatch(/looks like Austin/i);
+    expect(result.session.zipClarify).toBeFalsy();
   });
 
-  it("yes after conflict puts 78721 on dest, not Atlanta origin", () => {
+  it("yes after a no-city role conflict puts 78721 on dest, not Atlanta origin", () => {
     let session = sessionAtlantaToTx();
-    session.sheet.lanes.destination.city = "Austin";
     session = handleUtterance(session, "78721").session;
+    expect(session.zipClarify?.kind).toBe("role");
     const yes = handleUtterance(session, "yes");
     expect(yes.session.sheet.lanes.destination.postal_code).toBe("78721");
     expect(yes.session.sheet.lanes.origin.postal_code).toBeNull();
     expect(yes.session.sheet.lanes.origin.city).toBe("Atlanta");
-    expect(yes.session.sheet.lanes.destination.city).toBe("Austin");
     expect(yes.session.sheet.lanes.destination.state).toBe("TX");
   });
 
