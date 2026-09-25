@@ -47,12 +47,12 @@ export function layout(conversational) {
             </div>
             <button type="button" id="send-transcript" class="send-transcript">Send transcript</button>
           </div>
+          <pre id="send-note" class="send-note" hidden></pre>
           <p id="listen-hint" class="listen-hint" hidden></p>
           <button type="button" id="hold" class="hold ${speechOk ? "" : "is-disabled"}" aria-pressed="false">
             <span class="hold-dot"></span>
             <span class="hold-label">Hold to talk</span>
           </button>
-          <pre id="send-note" class="send-note" hidden></pre>
         </form>
       </section>
     </main>

@@ -442,9 +442,15 @@ button, input { font: inherit; }
   line-height: 1.35;
   color: #1b2a4a;
   white-space: pre-wrap;
-  max-height: 46vh;
+  max-height: 14rem;
   overflow: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.chat-col:has(#send-note:not([hidden])) .voice-tip {
+  display: none;
+}
+.chat-col:has(#send-note:not([hidden])) #quote-card:not(:empty) {
+  max-height: 16vh;
 }
 .listen-hint {
   margin: 0;
