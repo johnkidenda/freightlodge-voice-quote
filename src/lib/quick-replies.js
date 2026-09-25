@@ -64,8 +64,18 @@ function zipChoices(clarify, sheet, reply) {
  * Choices for the question this turn actually asked.
  * Open-ended asks (ZIPs, counts, weight, commodity, email, free dates) return null.
  */
+export function palletSanityChoices(pieces) {
+  const n = Number(pieces);
+  if (!Number.isInteger(n) || n < 1) return null;
+  return [{ label: `Yes, ${n}` }, { label: "No, fix it" }];
+}
+
 export function quickRepliesFor(result, displayedReply = result?.reply) {
-  if (!result || result.outOfScope || result.ready) return null;
+  if (!result || result.outOfScope) return null;
+  if (result.session?.awaiting === "pallet_sanity") {
+    return palletSanityChoices(result.session.sheet?.freight?.pieces);
+  }
+  if (result.ready) return null;
   const reply = String(displayedReply || "");
   if (!reply) return null;
 

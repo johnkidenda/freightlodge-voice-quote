@@ -69,7 +69,7 @@ describe("conversational reply copy", () => {
       awaiting: result.session.awaiting,
     });
     expect(warm).toBe(
-      "I have Austin and Atlanta and 1000 pounds of oranges. I still need the origin and destination zip codes.",
+      "I have 1000 pounds of oranges from Austin to Atlanta. I still need the origin and destination zip codes.",
     );
     expect(warm).not.toMatch(/\bdest\b/);
     expect(warm).not.toMatch(/\bpcs\b/);

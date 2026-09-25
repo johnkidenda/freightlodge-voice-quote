@@ -40,10 +40,8 @@ describe("piece unit then count", () => {
     expect(result.session.sheet.freight.piece_unit).toBe("pallets");
     expect(result.session.sheet.freight.pieces).toBeNull();
     expect(result.session.awaiting).toBe("pieces");
-    expect(result.reply).toBe("Got pallets. How many pallets? Please type it in.");
-    expect(presentAgentReply(result, true)).toBe(
-      "Got pallets. How many pallets? Please type it in.",
-    );
+    expect(result.reply).toBe("Got pallets. How many pallets?");
+    expect(presentAgentReply(result, true)).toBe("Got pallets. How many pallets?");
     expect(result.reply).not.toMatch(/\u2014/);
   });
 
@@ -53,8 +51,8 @@ describe("piece unit then count", () => {
     const result = handleUtterance(session, "we're shipping pieces");
     expect(result.session.sheet.freight.piece_unit).toBe("pieces");
     expect(result.session.awaiting).toBe("pieces");
-    expect(result.reply).toBe("Got pieces. How many pieces? Please type it in.");
-    expect(presentAgentReply(result, true)).toBe("Got pieces. How many pieces? Please type it in.");
+    expect(result.reply).toBe("Got pieces. How many pieces?");
+    expect(presentAgentReply(result, true)).toBe("Got pieces. How many pieces?");
   });
 
   it.each([
@@ -240,14 +238,12 @@ describe("short counts while awaiting pieces", () => {
     expect(result.reply, text).toMatch(new RegExp(`Got ${count} pallet`));
   });
 
-  it("count ask copy steers to typing and still accepts a spoken number", () => {
-    expect(PROMPTS.pieces).toBe("How many pieces or pallets? Please type it in.");
-    expect(piecesCountPrompt({ freight: { piece_unit: "pallets" } })).toBe(
-      "How many pallets? Please type it in.",
-    );
-    expect(piecesCountPrompt({ freight: { piece_unit: "pieces" } })).toBe(
-      "How many pieces? Please type it in.",
-    );
+  it("count ask copy does not demand typing and still accepts a spoken number", () => {
+    expect(PROMPTS.pieces).toBe("How many pieces or pallets?");
+    expect(PROMPTS.pieces).not.toMatch(/Please type it in/);
+    expect(piecesCountPrompt({ freight: { piece_unit: "pallets" } })).toBe("How many pallets?");
+    expect(piecesCountPrompt({ freight: { piece_unit: "pieces" } })).toBe("How many pieces?");
+    expect(PROMPTS.email).toMatch(/Please type it in/);
     const spoken = handleUtterance(awaitingPieces("spoken-four"), "4");
     expect(spoken.session.sheet.freight.pieces).toBe(4);
     expect(spoken.session.awaiting).not.toBe("pieces");

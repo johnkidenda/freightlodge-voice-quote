@@ -204,7 +204,7 @@ describe("quick reply catalog", () => {
     ]);
 
     const dated = replay([...TO_DATE, "next Friday"]);
-    expect(dated.reply).toBe("Friday Sep 25, or Friday Oct 2?");
+    expect(dated.reply).toBe("Friday, September 25, or Friday, October 2?");
     expect(dated.session.dateClarify.soon).toBe("2026-09-25");
     expect(dated.session.dateClarify.later).toBe("2026-10-02");
     expect(quickRepliesFor(dated).map((choice) => choice.label)).toEqual([
@@ -360,7 +360,7 @@ describe("quick reply buttons in the thread", () => {
       formatSpokenDate(dated.session.dateClarify.soon),
       formatSpokenDate(dated.session.dateClarify.later),
     ]);
-    expect(labelsOf(lastAssistant(dateRoot))).toEqual(["Friday Sep 25", "Friday Oct 2"]);
+    expect(labelsOf(lastAssistant(dateRoot))).toEqual(["Friday, September 25", "Friday, October 2"]);
 
     const emailRoot = mount();
     await drive(emailRoot, [...TO_ACCESSORIALS, "no"]);
@@ -437,7 +437,8 @@ describe("quick reply buttons in the thread", () => {
 
     root.querySelector("#send-transcript").click();
     await vi.waitFor(() => expect(snapshots).toHaveLength(1));
-    expect(snapshots[0]).toContain("User: Pallets");
+    expect(snapshots[0]).toContain("User [tap]: Pallets");
+    expect(snapshots[0]).toContain("Version: v0.41");
     expect(snapshots[0]).toMatch(/pallets or pieces/);
   });
 
@@ -487,11 +488,11 @@ describe("quick reply buttons in the thread", () => {
   it("date, yes/no, liftgate, inside, state, and metro taps match the typed answer", async () => {
     const dateRoot = mount();
     await drive(dateRoot, [...TO_DATE, "next Friday"]);
-    clickLabel(dateRoot, "Friday Sep 25");
+    clickLabel(dateRoot, "Friday, September 25");
     await Promise.resolve();
-    const sooner = expectTypedResult(dateRoot, [...TO_DATE, "next Friday", "Friday Sep 25"]);
+    const sooner = expectTypedResult(dateRoot, [...TO_DATE, "next Friday", "Friday, September 25"]);
     expect(sooner.session.sheet.pickup.date).toBe("2026-09-25");
-    expect(buttons(bubbleFor(dateRoot, /Friday Sep 25, or Friday Oct 2\?/)).every((button) => button.disabled)).toBe(
+    expect(buttons(bubbleFor(dateRoot, /Friday, September 25, or Friday, October 2\?/)).every((button) => button.disabled)).toBe(
       true,
     );
 
@@ -500,7 +501,7 @@ describe("quick reply buttons in the thread", () => {
     await send(laterRoot, "Friday Oct 2");
     const later = expectTypedResult(laterRoot, [...TO_DATE, "next Friday", "Friday Oct 2"]);
     expect(later.session.sheet.pickup.date).toBe("2026-10-02");
-    expect(buttons(bubbleFor(laterRoot, /Friday Sep 25, or Friday Oct 2\?/)).every((button) => button.disabled)).toBe(
+    expect(buttons(bubbleFor(laterRoot, /Friday, September 25, or Friday, October 2\?/)).every((button) => button.disabled)).toBe(
       true,
     );
 

@@ -1,6 +1,7 @@
 import { emptySheet } from "./sheet.js";
 import {
   awaitingSlotIsFilled,
+  hasMeasure,
   isReadyForQuote,
   isValidZip,
   nextRequiredSlot,
@@ -35,7 +36,7 @@ const PROMPTS = {
   incomplete_dest_zip: "That destination zip code is short. I need a full 5-digit zip code.",
   incomplete_origin_zip: "That origin zip code is short. I need a full 5-digit zip code.",
   piece_unit: "Are you shipping pallets or pieces?",
-  pieces: "How many pieces or pallets? Please type it in.",
+  pieces: "How many pieces or pallets?",
   measure:
     "I need a real measure: total weight in pounds, or L×W×H in inches, or the NMFC class if you already know it.",
   commodity: "What’s the commodity?",
@@ -61,6 +62,7 @@ export function createSession({ id, now } = {}) {
     accessorialClarify: null,
     dateClarify: null,
     sameZipConfirmed: false,
+    palletSanity: null,
   };
 }
 
@@ -235,15 +237,159 @@ function incompleteZipsReply(flags) {
   return `I heard ${phrases[0]} and ${phrases[1]}. What are the full 5-digit zip codes?`;
 }
 
-const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
+/** Spoken calendar date. Sheet and payload keep the ISO value. */
 export function formatSpokenDate(iso) {
   const [y, m, d] = String(iso || "").split("-").map(Number);
   if (!y || !m || !d) return String(iso || "");
   const dt = new Date(y, m - 1, d);
   if (Number.isNaN(dt.getTime())) return String(iso || "");
-  return `${WEEKDAY_NAMES[dt.getDay()]} ${MONTH_ABBR[m - 1]} ${d}`;
+  return `${WEEKDAY_NAMES[dt.getDay()]}, ${MONTH_NAMES[m - 1]} ${d}`;
+}
+
+/** More than this many pallets is outside a normal LTL handling-unit count. */
+export const LTL_MAX_PALLETS = 12;
+
+/** Under this many pounds per pallet, confirm before quoting. */
+export const MIN_LB_PER_PALLET = 50;
+
+export const PALLET_FIX_LABEL = "No, fix it";
+
+export function palletYesLabel(pieces) {
+  return `Yes, ${pieces}`;
+}
+
+/**
+ * Pallets only. Null until a real measure is on the sheet, so a high count
+ * and a light weight confirm once.
+ */
+export function palletSanityIssue(sheet) {
+  const freight = sheet?.freight;
+  if (freight?.piece_unit !== "pallets") return null;
+  const pieces = freight.pieces;
+  if (!Number.isInteger(pieces) || pieces < 1) return null;
+  if (!hasMeasure(freight)) return null;
+  const weight =
+    typeof freight.total_weight_lbs === "number" && freight.total_weight_lbs > 0
+      ? freight.total_weight_lbs
+      : null;
+  const tooMany = pieces > LTL_MAX_PALLETS;
+  const per = weight != null ? weight / pieces : null;
+  const light = per != null && per < MIN_LB_PER_PALLET;
+  if (!tooMany && !light) return null;
+  return { pieces, weight, tooMany, light, per };
+}
+
+export function palletSanityCovers(session, issue) {
+  const ok = session?.palletSanity;
+  if (!ok || ok.pieces !== issue?.pieces) return false;
+  if (issue.weight == null) return ok.weight == null;
+  return ok.weight === issue.weight;
+}
+
+export function palletSanityQuestion(issue) {
+  const n = issue.pieces;
+  const reasons = [];
+  if (issue.tooMany) reasons.push(`${n} pallets is above the LTL range of ${LTL_MAX_PALLETS}`);
+  if (issue.light) {
+    const each = Math.round(issue.per);
+    reasons.push(
+      `${n} pallets at ${issue.weight} lb is about ${each} lb each, under ${MIN_LB_PER_PALLET} lb a pallet`,
+    );
+  }
+  return `${reasons.join(", and ")}. Quote ${n} pallets anyway?`;
+}
+
+export function palletFixPrompt() {
+  return "What’s the pallet count? You can correct the weight too.";
+}
+
+function isPalletSanityYes(raw) {
+  const t = String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/['’]/g, "");
+  return /^(yes|yep|yeah|yup|correct|ok|okay|sure)\b/.test(t);
+}
+
+function isPalletSanityNo(raw) {
+  const t = String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/['’]/g, "");
+  if (/\bfix it\b/.test(t)) return true;
+  return /^(no|nope|nah)\b/.test(t);
+}
+
+function takePalletSanityAnswer(session, raw) {
+  if (session?.awaiting !== "pallet_sanity") return null;
+  const sheet0 = session.sheet;
+  if (isPalletSanityNo(raw)) {
+    const sheet = structuredClone(sheet0);
+    sheet.freight = { ...sheet.freight, pieces: null };
+    return {
+      handled: true,
+      result: finish(
+        { ...session, palletSanity: null },
+        sheet,
+        session.askedAccessorials,
+        palletFixPrompt(),
+        null,
+        "pieces",
+      ),
+    };
+  }
+  if (isPalletSanityYes(raw)) {
+    const weight = sheet0.freight?.total_weight_lbs;
+    const nextSession = {
+      ...session,
+      palletSanity: {
+        pieces: sheet0.freight?.pieces,
+        weight: typeof weight === "number" ? weight : null,
+      },
+    };
+    if (isReadyForQuote(sheet0) && session.askedAccessorials) {
+      return {
+        handled: true,
+        result: finish(
+          nextSession,
+          sheet0,
+          true,
+          "Sheet’s complete. Handing this to Freight Ops’ Exfresso runner for a live rate.",
+          null,
+          null,
+        ),
+      };
+    }
+    const awaiting = nextRequiredSlot(sheet0, { askedAccessorials: session.askedAccessorials });
+    return {
+      handled: true,
+      result: finish(
+        nextSession,
+        sheet0,
+        session.askedAccessorials,
+        promptFor(awaiting, sheet0),
+        null,
+        awaiting,
+      ),
+    };
+  }
+  return { handled: false };
 }
 
 /** Readback when "next <weekday>" is only a day or two away. */
@@ -333,6 +479,12 @@ export function handleUtterance(session, text, { now } = {}) {
       ready: false,
       outOfScope: true,
     };
+  }
+
+  const sanityAnswer = takePalletSanityAnswer(session, raw);
+  if (sanityAnswer?.handled) return sanityAnswer.result;
+  if (sanityAnswer && !sanityAnswer.handled) {
+    session = { ...session, palletSanity: null, awaiting: "pieces" };
   }
 
   const stickyZip = session.awaiting === "origin_zip" || session.awaiting === "dest_zip";
@@ -664,8 +816,24 @@ export function handleUtterance(session, text, { now } = {}) {
   }
 
   if (extracted.flags.vagueDate && !extracted.pickup.date) {
-    const reply = "I need a pickup date (today, tomorrow, Friday, or 2026-09-20).";
+    const reply = "I need a pickup date (today, tomorrow, or Friday).";
     return finish(session, sheet, askedAccessorials, reply, extracted, undefined, undefined, lastBareZip, zipClarify, accessorialClarify);
+  }
+
+  const sanityIssue = palletSanityIssue(sheet);
+  if (sanityIssue && !palletSanityCovers(session, sanityIssue)) {
+    return finish(
+      session,
+      sheet,
+      askedAccessorials,
+      palletSanityQuestion(sanityIssue),
+      extracted,
+      "pallet_sanity",
+      undefined,
+      lastBareZip,
+      zipClarify,
+      accessorialClarify,
+    );
   }
 
   if (isReadyForQuote(sheet) && askedAccessorials) {
@@ -726,20 +894,19 @@ function placeLabel(place) {
 function promptFor(slot, sheet) {
   if (slot === "dest_zip") {
     const label = placeLabel(sheet.lanes?.destination);
-    if (label) return `I have dest ${label}. What’s the destination zip code?`;
+    if (label) return `To ${label}. What’s the destination zip code?`;
   }
   if (slot === "origin_zip") {
     const label = placeLabel(sheet.lanes?.origin);
-    if (label) return `I have origin ${label}. What’s the origin zip code?`;
+    if (label) return `From ${label}. What’s the origin zip code?`;
   }
   if (slot === "pieces") return piecesCountPrompt(sheet);
   return slot ? PROMPTS[slot] : PROMPTS.email;
 }
 
 export function piecesCountPrompt(sheet) {
-  const typed = "Please type it in.";
-  if (sheet?.freight?.piece_unit === "pallets") return `How many pallets? ${typed}`;
-  if (sheet?.freight?.piece_unit === "pieces") return `How many pieces? ${typed}`;
+  if (sheet?.freight?.piece_unit === "pallets") return "How many pallets?";
+  if (sheet?.freight?.piece_unit === "pieces") return "How many pieces?";
   return PROMPTS.pieces;
 }
 
@@ -820,8 +987,9 @@ function detectSameZipClarify(sheet0, sheet) {
 
 function finish(session, sheet, askedAccessorials, reply, extracted, awaiting, extractKey, lastBareZip, zipClarify, accessorialClarify) {
   const nextAwait = awaiting ?? nextRequiredSlot(sheet, { askedAccessorials });
+  const holdingSanity = nextAwait === "pallet_sanity";
   const nextSheet =
-    isReadyForQuote(sheet) && askedAccessorials
+    !holdingSanity && isReadyForQuote(sheet) && askedAccessorials
       ? { ...sheet, status: "ready_for_quote" }
       : { ...sheet, status: sheet.status === "out_of_scope" ? "out_of_scope" : "collecting" };
   const stillSame = zip5(nextSheet.lanes?.origin?.postal_code) && zip5(nextSheet.lanes?.origin?.postal_code) === zip5(nextSheet.lanes?.destination?.postal_code);
@@ -870,13 +1038,16 @@ function hasRealDest(place) {
 
 function acknowledge(extracted, sheet) {
   const bits = [];
+  const originCity = extracted.origin?.city || null;
+  const destCity = !isGarbagePlace(extracted.destination) ? extracted.destination?.city || null : null;
+  if (originCity && destCity) bits.push(`from ${originCity} to ${destCity}`);
   if (extracted.origin?.postal_code) bits.push(`origin ${extracted.origin.postal_code}`);
-  else if (extracted.origin?.city) bits.push(`origin ${extracted.origin.city} (still need zip code)`);
-  else if (extracted.origin?.state) bits.push(`origin ${extracted.origin.state} (still need zip code)`);
+  else if (originCity && !destCity) bits.push(`from ${originCity} (still need zip code)`);
+  else if (!originCity && extracted.origin?.state) bits.push(`origin ${extracted.origin.state} (still need zip code)`);
   if (!isGarbagePlace(extracted.destination)) {
     if (extracted.destination?.postal_code) bits.push(`dest ${extracted.destination.postal_code}`);
-    else if (extracted.destination?.city) bits.push(`dest ${extracted.destination.city} (still need zip code)`);
-    else if (extracted.destination?.state) bits.push(`dest ${extracted.destination.state} (still need zip code)`);
+    else if (destCity && !originCity) bits.push(`to ${destCity} (still need zip code)`);
+    else if (!destCity && extracted.destination?.state) bits.push(`dest ${extracted.destination.state} (still need zip code)`);
   }
   if (extracted.freight?.pieces) {
     const unit = pieceUnitForAck(extracted.freight, sheet?.freight);
@@ -895,7 +1066,7 @@ function acknowledge(extracted, sheet) {
   }
   if (extracted.freight?.freight_class) bits.push(`class ${extracted.freight.freight_class}`);
   if (extracted.freight?.commodity) bits.push(extracted.freight.commodity);
-  if (extracted.pickup?.date) bits.push(`pickup ${extracted.pickup.date}`);
+  if (extracted.pickup?.date) bits.push(`pickup ${formatSpokenDate(extracted.pickup.date)}`);
   if (extracted.pickup?.accessorials?.length) {
     bits.push(extracted.pickup.accessorials.join(", ").replaceAll("_", " "));
   }

@@ -223,7 +223,7 @@ export function mountApp(root, { now } = {}) {
     const text = choice.getAttribute("data-choice") || "";
     if (!text) return;
     interaction.onTyping();
-    void acceptUserText(els, state, text);
+    void acceptUserText(els, state, text, { via: "tap" });
   });
 
   els.input?.addEventListener("input", () => {
@@ -244,12 +244,12 @@ function speakOrStop(state, reply) {
   else stopAgentSpeech();
 }
 
-async function acceptUserText(els, state, text) {
+async function acceptUserText(els, state, text, { via } = {}) {
   const trimmed = String(text || "").trim();
   if (!trimmed || state.busy) return;
   closeQuickReplies(state);
   state.listenHint = "";
-  push(state, "user", trimmed);
+  push(state, "user", trimmed, null, via);
   render(els, state);
 
   const result = handleUtterance(state.session, trimmed, state.now ? { now: state.now } : {});
@@ -266,11 +266,22 @@ async function acceptUserText(els, state, text) {
   }
 }
 
+function quotedAmount(sheet) {
+  const total = sheet?.quote_result?.total_usd;
+  if (typeof total !== "number" || !Number.isFinite(total)) return null;
+  return `$${total.toFixed(2)}`;
+}
+
 function handoffAssistantLine(sheet) {
   if (sheet.status === "quoted") {
+    const amount = quotedAmount(sheet);
     const to = sheet.contact?.email;
+    if (amount && to) {
+      return `Your quote is ${amount}. Tap 'Email me this quote' if you want it sent to ${to} from ${MAIL_FROM}.`;
+    }
+    if (amount) return `Your quote is ${amount}. Email it if you want a copy.`;
     return to
-      ? `Quote is back. I can email it to ${to} from ${MAIL_FROM}. Tap Email me this quote.`
+      ? `Quote is back. I can email it to ${to} from ${MAIL_FROM}. Tap 'Email me this quote'.`
       : "Quote is back. Email it if you want a copy.";
   }
   if (sheet.status === "out_of_scope") {
@@ -332,8 +343,7 @@ async function sendTranscriptToTeam(els, state) {
     if (result.ok && (result.mode === "formsubmit" || result.mode === "webhook")) {
       btn.textContent = "Sent";
       btn.classList.add("sent");
-      note.hidden = false;
-      note.textContent = "Thanks. The team will review.";
+      showSendNote(note, "Thanks. The team will review.", result.transcript);
       restore();
       return;
     }
@@ -350,10 +360,13 @@ async function sendTranscriptToTeam(els, state) {
         /* some WebViews block mailto */
       }
       btn.textContent = "Opened mail app…";
-      note.hidden = false;
-      note.textContent = copied
-        ? "Could not send silently. Opened mail. A copy is on the clipboard if mail didn’t open."
-        : "Could not send silently. Opened mail.";
+      showSendNote(
+        note,
+        copied
+          ? "Could not send silently. Opened mail. A copy is on the clipboard if mail didn’t open."
+          : "Could not send silently. Opened mail.",
+        result.transcript,
+      );
       restore(4000);
       return;
     }
@@ -393,8 +406,15 @@ function closeQuickReplies(state) {
   }
 }
 
-function push(state, role, text, choices) {
+function showSendNote(note, lead, transcript) {
+  note.hidden = false;
+  note.textContent =
+    typeof transcript === "string" && transcript ? `${lead}\n\n${transcript}` : lead;
+}
+
+function push(state, role, text, choices, via) {
   const message = { role, text, at: new Date().toISOString() };
+  if (via) message.via = via;
   if (Array.isArray(choices) && choices.length) {
     message.choices = choices.map((choice) => ({ label: String(choice.label) }));
     message.choicesOpen = true;

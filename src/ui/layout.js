@@ -52,7 +52,7 @@ export function layout(conversational) {
             <span class="hold-dot"></span>
             <span class="hold-label">Hold to talk</span>
           </button>
-          <p id="send-note" class="send-note" hidden></p>
+          <pre id="send-note" class="send-note" hidden></pre>
         </form>
       </section>
     </main>

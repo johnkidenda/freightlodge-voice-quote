@@ -1,5 +1,5 @@
 import { isValidZip, pieceUnitForAck, spokenPieceCount } from "./completeness.js";
-import { piecesCountPrompt } from "./dialog.js";
+import { formatSpokenDate, piecesCountPrompt } from "./dialog.js";
 import { isGarbagePlace } from "./extract.js";
 
 export const CONVERSATIONAL_GREETING =
@@ -49,19 +49,26 @@ function conversationalHave(sheet, extracted) {
     extracted?.origin?.city ||
     extracted?.destination?.city;
 
+  const spokenPickup = extracted?.pickup?.date ? `, pickup ${formatSpokenDate(extracted.pickup.date)}` : "";
   if (dumped && originCity && destCity && weight && commodity) {
-    return `I have ${originCity} and ${destCity} and ${weight} pounds of ${commodity}.`;
+    return `I have ${weight} pounds of ${commodity} from ${originCity} to ${destCity}${spokenPickup}.`;
   }
   if (dumped && originCity && destCity && commodity && !weight) {
-    return `I have ${originCity}, ${destCity}, and ${commodity}.`;
+    return `I have ${commodity} from ${originCity} to ${destCity}${spokenPickup}.`;
   }
 
   const bits = [];
-  if (extracted?.origin?.postal_code) bits.push(`the origin ZIP, ${extracted.origin.postal_code}`);
-  else if (extracted?.origin?.city) bits.push(extracted.origin.city);
-  if (extracted?.destination?.postal_code) bits.push(`the destination ZIP, ${extracted.destination.postal_code}`);
-  else if (extracted?.destination?.city && !isGarbagePlace(extracted.destination)) {
-    bits.push(extracted.destination.city);
+  const originCityNow = extracted?.origin?.city && !extracted?.origin?.postal_code ? extracted.origin.city : null;
+  const destCityNow =
+    extracted?.destination?.city && !extracted?.destination?.postal_code && !isGarbagePlace(extracted.destination)
+      ? extracted.destination.city
+      : null;
+  if (originCityNow && destCityNow) bits.push(`from ${originCityNow} to ${destCityNow}`);
+  else if (extracted?.origin?.postal_code) bits.push(`the origin ZIP, ${extracted.origin.postal_code}`);
+  else if (originCityNow) bits.push(`from ${originCityNow}`);
+  if (!(originCityNow && destCityNow)) {
+    if (extracted?.destination?.postal_code) bits.push(`the destination ZIP, ${extracted.destination.postal_code}`);
+    else if (destCityNow) bits.push(`to ${destCityNow}`);
   }
   if (extracted?.freight?.pieces) {
     const unit = pieceUnitForAck(extracted.freight, sheet?.freight);
@@ -71,7 +78,7 @@ function conversationalHave(sheet, extracted) {
   }
   if (extracted?.freight?.total_weight_lbs) bits.push(`${extracted.freight.total_weight_lbs} pounds`);
   if (extracted?.freight?.commodity) bits.push(extracted.freight.commodity);
-  if (extracted?.pickup?.date) bits.push(`pickup ${extracted.pickup.date}`);
+  if (extracted?.pickup?.date) bits.push(`pickup ${formatSpokenDate(extracted.pickup.date)}`);
   if (extracted?.pickup?.accessorials?.length) {
     bits.push(extracted.pickup.accessorials.join(", ").replaceAll("_", " "));
   }
@@ -105,11 +112,11 @@ function conversationalAsk(sheet, awaiting) {
     return "I still need the origin and destination zip codes.";
   }
   if (awaiting === "origin_zip") {
-    return originCity ? `What’s the origin zip code for ${originCity}?` : "Got it. What’s the pickup zip code?";
+    return originCity ? `From ${originCity}. What’s the origin zip code?` : "Got it. What’s the pickup zip code?";
   }
   if (awaiting === "dest_zip") {
     return destCity
-      ? `I have ${destCity}. What’s the destination zip code?`
+      ? `To ${destCity}. What’s the destination zip code?`
       : "Where is this going? I need a city, state, or zip code.";
   }
   if (awaiting === "piece_unit") return "Are you shipping pallets or pieces?";
@@ -154,6 +161,7 @@ export function composeConversationalReply({
   if (extracted?.flags?.incompleteZips?.length) return formalReply || "";
   if (extracted?.flags?.incompleteZip?.digits) return formalReply || "";
   if (extracted?.flags?.ambiguousDate) return formalReply || "";
+  if (awaiting === "pallet_sanity") return formalReply || "";
   if (extracted?.flags?.incompleteZip) {
     return "That zip code is short. I need a full 5-digit zip code.";
   }
