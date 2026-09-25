@@ -4,7 +4,15 @@
  * builds candidates, interprets answers, and formats the QA stamp.
  */
 
-import { hasMeasure, hasMinimumLane, hasPieceCount, hasPieceUnit, isValidEmail, isValidZip } from "./completeness.js";
+import {
+  hasMeasure,
+  hasMinimumLane,
+  hasPieceCount,
+  hasPieceUnit,
+  isReadyForQuote,
+  isValidEmail,
+  isValidZip,
+} from "./completeness.js";
 
 export const JEV_THRESHOLD = 0.5;
 export const JEV_MODEL = "jev-latest";
@@ -277,7 +285,16 @@ export function utteranceCorrectsSlot(text) {
 /**
  * Hard rules on top of raw Jev answers:
  * never focus a filled slot unless the user corrects it;
- * never hold clarify / ready-low when origin+dest ZIPs and weight are present.
+ * once origin ZIP, dest ZIP, and a measure are present, ignore a clarify vote
+ * and ask the next missing field (gate advance, reason min-fields).
+ *
+ * A low ready score means "not quote-ready". It must not advance the gate
+ * while any required slot is still empty. Live example: ready=0.03,
+ * clarify=0.18, slots=email, while email (or another required field) is
+ * still open. That stamps gate=not-ready and the heuristic ask continues.
+ * The one exception: when every required slot is already filled
+ * (isReadyForQuote), a low ready score must not block the Exfresso handoff.
+ * That case clears ready and stamps gate=advance with reason sheet-complete.
  */
 export function guardJevDecision(decision, { sheet, utterance, askedAccessorials = false } = {}) {
   const d = normalizeJevDecision(decision);
@@ -296,16 +313,16 @@ export function guardJevDecision(decision, { sheet, utterance, askedAccessorials
       needsClarify = false;
       gateOverride = "min-fields";
     }
-    if (ready === false) {
-      ready = null;
-      gateOverride = gateOverride || "min-fields";
-    }
   } else if (needsClarify) {
     const clarifySlot = focus || d.focus;
     if (clarifySlot && awaitingSlotIsFilled(sheet, clarifySlot, ctx) && !corrects) {
       needsClarify = false;
       gateOverride = "filled-slot";
     }
+  }
+  if (ready === false && isReadyForQuote(sheet)) {
+    ready = null;
+    gateOverride = gateOverride || "sheet-complete";
   }
   return { ...d, focus, needsClarify, ready, gateOverride };
 }
@@ -372,11 +389,12 @@ export function formatJevStamp(decision) {
   return bits.join(" ");
 }
 
+/** Every turn's Jev stamp, not only the last one. Empty log stays "Jev: off". */
 export function formatJevTranscriptLine(session) {
   const log = session?.jevLog;
   if (!Array.isArray(log) || !log.length) return "Jev: off";
-  const last = String(log[log.length - 1] || "").trim();
-  return last || "Jev: off";
+  const lines = log.map((line) => String(line || "").trim()).filter(Boolean);
+  return lines.join("\n") || "Jev: off";
 }
 
 export function jevClarifyScript(decision, awaiting) {

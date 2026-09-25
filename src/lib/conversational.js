@@ -3,7 +3,7 @@ import { piecesCountPrompt } from "./dialog.js";
 import { isGarbagePlace } from "./extract.js";
 
 export const CONVERSATIONAL_GREETING =
-  "Hi. I can take a US domestic LTL quote. Where are we picking up? What’s the origin zip code?";
+  "Hi. I can take a US domestic LTL quote. What’s the origin zip code?";
 
 export const CONVERSATIONAL_STORAGE_KEY = "freightlodge.conversational";
 
@@ -151,7 +151,9 @@ export function composeConversationalReply({
     return "The sheet is complete. I’ll hand this to Freight Ops for a live rate.";
   }
   if (extracted?.flags?.zipClarify) return formalReply || "";
+  if (extracted?.flags?.incompleteZips?.length) return formalReply || "";
   if (extracted?.flags?.incompleteZip?.digits) return formalReply || "";
+  if (extracted?.flags?.ambiguousDate) return formalReply || "";
   if (extracted?.flags?.incompleteZip) {
     return "That zip code is short. I need a full 5-digit zip code.";
   }

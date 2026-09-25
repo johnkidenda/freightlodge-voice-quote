@@ -24,10 +24,10 @@ describe("reply copy purge — ask, don’t narrate the guardrail", () => {
 
   it("formal + conversational greetings ask for the origin ZIP in plain CS", () => {
     expect(openingMessage()).toBe(
-      "Freight Lodge. I’ll take a US domestic LTL quote. Where are we picking up? What’s the origin zip code?",
+      "Freight Lodge. I’ll take a US domestic LTL quote. What’s the origin zip code?",
     );
     expect(CONVERSATIONAL_GREETING).toBe(
-      "Hi. I can take a US domestic LTL quote. Where are we picking up? What’s the origin zip code?",
+      "Hi. I can take a US domestic LTL quote. What’s the origin zip code?",
     );
     expect(PROMPTS.origin_zip).toBe("What’s the origin zip code? City is helpful, but I need the 5-digit zip code.");
     expect(PROMPTS.dest_zip).toBe("Where is this going? I need a destination city, state, or zip code.");

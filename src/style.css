@@ -209,6 +209,19 @@ button, input { font: inherit; }
   padding: 6px 10px;
   font-size: 0.85rem;
 }
+.choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.choice-row[hidden] { display: none; }
+.choice-row .choice {
+  border: 1px solid var(--line);
+  background: #fffdf8;
+  color: var(--navy);
+  font-weight: 700;
+  padding: 8px 14px;
+}
 .send-transcript {
   align-self: flex-start;
   border: 1px dashed #b9a57a;

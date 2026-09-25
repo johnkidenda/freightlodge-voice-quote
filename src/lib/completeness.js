@@ -73,9 +73,10 @@ export function isReadyForQuote(sheet) {
 }
 
 /**
- * Lane minimum used to ignore a Jev clarify/ready-low gate:
+ * Lane minimum used to ignore a Jev clarify vote:
  * origin ZIP + dest ZIP + a real measure (weight, dims, or class).
  * Pieces / accessorials / email stay askable after this.
+ * A low ready score is separate: it advances only when isReadyForQuote.
  */
 export function hasMinimumLane(sheet) {
   return (

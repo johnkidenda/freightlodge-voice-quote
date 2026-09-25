@@ -11,16 +11,42 @@ const ACTIVATE_RE =
 /**
  * Plain-text dump of the current sheet conversation for team delivery.
  */
+function formatTurnStamp(at) {
+  if (!at) return "";
+  const d = new Date(at);
+  if (Number.isNaN(d.getTime())) return "";
+  return `[${d.toISOString().replace(/\.\d{3}Z$/, "Z")}] `;
+}
+
+function formatQuoteAmount(sheet) {
+  const total = sheet?.quote_result?.total_usd;
+  if (typeof total !== "number" || !Number.isFinite(total)) return "—";
+  return `$${total.toFixed(2)}`;
+}
+
 export function formatSessionTranscript(messages, session) {
+  const jevLog = Array.isArray(session?.jevLog) ? session.jevLog : [];
+  let userTurn = 0;
   const turns = (messages || []).map((m) => {
     const label = m.role === "user" ? "User" : "Agent";
-    return `${label}: ${m.text ?? ""}`;
+    const stamp = formatTurnStamp(m.at);
+    let line = `${stamp}${label}: ${m.text ?? ""}`;
+    if (m.role === "user") {
+      const jevLine = String(m.jev || jevLog[userTurn] || "").trim();
+      userTurn += 1;
+      if (jevLine) line += `\n${jevLine}`;
+    }
+    return line;
   });
   const sheet = session?.sheet;
   const origin = formatPlace(sheet?.lanes?.origin) || "—";
   const dest = formatPlace(sheet?.lanes?.destination) || "—";
   const weight = sheet?.freight?.total_weight_lbs ?? "—";
   const pieces = formatPieces(sheet?.freight);
+  const commodity = sheet?.freight?.commodity || "—";
+  const pickupDate = sheet?.pickup?.date || "—";
+  const email = sheet?.contact?.email || "—";
+  const quote = formatQuoteAmount(sheet);
   const awaiting = session?.awaiting || "—";
   const status = sheet?.status || "—";
   const accessorials = (sheet?.pickup?.accessorials || []).join(", ") || "—";
@@ -38,6 +64,10 @@ export function formatSessionTranscript(messages, session) {
     `Dest: ${dest}`,
     `Weight: ${weight}`,
     `Pieces: ${pieces}`,
+    `Commodity: ${commodity}`,
+    `Pickup date: ${pickupDate}`,
+    `Email: ${email}`,
+    `Quote: ${quote}`,
     `Accessorials: ${accessorials}`,
     `Awaiting: ${awaiting}`,
     `Status: ${status}`,

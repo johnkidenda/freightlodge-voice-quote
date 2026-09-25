@@ -10,6 +10,7 @@ import {
   saveConversationalMode,
 } from "./lib/conversational.js";
 import { onAgentSpeaking, speakAgentReply, stopAgentSpeech } from "./lib/agent-speech.js";
+import { createNoInputWatch } from "./lib/no-input.js";
 import { copyTextToClipboard, sendSessionTranscript } from "./lib/transcript.js";
 import { playListenCue } from "./lib/listen-cue.js";
 import {
@@ -56,7 +57,7 @@ function createViewState() {
   session.jevEnabled = jevOn;
   return {
     session,
-    messages: [{ role: "assistant", text: greetingFor(conversational) }],
+    messages: [{ role: "assistant", text: greetingFor(conversational), at: new Date().toISOString() }],
     listening: false,
     finishing: false,
     busy: false,
@@ -92,14 +93,27 @@ export function mountApp(root) {
     sample: root.querySelector("#sample"),
     sendTranscript: root.querySelector("#send-transcript"),
     sendNote: root.querySelector("#send-note"),
+    choices: root.querySelector("#choice-row"),
     reset: root.querySelector("#reset"),
   };
+
+  const noInput = createNoInputWatch({
+    onReprompt() {
+      if (state.busy || state.listening || state.finishing) return;
+      noInput.onNewAsk();
+      const text = "I didn’t catch that. Say it again, or type it.";
+      push(state, "assistant", text);
+      render(els, state);
+      speakOrStop(state, text);
+    },
+  });
 
   const sessionRef = { current: null };
 
   function talkCallbacks() {
     return {
       onStart() {
+        noInput.onUserActivity();
         state.listening = true;
         state.finishing = false;
         playListenCue();
@@ -131,9 +145,8 @@ export function mountApp(root) {
         void acceptUserText(els, state, trimmed);
       },
       onEmpty() {
-        if (state.busy) return;
-        push(state, "assistant", "I didn’t catch that. Say it again, or type it.");
-        render(els, state);
+        if (state.busy || state.listening) return;
+        noInput.onEmptyListen();
       },
     };
   }
@@ -168,6 +181,7 @@ export function mountApp(root) {
   bindMic(els.hold, sessionRef);
   onAgentSpeaking((speaking) => {
     state.ttsSpeaking = Boolean(speaking);
+    noInput.onSpeakingChange(speaking);
     renderTtsWave(els, state);
   });
 
@@ -195,6 +209,7 @@ export function mountApp(root) {
     const text = els.input.value.trim();
     if (!text || state.busy) return;
     els.input.value = "";
+    noInput.onUserActivity();
     void acceptUserText(els, state, text);
   });
 
@@ -210,18 +225,27 @@ export function mountApp(root) {
   els.reset.addEventListener("click", () => {
     state.session = createSession();
     state.session.jevEnabled = state.jevOn;
-    state.messages = [{ role: "assistant", text: greetingFor(state.conversational) }];
+    state.messages = [{ role: "assistant", text: greetingFor(state.conversational), at: new Date().toISOString() }];
     stopAgentSpeech();
     state.emailNote = null;
+    noInput.onNewAsk();
     render(els, state);
   });
 
   root.addEventListener("click", (e) => {
     const quoteBtn = e.target.closest("[data-email-quote]");
     if (quoteBtn) void sendEmail(els, state);
+    const choice = e.target.closest("[data-choice]");
+    if (!choice || state.busy) return;
+    if (state.session.awaiting !== "liftgate_side") return;
+    const text = choice.getAttribute("data-choice") || "";
+    if (!text) return;
+    noInput.onUserActivity();
+    void acceptUserText(els, state, text);
   });
 
   render(els, state);
+  noInput.onNewAsk();
 }
 
 function pageApiBase() {
@@ -238,6 +262,7 @@ async function acceptUserText(els, state, text) {
   push(state, "user", text);
   render(els, state);
 
+  noInput.onUserActivity();
   state.session.jevEnabled = state.jevOn;
   const jev = await fetchJevDecision({
     utterance: text,
@@ -254,6 +279,7 @@ async function acceptUserText(els, state, text) {
   const reply = presentAgentReply(result, state.conversational);
   push(state, "assistant", reply);
   render(els, state);
+  noInput.onNewAsk();
   speakOrStop(state, reply);
 
   if (result.outOfScope) return;
@@ -384,7 +410,7 @@ async function sendEmail(els, state) {
 }
 
 function push(state, role, text) {
-  state.messages.push({ role, text });
+  state.messages.push({ role, text, at: new Date().toISOString() });
 }
 
 function render(els, state) {

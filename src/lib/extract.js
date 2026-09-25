@@ -88,6 +88,25 @@ export function placeCityMatchesMetro(place, metro) {
   return Boolean(city && city === metro.city.toLowerCase());
 }
 
+/** Case and light format insensitive: "Atlanta", "ATLANTA", "Atlanta, GA". */
+export function cityNameMatchesMetro(place, metro) {
+  if (!place || !metro?.city) return false;
+  const metroCity = String(metro.city)
+    .toLowerCase()
+    .replace(/[.,]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  let city = String(place.city || "")
+    .toLowerCase()
+    .replace(/[.,]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!city || !metroCity) return false;
+  if (city === metroCity) return true;
+  if (city.startsWith(`${metroCity} `)) return true;
+  return false;
+}
+
 export function placeConflictsWithMetro(place, metro) {
   if (!place || !metro) return false;
   const city = cityOf(place);
@@ -122,7 +141,7 @@ export function overlayPlace(sheetPlace, extractedPlace) {
  * pairing a ZIP whose metro disagrees with the stated city (NYC + 30301),
  * or parking a ZIP that does not belong to the known / city-implied state.
  */
-export function resolveZipAttachment(sheet, zip, intendedRole, extracted = null) {
+export function resolveZipAttachment(sheet, zip, intendedRole, extracted = null, { explicit = false } = {}) {
   if (!intendedRole || !zip) return { attach: intendedRole || null, clarify: null };
   const origin = overlayPlace(sheet?.lanes?.origin, extracted?.origin);
   const dest = overlayPlace(sheet?.lanes?.destination, extracted?.destination);
@@ -169,6 +188,16 @@ export function resolveZipAttachment(sheet, zip, intendedRole, extracted = null)
   const targetConflict = Boolean(metro && placeConflictsWithMetro(target, metro));
 
   if (metro && targetConflict && otherMatch) {
+    const otherParked = intendedRole === "origin" ? destParked : originParked;
+    // The ZIP's city is already the city on that slot. Attach it. Still ask
+    // when that slot has no city, or the city does not match, or a different
+    // ZIP is already parked there.
+    // Bare ZIP whose metro city is already the city on the other slot can
+    // move there without "Is that the destination zip code?". An explicit
+    // "dest zip …" label stays a confirm, so a mismatch is not stolen.
+    if (cityNameMatchesMetro(other, metro) && !otherParked && !explicit) {
+      return { attach: otherRole, clarify: null };
+    }
     return {
       attach: null,
       clarify: {
@@ -400,6 +429,53 @@ function labeledZipRe(label, digits) {
 }
 
 /**
+ * Every ZIP-like run tied to one lane role, in utterance order.
+ * Repeated STT ("zip code is 300 ... zip code is 30030") keeps each hit.
+ */
+function roleZipHits(raw, role) {
+  const label = role === "origin" ? ORIGIN_ZIP_LABEL : DEST_ZIP_LABEL;
+  const loose =
+    role === "origin"
+      ? /\borigins?\b(?:\s+[a-z]+){0,6}?\s+is\s+(\d{3,5})(-\d{4})?(?!\d)/gi
+      : /\b(?:destination|dest)\b(?:\s+[a-z]+){0,6}?\s+is\s+(\d{3,5})(-\d{4})?(?!\d)/gi;
+  const labeled = new RegExp(
+    String.raw`\b(?:${label})${LABELED_ZIP_TAIL}(\d{3,5})(-\d{4})?(?!\d)`,
+    "gi",
+  );
+  const hits = [];
+  for (const re of [labeled, loose]) {
+    let match;
+    while ((match = re.exec(raw))) {
+      hits.push({ digits: match[1], plus4: match[2] || "", index: match.index });
+    }
+  }
+  hits.sort((a, b) => a.index - b.index || b.digits.length - a.digits.length);
+  const seen = new Set();
+  const out = [];
+  for (const hit of hits) {
+    const key = `${hit.index}:${hit.digits}${hit.plus4}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(hit);
+  }
+  return out;
+}
+
+/**
+ * Same slot, several ZIP-like numbers: keep the last valid 5-digit one.
+ * Shorter fragments are ignored once a 5-digit ZIP is present.
+ */
+function pickRoleZip(hits) {
+  const full = hits.filter((hit) => hit.digits.length === 5);
+  if (full.length) {
+    const last = full[full.length - 1];
+    return { zip: `${last.digits}${last.plus4 || ""}`, short: null };
+  }
+  if (hits.length) return { zip: null, short: hits[hits.length - 1].digits };
+  return { zip: null, short: null };
+}
+
+/**
  * from/to (or X to Y) where one side is 5 digits and the other is not.
  * Both-valid pairs stay on the existing path. An "or" is a choice, not a lane.
  */
@@ -600,17 +676,10 @@ function extractLane(raw, extracted, awaiting, sheetCities = {}) {
     extracted.destination.postal_code = fromToZips[2];
   }
 
-  const labeledOrigin = raw.match(labeledZipRe(ORIGIN_ZIP_LABEL, String.raw`\d{5}(?:-\d{4})?`));
-  if (labeledOrigin) extracted.origin.postal_code = labeledOrigin[1];
-
-  const labeledDest = raw.match(labeledZipRe(DEST_ZIP_LABEL, String.raw`\d{5}(?:-\d{4})?`));
-  if (labeledDest) extracted.destination.postal_code = labeledDest[1];
-
-  // STT "origins of God is 78721" still names the origin. Words may sit between the label and the digits.
-  const looseOrigin = raw.match(/\borigins?\b(?:\s+[a-z]+){0,6}?\s+is\s+(\d{5}(?:-\d{4})?)\b/i);
-  if (looseOrigin && !extracted.origin.postal_code) extracted.origin.postal_code = looseOrigin[1];
-  const looseDest = raw.match(/\b(?:destination|dest)\b(?:\s+[a-z]+){0,6}?\s+is\s+(\d{5}(?:-\d{4})?)\b/i);
-  if (looseDest && !extracted.destination.postal_code) extracted.destination.postal_code = looseDest[1];
+  const pickedOrigin = pickRoleZip(roleZipHits(raw, "origin"));
+  const pickedDest = pickRoleZip(roleZipHits(raw, "dest"));
+  if (pickedOrigin.zip) extracted.origin.postal_code = pickedOrigin.zip;
+  if (pickedDest.zip) extracted.destination.postal_code = pickedDest.zip;
 
   const partialPair = matchPartialZipPair(raw);
   if (partialPair?.originZip && !extracted.origin.postal_code) extracted.origin.postal_code = partialPair.originZip;
@@ -622,11 +691,15 @@ function extractLane(raw, extracted, awaiting, sheetCities = {}) {
   if (originZipAfter) extracted.origin.postal_code = originZipAfter[1];
 
   const destZipLocked = Boolean(
-    labeledDest || looseDest || destZipAfter || partialPair?.destZip || partialPair?.incomplete?.role === "dest",
+    pickedDest.zip ||
+      pickedDest.short ||
+      destZipAfter ||
+      partialPair?.destZip ||
+      partialPair?.incomplete?.role === "dest",
   );
   const originZipLocked = Boolean(
-    labeledOrigin ||
-      looseOrigin ||
+    pickedOrigin.zip ||
+      pickedOrigin.short ||
       originZipAfter ||
       fromToZips ||
       partialPair?.originZip ||
@@ -692,8 +765,33 @@ function extractLane(raw, extracted, awaiting, sheetCities = {}) {
 
   applyDistinctZipPair(raw, extracted, uniqueZips, { cityLabeled, originZipLocked, destZipLocked });
 
+  const incompleteZips = [];
+  if (pickedOrigin.short && !pickedOrigin.zip) {
+    incompleteZips.push({ digits: pickedOrigin.short, role: "origin", labeled: true });
+  }
+  if (pickedDest.short && !pickedDest.zip) {
+    incompleteZips.push({ digits: pickedDest.short, role: "dest", labeled: true });
+  }
   const incomplete = partialPair?.incomplete || detectIncompleteZip(raw, awaiting);
-  if (incomplete && (incomplete.labeled || zipTokens.length === 0)) extracted.flags.incompleteZip = incomplete;
+  const incompleteCovered =
+    incomplete &&
+    incompleteZips.some((flag) => flag.role === incomplete.role || incomplete.role === "unknown");
+  const incompleteRoleHasFull =
+    incomplete?.role === "dest"
+      ? Boolean(pickedDest.zip)
+      : incomplete?.role === "origin"
+        ? Boolean(pickedOrigin.zip)
+        : false;
+  if (
+    incomplete &&
+    !incompleteCovered &&
+    !incompleteRoleHasFull &&
+    (incomplete.labeled || zipTokens.length === 0)
+  ) {
+    incompleteZips.push(incomplete);
+  }
+  if (incompleteZips.length > 1) extracted.flags.incompleteZips = incompleteZips;
+  else if (incompleteZips.length === 1) extracted.flags.incompleteZip = incompleteZips[0];
 
   stripNoiseCity(extracted.origin, sheetCities.originCity);
   stripNoiseCity(extracted.destination, sheetCities.destCity);
@@ -1479,6 +1577,25 @@ function extractDate(raw, extracted, now) {
     extracted.pickup.date = isoDate(addDays(first, (count - 1) * 7));
     return;
   }
+  const nextDow = raw.match(
+    /\bnext\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i,
+  );
+  if (nextDow && !/\b(after\s+next|from\s+now)\b/i.test(raw)) {
+    const target = WEEKDAYS[nextDow[1].toLowerCase()];
+    const soonDays = daysUntilWeekday(n, target, true);
+    // "next Friday" on a Thursday is tomorrow or a week from tomorrow.
+    // Within two days, do not pick silently. Offer both dates.
+    if (soonDays > 0 && soonDays <= 2) {
+      const soon = isoDate(addDays(startOfDay(n), soonDays));
+      const later = isoDate(addDays(startOfDay(n), soonDays + 7));
+      extracted.flags.ambiguousDate = {
+        weekday: titleCase(nextDow[1].toLowerCase()),
+        soon,
+        later,
+      };
+      return;
+    }
+  }
   const dow = raw.match(/\b(?:next\s+)?(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\b/i);
   if (dow) {
     extracted.pickup.date = isoDate(nextWeekday(n, WEEKDAYS[dow[1].toLowerCase()], /next/i.test(raw)));
@@ -1597,12 +1714,15 @@ function startOfDay(d) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
-function nextWeekday(from, target, forceNext) {
+function daysUntilWeekday(from, target, forceNext) {
   const d = startOfDay(from);
   let add = (target - d.getDay() + 7) % 7;
-  if (add === 0) add = forceNext ? 7 : 0;
-  if (forceNext && add === 0) add = 7;
-  return addDays(d, add);
+  if (add === 0 && forceNext) add = 7;
+  return add;
+}
+
+function nextWeekday(from, target, forceNext) {
+  return addDays(startOfDay(from), daysUntilWeekday(from, target, forceNext));
 }
 
 function normalizeYear(y, fallback) {

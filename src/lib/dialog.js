@@ -31,7 +31,7 @@ import {
 } from "./jev-core.js";
 
 export const GREETING =
-  "Freight Lodge. I’ll take a US domestic LTL quote. Where are we picking up? What’s the origin zip code?";
+  "Freight Lodge. I’ll take a US domestic LTL quote. What’s the origin zip code?";
 
 const PROMPTS = {
   origin_zip: "What’s the origin zip code? City is helpful, but I need the 5-digit zip code.",
@@ -65,6 +65,7 @@ export function createSession({ id, now } = {}) {
     lastBareZip: null,
     zipClarify: null,
     accessorialClarify: null,
+    dateClarify: null,
     sameZipConfirmed: false,
     jevLog: [],
   };
@@ -215,19 +216,75 @@ function insideIdsForSide(side) {
 
 const DIGIT_WORDS = ["", "one", "two", "three", "four", "five", "six"];
 
-function incompleteZipReply(flag) {
+function incompleteZipPhrase(flag) {
   const digits = String(flag?.digits || "");
   const role = flag?.role;
-  if (flag?.labeled && digits && (role === "dest" || role === "origin")) {
-    const side = role === "dest" ? "destination" : "origin";
-    const n = digits.length;
-    const word = DIGIT_WORDS[n] || String(n);
-    const unit = n === 1 ? "digit" : "digits";
-    return `I heard ${digits} for the ${side}, which is only ${word} ${unit}. What’s the full zip code?`;
-  }
+  if (!flag?.labeled || !digits || (role !== "dest" && role !== "origin")) return "";
+  const side = role === "dest" ? "destination" : "origin";
+  const n = digits.length;
+  const word = DIGIT_WORDS[n] || String(n);
+  const unit = n === 1 ? "digit" : "digits";
+  return `${digits} for the ${side}, which is only ${word} ${unit}`;
+}
+
+function incompleteZipReply(flag) {
+  const phrase = incompleteZipPhrase(flag);
+  if (phrase) return `I heard ${phrase}. What’s the full zip code?`;
+  const role = flag?.role;
   if (role === "dest") return PROMPTS.incomplete_dest_zip;
   if (role === "origin") return PROMPTS.incomplete_origin_zip;
   return PROMPTS.incomplete_zip;
+}
+
+function incompleteZipsReply(flags) {
+  const phrases = (flags || []).map(incompleteZipPhrase).filter(Boolean);
+  if (phrases.length < 2) return incompleteZipReply(flags?.[0]);
+  return `I heard ${phrases[0]} and ${phrases[1]}. What are the full 5-digit zip codes?`;
+}
+
+const MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+export function formatSpokenDate(iso) {
+  const [y, m, d] = String(iso || "").split("-").map(Number);
+  if (!y || !m || !d) return String(iso || "");
+  const dt = new Date(y, m - 1, d);
+  if (Number.isNaN(dt.getTime())) return String(iso || "");
+  return `${WEEKDAY_NAMES[dt.getDay()]} ${MONTH_ABBR[m - 1]} ${d}`;
+}
+
+/** Readback when "next <weekday>" is only a day or two away. */
+export function ambiguousDateQuestion(flag) {
+  return `${formatSpokenDate(flag?.soon)}, or ${formatSpokenDate(flag?.later)}?`;
+}
+
+function isoDay(iso) {
+  const n = Number(String(iso || "").slice(8, 10));
+  return Number.isInteger(n) ? n : null;
+}
+
+export function resolveAmbiguousDateChoice(raw, flag) {
+  if (!flag?.soon || !flag?.later) return null;
+  const t = String(raw || "")
+    .toLowerCase()
+    .replace(/['’]/g, "");
+  if (!t.trim()) return null;
+  if (t.includes(flag.soon)) return flag.soon;
+  if (t.includes(flag.later)) return flag.later;
+  if (/\b(later|second|other one|week after|next week|the following)\b/.test(t)) return flag.later;
+  if (/\b(sooner|earlier|first one|this week|tomorrow)\b/.test(t)) return flag.soon;
+  const soonLabel = formatSpokenDate(flag.soon).toLowerCase();
+  const laterLabel = formatSpokenDate(flag.later).toLowerCase();
+  if (t.includes(soonLabel)) return flag.soon;
+  if (t.includes(laterLabel)) return flag.later;
+  const soonDay = isoDay(flag.soon);
+  const laterDay = isoDay(flag.later);
+  const days = [...t.matchAll(/\b(\d{1,2})(?:st|nd|rd|th)?\b/g)].map((m) => Number(m[1]));
+  const soonHit = days.includes(soonDay);
+  const laterHit = days.includes(laterDay);
+  if (soonHit && !laterHit) return flag.soon;
+  if (laterHit && !soonHit) return flag.later;
+  return null;
 }
 
 function addAccessorials(extracted, ids) {
@@ -340,12 +397,21 @@ export function handleUtterance(session, text, { now, jev } = {}) {
     }
   }
 
+  const pendingDateChoice = session.dateClarify
+    ? resolveAmbiguousDateChoice(raw, session.dateClarify)
+    : null;
+  session = { ...session, dateClarify: null };
+
   const extracted = extractSlots(raw, {
     now,
     awaiting: extractAwaiting,
     originCity: sheetFromClarify.lanes?.origin?.city,
     destCity: sheetFromClarify.lanes?.destination?.city,
   });
+  if (pendingDateChoice && !extracted.pickup?.date) extracted.pickup.date = pendingDateChoice;
+  if (extracted.flags?.ambiguousDate && extracted.pickup?.date) {
+    extracted.flags.ambiguousDate = null;
+  }
   if (
     zipClarifyDecided &&
     !firstBareZip(raw) &&
@@ -409,7 +475,9 @@ export function handleUtterance(session, text, { now, jev } = {}) {
   const zipForIntent =
     zipIntent === "origin" ? extracted.origin.postal_code : zipIntent === "dest" ? extracted.destination.postal_code : null;
   if (zipIntent && zipForIntent) {
-    const verdict = resolveZipAttachment(sheetFromClarify, zipForIntent, zipIntent, extracted);
+    const verdict = resolveZipAttachment(sheetFromClarify, zipForIntent, zipIntent, extracted, {
+      explicit: roleWasLabeled(raw, zipIntent),
+    });
     if (verdict.clarify) {
       const uttered = [...String(raw).matchAll(/\b(\d{5})(?:-\d{4})?\b/g)].map((m) => m[1]);
       const altZip = uttered.find((z) => z !== zipForIntent) || null;
@@ -417,7 +485,9 @@ export function handleUtterance(session, text, { now, jev } = {}) {
       if (zipIntent === "dest") delete extracted.destination.postal_code;
       if (altZip) {
         const otherRole = zipIntent === "origin" ? "dest" : "origin";
-        const altVerdict = resolveZipAttachment(sheetFromClarify, altZip, otherRole, extracted);
+        const altVerdict = resolveZipAttachment(sheetFromClarify, altZip, otherRole, extracted, {
+          explicit: roleWasLabeled(raw, otherRole),
+        });
         if (!altVerdict.clarify && altVerdict.attach) {
           applyZipRoleMove(extracted, altZip, altVerdict.attach);
         }
@@ -434,7 +504,9 @@ export function handleUtterance(session, text, { now, jev } = {}) {
     for (const role of roles) {
       const zip = role === "origin" ? extracted.origin.postal_code : extracted.destination.postal_code;
       if (!zip) continue;
-      const verdict = resolveZipAttachment(sheetFromClarify, zip, role, extracted);
+      const verdict = resolveZipAttachment(sheetFromClarify, zip, role, extracted, {
+        explicit: roleWasLabeled(raw, role),
+      });
       if (verdict.clarify) {
         if (role === "origin") delete extracted.origin.postal_code;
         if (role === "dest") delete extracted.destination.postal_code;
@@ -576,12 +648,37 @@ export function handleUtterance(session, text, { now, jev } = {}) {
     return finish(session, sheet, askedAccessorials, reply, extracted, awaitingNow, undefined, lastBareZip, zipClarify, jevAfter, accessorialClarify);
   }
 
+  if (extracted.flags.incompleteZips?.length > 1) {
+    const reply = incompleteZipsReply(extracted.flags.incompleteZips);
+    const hasOrigin = extracted.flags.incompleteZips.some((flag) => flag.role === "origin");
+    const stay = hasOrigin ? "origin_zip" : "dest_zip";
+    return finish(session, sheet, askedAccessorials, reply, extracted, stay, undefined, undefined, zipClarify, jevAfter, accessorialClarify);
+  }
+
   if (extracted.flags.incompleteZip) {
     const role = extracted.flags.incompleteZip.role;
     const reply = incompleteZipReply(extracted.flags.incompleteZip);
     const stay =
       role === "dest" ? "dest_zip" : role === "origin" ? "origin_zip" : session.awaiting;
     return finish(session, sheet, askedAccessorials, reply, extracted, stay, undefined, undefined, zipClarify, jevAfter, accessorialClarify);
+  }
+
+  if (extracted.flags.ambiguousDate && !extracted.pickup?.date) {
+    const dateClarify = extracted.flags.ambiguousDate;
+    const reply = ambiguousDateQuestion(dateClarify);
+    return finish(
+      { ...session, dateClarify },
+      sheet,
+      askedAccessorials,
+      reply,
+      extracted,
+      "pickup_date",
+      undefined,
+      lastBareZip,
+      zipClarify,
+      jevAfter,
+      accessorialClarify,
+    );
   }
 
   if (extracted.flags.vagueMeasure && !extracted.freight.total_weight_lbs && !extracted.freight.dims && !extracted.freight.freight_class) {
@@ -685,6 +782,13 @@ function spokenSlot(slot) {
   if (slot === "origin_zip") return "origin zip code";
   if (slot === "dest_zip") return "destination zip code";
   return slot?.replaceAll("_", " ") || "detail";
+}
+
+function roleWasLabeled(raw, role) {
+  const t = String(raw || "");
+  if (role === "dest") return /\b(?:destination|dest|delivery|deliver(?:y|ed)?\s+to|ship\s+to)\b/i.test(t);
+  if (role === "origin") return /\b(?:origins?|pickup|pick\s*up|ship\s+from)\b/i.test(t);
+  return false;
 }
 
 function zip5(code) {

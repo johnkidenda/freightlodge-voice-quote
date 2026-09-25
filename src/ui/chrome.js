@@ -42,6 +42,13 @@ export function renderChrome(els, state) {
   renderJevMode(els, state);
   renderConvoAudio(els, state);
   renderTtsWave(els, state);
+  renderChoiceRow(els, state);
+}
+
+function renderChoiceRow(els, state) {
+  if (!els.choices) return;
+  const show = state.session?.awaiting === "liftgate_side";
+  els.choices.hidden = !show;
 }
 
 function renderJevMode(els, state) {
