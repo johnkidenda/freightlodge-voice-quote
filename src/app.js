@@ -410,6 +410,11 @@ function showSendNote(note, lead, transcript) {
   note.hidden = false;
   note.textContent =
     typeof transcript === "string" && transcript ? `${lead}\n\n${transcript}` : lead;
+  const thread = note.ownerDocument?.getElementById("thread");
+  if (thread) {
+    void thread.offsetHeight;
+    thread.scrollTop = thread.scrollHeight;
+  }
 }
 
 function push(state, role, text, choices, via) {
