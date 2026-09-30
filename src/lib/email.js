@@ -1,5 +1,6 @@
 import { formatStoredPieces } from "./completeness.js";
 import { emailQuoteSendUrl } from "./email-verify-client.js";
+import { formatPalletSize } from "./pallet-size.js";
 import { buildQuoteEmailHtml } from "./quote-email-html.js";
 
 export const MAIL_FROM = "john@freightlodge.com";
@@ -29,6 +30,7 @@ export function quoteEmailFields(sheet) {
     dest: dest || "—",
     lane: `${origin || "—"} → ${dest || "—"}`,
     pieces: piecesLine(sheet?.freight),
+    palletSize: formatPalletSize(sheet?.freight?.dims),
     weight: `${sheet?.freight?.total_weight_lbs ?? "—"} lb`,
     commodity: sheet?.freight?.commodity || "—",
     pickup: sheet?.pickup?.date || "—",
@@ -74,6 +76,7 @@ export function formatQuoteEmail(sheet) {
       "",
       `Lane: ${fields.lane}`,
       `Pieces: ${fields.pieces}`,
+      ...(fields.palletSize ? [`Pallet size: ${fields.palletSize}`] : []),
       `Weight: ${fields.weight}`,
       `Commodity: ${fields.commodity}`,
       `Pickup: ${fields.pickup}`,

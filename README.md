@@ -10,6 +10,7 @@ Playable URL (GitHub Pages project site):
 - Out of scope (hard international, ocean/air) → `status=out_of_scope` + honest message, never a fake rate
 - Sheet contract: [`docs/QUOTE_SHEET_V1.json`](docs/QUOTE_SHEET_V1.json) (`schema_version: "1.0"`)
 - v1.0.1 additives: optional `error_reason`, default `mode: "LTL"`, lowest `total_usd` if multiple rates
+- v1.0.2 additives: optional `freight.dims.l`, `dims.w`, `dims.h`, `dims.unit`, `dims.source`, and `dims.choice` (schema_version stays `1.0`)
 - The quote conversation is rule-based. It does not call Jev. **Never** put `TYPESAFE_API_KEY` in `VITE_*`.
 
 ## Run locally
@@ -24,7 +25,13 @@ Open the printed localhost URL (Chrome or Safari). Hold the mic button to talk, 
 
 **Conversational mode** (separate toggle) rewrites agent bubbles into short customer-service copy and speaks them with the browser `speechSynthesis` API. Mode off = formal prompts + silent. There is no cloud TTS toggle, latency chip, or STT mode badge in the UI.
 
-**App version** is `v0.XX` where XX is `0.01` × (merged change-sets including the current ship). Source of truth: [`VERSION`](VERSION). This ship is **v0.36**. Future PRs that do not bump `VERSION` are incremented by CI (`.github/workflows/version-on-pr.yml`).
+**App version** is `v0.XX` where XX is `0.01` × (merged change-sets including the current ship). Source of truth: [`VERSION`](VERSION). This ship is **v0.42**. Future PRs that do not bump `VERSION` are incremented by CI (`.github/workflows/version-on-pr.yml`).
+
+### v0.42
+
+After the pallet count, the chat asks `What size are the pallets?` with quick replies `48x40x48`, `48x48x48`, and `Custom`. There is no silent default. Custom takes length, width, and height in inches (together or one at a time) and re-asks when a side is outside 1 to 120. The size is stored on `freight.dims` and shown on the quote card, the transcript, and the quote email as `Pallet size: 48 x 40 x 48 in`.
+
+The pickup ask is a confirm of the next America/Chicago business day: `I can have it picked up Thursday, October 1. Does that work?` with `Yes` and `Pick another day`. Weekends roll to Monday. Friday proposes Monday. The stored field is still `pickup.date` as `YYYY-MM-DD`.
 
 `npm run preview` serves the production build plus the same local API stubs.
 
@@ -203,7 +210,7 @@ npm test
 
 - Hold-and-dump: one utterance parks weight + commodity + cities while awaiting origin ZIP
 - Conversational copy + browser `speechSynthesis`; Web Speech only for STT
-- Visible `VERSION` (`v0.36` this ship) baked into the footer only
+- Visible `VERSION` (`v0.42` this ship) baked into the footer only
 - Quote-card email (HTML + text) without mailto; no OTP gate on the quote path
 - Completeness rules for `ready_for_quote`
 - Never-invent: cities do not become ZIPs; “standard class” / “a few hundred pounds” stay `null`

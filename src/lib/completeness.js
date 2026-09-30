@@ -1,3 +1,4 @@
+import { needsPalletSize } from "./pallet-size.js";
 import { SCHEMA_VERSION } from "./sheet.js";
 import { hasPlaceHint, isGarbagePlace } from "./extract.js";
 
@@ -26,7 +27,9 @@ export function hasMeasure(freight) {
     freight.total_weight_lbs > 0;
   const klass =
     typeof freight.freight_class === "string" && freight.freight_class.trim().length > 0;
-  return Boolean(weight || hasCompleteDims(freight.dims) || klass);
+  // Pallet-size dims carry source/choice. They do not replace the weight ask.
+  const dimsArePalletChoice = Boolean(freight.dims?.source || freight.dims?.choice);
+  return Boolean(weight || (hasCompleteDims(freight.dims) && !dimsArePalletChoice) || klass);
 }
 
 export function missingReadyFields(sheet) {
@@ -41,6 +44,7 @@ export function missingReadyFields(sheet) {
   if (!Number.isInteger(sheet.freight?.pieces) || sheet.freight.pieces < 1) {
     missing.push("freight.pieces");
   }
+  if (needsPalletSize(sheet)) missing.push("freight.dims.choice");
   if (!hasMeasure(sheet.freight)) {
     missing.push("freight.total_weight_lbs|freight.dims|freight.freight_class");
   }
@@ -95,6 +99,7 @@ export function awaitingSlotIsFilled(sheet, slot, { askedAccessorials = false } 
   if (slot === "measure") return hasMeasure(sheet?.freight);
   if (slot === "piece_unit") return hasPieceUnit(sheet?.freight);
   if (slot === "pieces") return hasPieceCount(sheet?.freight);
+  if (slot === "pallet_size") return !needsPalletSize(sheet);
   if (slot === "commodity") {
     return typeof sheet?.freight?.commodity === "string" && Boolean(sheet.freight.commodity.trim());
   }
@@ -118,6 +123,7 @@ export const SLOT_ORDER = [
   "dest_zip",
   "piece_unit",
   "pieces",
+  "pallet_size",
   "measure",
   "commodity",
   "pickup_date",
@@ -135,6 +141,7 @@ export function nextRequiredSlot(sheet, { askedAccessorials = false } = {}) {
   if (!isValidZip(dest?.postal_code)) return "dest_zip";
   if (!hasPieceCount(sheet?.freight) && !hasPieceUnit(sheet?.freight)) return "piece_unit";
   if (!hasPieceCount(sheet?.freight)) return "pieces";
+  if (needsPalletSize(sheet)) return "pallet_size";
   if (!hasMeasure(sheet?.freight)) return "measure";
   if (typeof sheet?.freight?.commodity !== "string" || !sheet.freight.commodity.trim()) {
     return "commodity";

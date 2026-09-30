@@ -89,6 +89,7 @@ describe("quote sheet v1 completeness", () => {
     const turns = [
       "Chicago IL 60601 to Dallas TX 75201",
       "3 pallets",
+      "48x40x48",
       "1200 pounds",
       "auto parts",
       "tomorrow",
@@ -118,7 +119,9 @@ describe("quote sheet v1 completeness", () => {
       "Chicago IL 60601 to Dallas TX 75201, 3 pallets, 1200 pounds, auto parts, pickup tomorrow, liftgate delivery, email shipper@example.com",
       { now },
     );
-    expect(result.ready).toBe(true);
+    expect(result.ready).toBe(false);
+    expect(result.session.awaiting).toBe("pallet_size");
+    expect(result.reply).toMatch(/What size are the pallets\?/);
     expect(result.session.sheet.freight.freight_class).toBeNull();
     expect(result.session.sheet.freight.dims).toBeNull();
     expect(result.session.sheet.freight.total_weight_lbs).toBe(1200);

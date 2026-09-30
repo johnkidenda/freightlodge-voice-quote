@@ -100,12 +100,13 @@ describe("v0.41 pallet sanity", () => {
     const yesLabel = handleUtterance(pending.session, "Yes, 65");
     expect(yesLabel.session.sheet.freight.pieces).toBe(65);
     expect(yesLabel.session.palletSanity).toEqual({ pieces: 65, weight: 1000 });
-    expect(yesLabel.session.awaiting).toBe("pickup_date");
+    expect(yesLabel.session.awaiting).toBe("pallet_size");
+    expect(yesLabel.reply).toMatch(/What size are the pallets\?/);
     expect(yesLabel.reply).not.toMatch(/anyway\?/);
 
     const yeah = handleUtterance(pending.session, "yeah");
     expect(yeah.session.palletSanity.pieces).toBe(65);
-    expect(yeah.session.awaiting).toBe("pickup_date");
+    expect(yeah.session.awaiting).toBe("pallet_size");
 
     const typedNo = handleUtterance(pending.session, "no");
     expect(typedNo.session.sheet.freight.pieces).toBeNull();
@@ -125,6 +126,18 @@ describe("v0.41 pallet sanity", () => {
   it("a confirmed count quotes, and a changed weight asks again", () => {
     let session = withPallets(65, 1000, "ready");
     session.sheet.freight.commodity = "oranges";
+    session.sheet.freight.dims = {
+      l: 48,
+      w: 40,
+      h: 48,
+      unit: "in",
+      source: "button_48x40x48",
+      choice: "48x40x48",
+      length_in: 48,
+      width_in: 40,
+      height_in: 48,
+      per_piece: true,
+    };
     session.sheet.pickup.date = "2026-10-02";
     session.askedAccessorials = true;
     session.sheet.contact.email = "shipper@example.com";
@@ -215,7 +228,7 @@ describe("v0.41 date words and city direction", () => {
 describe("v0.41 transcript version and taps", () => {
   it("stamps the app version on the sheet and in the emailed snapshot", () => {
     const session = createSession({ id: "ver" });
-    expect(session.sheet.app_version).toBe("v0.41");
+    expect(session.sheet.app_version).toBe("v0.42");
     expect(emptySheet().app_version).toBe(formatAppVersionLabel());
     const text = formatSessionTranscript(
       [
@@ -225,8 +238,8 @@ describe("v0.41 transcript version and taps", () => {
       ],
       session,
     );
-    expect(text.startsWith("Version: v0.41\n")).toBe(true);
-    expect(text).toContain("Sheet snapshot:\nVersion: v0.41");
+    expect(text.startsWith("Version: v0.42\n")).toBe(true);
+    expect(text).toContain("Sheet snapshot:\nVersion: v0.42");
     expect(text).toContain("User [tap]: Pallets");
     expect(text).toContain("User: five");
     expect(text).not.toContain("User [tap]: five");
@@ -243,6 +256,18 @@ describe("v0.41 rating payload", () => {
     light.freight.piece_unit = "pallets";
     light.freight.total_weight_lbs = 1000;
     light.freight.commodity = "oranges";
+    light.freight.dims = {
+      l: 48,
+      w: 40,
+      h: 48,
+      unit: "in",
+      source: "button_48x40x48",
+      choice: "48x40x48",
+      length_in: 48,
+      width_in: 40,
+      height_in: 48,
+      per_piece: true,
+    };
     light.pickup.date = "2026-10-02";
     light.contact.email = "shipper@example.com";
     light.status = "ready_for_quote";

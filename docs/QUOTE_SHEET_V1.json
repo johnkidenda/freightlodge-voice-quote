@@ -2,7 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "freightlodge.quote_sheet.v1",
   "title": "Freight Lodge Quote Sheet v1",
-  "description": "Stable contract between voice-to-quote app (Anthony) and Exfresso computer-use runner (Freight Ops). Never invent ZIPs, dims, weights, or class \u2014 leave null and ask. v1.0.1 additives: error_reason; assume domestic LTL unless mode added later; when multiple rates, Freight Ops returns lowest total_usd unless overridden.",
+  "description": "Stable contract between voice-to-quote app (Anthony) and Exfresso computer-use runner (Freight Ops). Never invent ZIPs, dims, weights, or class. Leave null and ask. v1.0.1 additives: error_reason; assume domestic LTL unless mode added later; when multiple rates, Freight Ops returns lowest total_usd unless overridden. v1.0.2 additives: optional freight.dims.l, dims.w, dims.h, dims.unit, dims.source, and dims.choice. schema_version stays 1.0.",
+  "x-contract-version": "1.0.2",
   "type": "object",
   "required": [
     "schema_version",
@@ -106,6 +107,31 @@
             "per_piece": {
               "type": "boolean",
               "default": true
+            },
+            "l": {
+              "type": ["number", "null"],
+              "description": "Length in inches. Additive with length_in."
+            },
+            "w": {
+              "type": ["number", "null"],
+              "description": "Width in inches. Additive with width_in."
+            },
+            "h": {
+              "type": ["number", "null"],
+              "description": "Height in inches. Additive with height_in."
+            },
+            "unit": {
+              "type": ["string", "null"],
+              "enum": ["in", null]
+            },
+            "source": {
+              "type": ["string", "null"],
+              "enum": ["button_48x40x48", "button_48x48x48", "custom", "voice", null]
+            },
+            "choice": {
+              "type": ["string", "null"],
+              "description": "Which pallet size choice was used: 48x40x48, 48x48x48, or custom.",
+              "enum": ["48x40x48", "48x48x48", "custom", null]
             }
           }
         },

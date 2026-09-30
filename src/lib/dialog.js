@@ -23,6 +23,23 @@ import {
   resolveZipAttachment,
 } from "./extract.js";
 import { detectOutOfScope } from "./scope.js";
+import {
+  PALLET_SIZE_PROMPT,
+  formatPalletSize,
+  interpretPalletSize,
+  normalizeSpokenDims,
+  promptForPalletDraft,
+  resolvePalletSizeTurn,
+} from "./pallet-size.js";
+import {
+  SHIP_DAY_OTHER_PROMPT,
+  SHIP_DAY_PAST_PROMPT,
+  isPastShipDate,
+  isPickAnotherDay,
+  isShipDayYes,
+  nextBusinessDayIso,
+  shipDayConfirmPrompt,
+} from "./ship-day.js";
 import { stateDisplayName } from "./zip-state.js";
 
 export const GREETING =
@@ -40,7 +57,6 @@ const PROMPTS = {
   measure:
     "I need a real measure: total weight in pounds, or L×W×H in inches, or the NMFC class if you already know it.",
   commodity: "What’s the commodity?",
-  pickup_date: "What pickup date works?",
   accessorials:
     "Any accessorials? Liftgate, residential, inside, limited access, appointment, freeze protect, or say none.",
   liftgate_side: "Liftgate at pickup, delivery, or both?",
@@ -65,6 +81,10 @@ export function createSession({ id, now } = {}) {
     dateClarify: null,
     sameZipConfirmed: false,
     palletSanity: null,
+    palletSizePhase: null,
+    palletDraft: null,
+    shipDayOffer: null,
+    shipDayPicking: false,
   };
 }
 
@@ -461,6 +481,7 @@ export function openingMessage() {
  */
 export function handleUtterance(session, text, { now } = {}) {
   const raw = (text || "").trim();
+  const clock = now ? new Date(now) : new Date();
   const sheet0 = session.sheet;
   const scope = detectOutOfScope(raw, sheet0);
   if (scope.outOfScope) {
@@ -487,6 +508,65 @@ export function handleUtterance(session, text, { now } = {}) {
   if (sanityAnswer?.handled) return sanityAnswer.result;
   if (sanityAnswer && !sanityAnswer.handled) {
     session = { ...session, palletSanity: null, awaiting: "pieces" };
+  }
+
+  if (session.awaiting === "pickup_date" && !session.dateClarify) {
+    if (!session.shipDayPicking && isShipDayYes(raw)) {
+      const iso = session.shipDayOffer || nextBusinessDayIso(clock);
+      const sheet = structuredClone(sheet0);
+      sheet.pickup = { ...sheet.pickup, date: iso };
+      return proceedFromSheet(session, sheet, session.askedAccessorials, null, { now: clock });
+    }
+    if (isPickAnotherDay(raw)) {
+      return finish(
+        {
+          ...session,
+          shipDayPicking: true,
+          shipDayOffer: session.shipDayOffer || nextBusinessDayIso(clock),
+        },
+        sheet0,
+        session.askedAccessorials,
+        SHIP_DAY_OTHER_PROMPT,
+        null,
+        "pickup_date",
+      );
+    }
+  }
+
+  if (session.awaiting === "pallet_size" || session.palletSizePhase === "custom") {
+    const interpreted = interpretPalletSize(raw, { phase: session.palletSizePhase });
+    if (interpreted.kind === "unrecognized" && /^(yes|yeah|yep|yup|no|nope|nah)\b/i.test(raw)) {
+      return finish(
+        session,
+        sheet0,
+        session.askedAccessorials,
+        session.palletSizePhase === "custom" ? promptForPalletDraft(session.palletDraft) : PALLET_SIZE_PROMPT,
+        null,
+        "pallet_size",
+      );
+    }
+    if (interpreted.kind !== "unrecognized") {
+      const turned = resolvePalletSizeTurn(session, interpreted);
+      if (turned.done) {
+        const sheet = structuredClone(sheet0);
+        sheet.freight = { ...sheet.freight, dims: turned.dims };
+        return proceedFromSheet(
+          { ...session, palletSizePhase: null, palletDraft: null },
+          sheet,
+          session.askedAccessorials,
+          null,
+          { now: clock, replyAck: `Got it: ${formatPalletSize(turned.dims)}.` },
+        );
+      }
+      return finish(
+        { ...session, palletSizePhase: turned.phase, palletDraft: turned.draft },
+        sheet0,
+        session.askedAccessorials,
+        turned.reply,
+        null,
+        "pallet_size",
+      );
+    }
   }
 
   const stickyZip = session.awaiting === "origin_zip" || session.awaiting === "dest_zip";
@@ -676,6 +756,10 @@ export function handleUtterance(session, text, { now } = {}) {
   // bare ZIPs / lone counts in extract — it must never drop weight, commodity,
   // or cities from the same utterance.
   let sheet = applyExtractedSlots(sheetFromClarify, extracted);
+  if (sheet.freight?.piece_unit === "pallets" && sheet.freight.dims && !sheet.freight.dims.choice) {
+    const stamped = normalizeSpokenDims(sheet.freight.dims, { source: "voice" });
+    if (stamped) sheet = { ...sheet, freight: { ...sheet.freight, dims: stamped } };
+  }
 
   if (!extracted.flags.zipClarify && !session.sameZipConfirmed) {
     const same = detectSameZipClarify(sheetFromClarify, sheet);
@@ -737,6 +821,24 @@ export function handleUtterance(session, text, { now } = {}) {
     (extracted.pickup.accessorials && extracted.pickup.accessorials.length)
   ) {
     askedAccessorials = true;
+  }
+
+  if (extracted.pickup?.date && isPastShipDate(extracted.pickup.date, clock)) {
+    const previous = sheet0.pickup?.date;
+    const keep = previous && !isPastShipDate(previous, clock) ? previous : null;
+    sheet = { ...sheet, pickup: { ...sheet.pickup, date: keep } };
+    return finish(
+      { ...session, shipDayPicking: true, shipDayOffer: session.shipDayOffer || nextBusinessDayIso(clock) },
+      sheet,
+      askedAccessorials,
+      SHIP_DAY_PAST_PROMPT,
+      extracted,
+      "pickup_date",
+      undefined,
+      lastBareZip,
+      zipClarify,
+      accessorialClarify,
+    );
   }
 
   if (extracted.flags.zipClarify) {
@@ -866,6 +968,9 @@ export function handleUtterance(session, text, { now } = {}) {
     const slot = pendingClarifyRole === "dest" ? "dest_zip" : "origin_zip";
     if (!awaitingSlotIsFilled(sheet, slot)) awaiting = slot;
   }
+  if (awaiting === "pickup_date" && !session.shipDayPicking) {
+    session = { ...session, shipDayOffer: session.shipDayOffer || nextBusinessDayIso(clock) };
+  }
   const extractKey = extractKeyOf(extracted);
   const addedNothing = session.lastExtractKey === extractKey && !extracted.flags.zipRole;
   let reply;
@@ -875,7 +980,7 @@ export function handleUtterance(session, text, { now } = {}) {
       : PROMPTS.dest_incomplete;
   } else {
     const ack = acknowledge(extracted, sheet);
-    const ask = promptFor(awaiting, sheet);
+    const ask = promptFor(awaiting, sheet, session, clock);
     reply = ack ? `${ack} ${ask}` : ask;
     if (addedNothing && reply === session.lastReply) {
       reply =
@@ -893,7 +998,46 @@ function placeLabel(place) {
   return bits.length ? bits.join(", ") : null;
 }
 
-function promptFor(slot, sheet) {
+function proceedFromSheet(session, sheet, askedAccessorials, extracted, { now, replyAck } = {}) {
+  const clock = now instanceof Date ? now : now ? new Date(now) : new Date();
+  const sanityIssue = palletSanityIssue(sheet);
+  if (sanityIssue && !palletSanityCovers(session, sanityIssue)) {
+    const question = palletSanityQuestion(sanityIssue);
+    const reply = replyAck ? `${replyAck} ${question}` : question;
+    return finish(session, sheet, askedAccessorials, reply, extracted, "pallet_sanity");
+  }
+  if (isReadyForQuote(sheet) && askedAccessorials) {
+    const readySheet = { ...sheet, status: "ready_for_quote", error_reason: null, out_of_scope_reason: null };
+    return {
+      session: {
+        ...session,
+        sheet: readySheet,
+        askedAccessorials,
+        awaiting: null,
+        palletSizePhase: null,
+        palletDraft: null,
+        shipDayPicking: false,
+        shipDayOffer: null,
+        zipClarify: null,
+        accessorialClarify: null,
+      },
+      reply: replyAck ? `${replyAck} ${SHEET_READY_REPLY}` : SHEET_READY_REPLY,
+      extracted,
+      ready: true,
+      outOfScope: false,
+    };
+  }
+  let nextSession = session;
+  const awaiting = nextRequiredSlot(sheet, { askedAccessorials });
+  if (awaiting === "pickup_date" && !nextSession.shipDayPicking) {
+    nextSession = { ...nextSession, shipDayOffer: nextSession.shipDayOffer || nextBusinessDayIso(clock) };
+  }
+  const ask = promptFor(awaiting, sheet, nextSession, clock);
+  const reply = replyAck ? `${replyAck} ${ask}` : ask;
+  return finish(nextSession, sheet, askedAccessorials, reply, extracted, awaiting);
+}
+
+function promptFor(slot, sheet, session, now) {
   if (slot === "dest_zip") {
     const label = placeLabel(sheet.lanes?.destination);
     if (label) return `To ${label}. What’s the destination zip code?`;
@@ -903,6 +1047,15 @@ function promptFor(slot, sheet) {
     if (label) return `From ${label}. What’s the origin zip code?`;
   }
   if (slot === "pieces") return piecesCountPrompt(sheet);
+  if (slot === "pallet_size") {
+    if (session?.palletSizePhase === "custom") return promptForPalletDraft(session.palletDraft);
+    return PALLET_SIZE_PROMPT;
+  }
+  if (slot === "pickup_date") {
+    if (session?.shipDayPicking) return SHIP_DAY_OTHER_PROMPT;
+    const iso = session?.shipDayOffer || nextBusinessDayIso(now || new Date());
+    return shipDayConfirmPrompt(formatSpokenDate(iso));
+  }
   return slot ? PROMPTS[slot] : PROMPTS.email;
 }
 
@@ -915,6 +1068,8 @@ export function piecesCountPrompt(sheet) {
 function spokenSlot(slot) {
   if (slot === "origin_zip") return "origin zip code";
   if (slot === "dest_zip") return "destination zip code";
+  if (slot === "pallet_size") return "pallet size";
+  if (slot === "pickup_date") return "pickup date";
   return slot?.replaceAll("_", " ") || "detail";
 }
 
@@ -1010,6 +1165,10 @@ function finish(session, sheet, askedAccessorials, reply, extracted, awaiting, e
       lastReply: reply,
       lastExtractKey: extractKey ?? extractKeyOf(extracted),
       lastBareZip: lastBareZip ?? session.lastBareZip,
+      palletSizePhase: nextAwait === "pallet_size" && nextSheet.status !== "ready_for_quote" ? session.palletSizePhase ?? null : null,
+      palletDraft: nextAwait === "pallet_size" && nextSheet.status !== "ready_for_quote" ? session.palletDraft ?? null : null,
+      shipDayPicking: nextAwait === "pickup_date" && nextSheet.status !== "ready_for_quote" ? Boolean(session.shipDayPicking) : false,
+      shipDayOffer: nextAwait === "pickup_date" && nextSheet.status !== "ready_for_quote" ? session.shipDayOffer ?? null : null,
       zipClarify: nextSheet.status === "ready_for_quote" ? null : zipClarify ?? null,
       accessorialClarify: nextAccessorialClarify,
       sameZipConfirmed: stillSame ? Boolean(session.sameZipConfirmed) : false,

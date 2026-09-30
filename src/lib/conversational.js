@@ -1,6 +1,8 @@
 import { isValidZip, pieceUnitForAck, spokenPieceCount } from "./completeness.js";
 import { formatSpokenDate, piecesCountPrompt } from "./dialog.js";
 import { isGarbagePlace } from "./extract.js";
+import { PALLET_CUSTOM_PROMPT, PALLET_SIZE_PROMPT, promptForPalletDraft } from "./pallet-size.js";
+import { SHIP_DAY_OTHER_PROMPT, nextBusinessDayIso, shipDayConfirmPrompt } from "./ship-day.js";
 
 export const CONVERSATIONAL_GREETING =
   "Hi. I can take a US domestic LTL quote. What’s the origin zip code?";
@@ -93,7 +95,7 @@ function conversationalHave(sheet, extracted) {
   return `Got ${joinSpoken(bits)}.`;
 }
 
-function conversationalAsk(sheet, awaiting) {
+function conversationalAsk(sheet, awaiting, session) {
   const originZip = isValidZip(sheet?.lanes?.origin?.postal_code);
   const destZip = isValidZip(sheet?.lanes?.destination?.postal_code);
   const originCity = cityOf(sheet?.lanes?.origin);
@@ -121,11 +123,19 @@ function conversationalAsk(sheet, awaiting) {
   }
   if (awaiting === "piece_unit") return "Are you shipping pallets or pieces?";
   if (awaiting === "pieces") return piecesCountPrompt(sheet);
+  if (awaiting === "pallet_size") {
+    if (session?.palletSizePhase === "custom") return promptForPalletDraft(session.palletDraft) || PALLET_CUSTOM_PROMPT;
+    return PALLET_SIZE_PROMPT;
+  }
   if (awaiting === "measure") {
     return "What’s the total weight in pounds? Or dims or class if you already know them.";
   }
   if (awaiting === "commodity") return "What’s the commodity?";
-  if (awaiting === "pickup_date") return "What pickup date works?";
+  if (awaiting === "pickup_date") {
+    if (session?.shipDayPicking) return SHIP_DAY_OTHER_PROMPT;
+    const iso = session?.shipDayOffer || nextBusinessDayIso(new Date());
+    return shipDayConfirmPrompt(formatSpokenDate(iso));
+  }
   if (awaiting === "accessorials") {
     return "Any extras? Liftgate, residential, inside, protect from freeze, or should I put none?";
   }
@@ -152,6 +162,7 @@ export function composeConversationalReply({
   awaiting,
   ready,
   outOfScope,
+  session,
 } = {}) {
   if (outOfScope) return formalReply || "";
   if (ready) {
@@ -179,9 +190,11 @@ export function composeConversationalReply({
   if (extracted?.flags?.vagueDate && !extracted.pickup?.date) {
     return "I need a pickup date. Today, tomorrow, or Friday.";
   }
+  if (/already passed/.test(formalReply || "")) return formalReply || "";
+  if (/1 to 120/.test(formalReply || "")) return formalReply || "";
 
   const have = conversationalHave(sheet, extracted);
-  const ask = conversationalAsk(sheet, awaiting);
+  const ask = conversationalAsk(sheet, awaiting, session);
   if (have && ask) return `${have} ${ask}`;
   if (ask) return ask;
   if (have) return have;
@@ -198,5 +211,6 @@ export function presentAgentReply(result, conversational) {
     awaiting: result.session?.awaiting,
     ready: result.ready,
     outOfScope: result.outOfScope,
+    session: result.session,
   });
 }

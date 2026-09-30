@@ -25,6 +25,18 @@ function readySheet() {
   sheet.freight.piece_unit = "pallets";
   sheet.freight.total_weight_lbs = 1000;
   sheet.freight.commodity = "oranges";
+  sheet.freight.dims = {
+    l: 48,
+    w: 40,
+    h: 48,
+    unit: "in",
+    source: "button_48x40x48",
+    choice: "48x40x48",
+    length_in: 48,
+    width_in: 40,
+    height_in: 48,
+    per_piece: true,
+  };
   sheet.pickup.date = "2026-10-02";
   sheet.contact.email = "shipper@example.com";
   sheet.status = "ready_for_quote";
@@ -125,8 +137,7 @@ describe("v0.41 estimate display", () => {
 
 describe("v0.41 copy nits", () => {
   it("asks for a pickup date without an ISO format hint", () => {
-    expect(PROMPTS.pickup_date).toBe("What pickup date works?");
-    expect(PROMPTS.pickup_date).not.toMatch(/YYYY-MM-DD/);
+    expect(PROMPTS.pickup_date).toBeUndefined();
     const session = createSession({ id: "date-ask" });
     session.sheet.lanes.origin.postal_code = "78721";
     session.sheet.lanes.destination.postal_code = "30030";

@@ -1,5 +1,6 @@
 import { MAIL_FROM } from "../lib/email.js";
 import { escapeHtml } from "../lib/escape-html.js";
+import { formatPalletSizeLine } from "../lib/pallet-size.js";
 import {
   ESTIMATE_ERROR,
   ESTIMATE_LOADING,
@@ -9,6 +10,16 @@ import {
   formatUsd,
   isHiddenPrice,
 } from "../lib/price-display.js";
+
+function sheetFacts(sheet) {
+  const lines = [];
+  const size = formatPalletSizeLine(sheet?.freight?.dims);
+  if (size) lines.push(`<p class="sheet-line">${escapeHtml(size)}</p>`);
+  if (sheet?.pickup?.date) {
+    lines.push(`<p class="sheet-line">Pickup: ${escapeHtml(sheet.pickup.date)}</p>`);
+  }
+  return lines.join("");
+}
 
 export function quoteCard(sheet, emailNote, mode = PRICE_DISPLAY) {
   if (sheet.status === "quoting") {
@@ -33,6 +44,7 @@ export function quoteCard(sheet, emailNote, mode = PRICE_DISPLAY) {
     return `<section class="card quote">
       <p class="eyebrow">Estimate</p>
       <p>${escapeHtml(HIDDEN_FOLLOWUP)}</p>
+      ${sheetFacts(sheet)}
       <button type="button" class="email-btn" data-email-quote>Email me this quote</button>
       <p class="hint">We’ll send it from ${escapeHtml(MAIL_FROM)}.</p>
       ${emailNote ? `<p class="hint">${escapeHtml(emailNote)}</p>` : ""}
@@ -49,6 +61,7 @@ export function quoteCard(sheet, emailNote, mode = PRICE_DISPLAY) {
       <div><dt>ID</dt><dd>${escapeHtml(q.quote_id || "")}</dd></div>
     </dl>
     <p class="estimate-note">${escapeHtml(ESTIMATE_NOTE)}</p>
+    ${sheetFacts(sheet)}
     <button type="button" class="email-btn" data-email-quote>Email me this quote</button>
     <p class="hint">We’ll send it from ${escapeHtml(MAIL_FROM)}.</p>
     ${emailNote ? `<p class="hint">${escapeHtml(emailNote)}</p>` : ""}
