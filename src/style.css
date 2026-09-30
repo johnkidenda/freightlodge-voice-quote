@@ -383,6 +383,7 @@ button, input { font: inherit; }
   border: 1px solid var(--line);
 }
 .card.quote { background: #f7f1e3; }
+.sheet-line { margin: 0 0 8px; font-weight: 650; }
 .card.oos { background: #f8e8e4; }
 .card.wait { background: #eef2f7; }
 .card h3 { margin: 4px 0 0; font-family: Fraunces, Georgia, serif; }

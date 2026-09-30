@@ -62,6 +62,7 @@ export function buildQuoteEmailHtml({ fields, subject, mailFrom, logoUrl, logoCr
   const sheetRows = [
     ["Lane", fields.lane],
     ["Pieces", String(fields.pieces)],
+    ...(fields.palletSize ? [["Pallet size", fields.palletSize]] : []),
     ["Weight", fields.weight],
     ["Commodity", fields.commodity],
     ["Pickup", fields.pickup],

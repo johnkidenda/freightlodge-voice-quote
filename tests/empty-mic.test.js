@@ -51,7 +51,7 @@ vi.mock("../src/lib/listen-cue.js", () => ({
 import { EMPTY_MIC_HINT, mountApp } from "../src/app.js";
 
 const TO_PIECES = ["78721", "30030", "pallets"];
-const PIECES_TO_EMAIL = ["2", "500 pounds", "oranges", "October 2", "no"];
+const PIECES_TO_EMAIL = ["2", "48x40x48", "500 pounds", "oranges", "October 2", "no"];
 
 function mount() {
   localStorage.clear();

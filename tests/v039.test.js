@@ -31,7 +31,8 @@ describe("repeated ZIP fragments keep the last full ZIP", () => {
     expect(result.reply).not.toMatch(/\bfull\b/i);
 
     const counted = handleUtterance(result.session, "2 pallets");
-    const weighed = handleUtterance(counted.session, "500 pounds");
+    const sized = handleUtterance(counted.session, "48x40x48");
+    const weighed = handleUtterance(sized.session, "500 pounds");
     expect(weighed.session.sheet.freight.commodity).toBeFalsy();
     expect(weighed.session.awaiting).toBe("commodity");
     expect(weighed.reply).toMatch(/What’s the commodity\?/);

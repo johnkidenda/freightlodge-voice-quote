@@ -1,5 +1,6 @@
 import { formatAppVersionLabel } from "./app-version.js";
 import { formatPlace, formatStoredPieces } from "./completeness.js";
+import { formatPalletSize } from "./pallet-size.js";
 import { getSttProvider } from "./stt-providers.js";
 
 export const TRANSCRIPT_TO = "john@freightlodge.com";
@@ -45,6 +46,7 @@ export function formatSessionTranscript(messages, session) {
   const dest = formatPlace(sheet?.lanes?.destination) || BLANK;
   const weight = sheet?.freight?.total_weight_lbs ?? BLANK;
   const pieces = formatPieces(sheet?.freight);
+  const palletSize = formatPalletSize(sheet?.freight?.dims) || BLANK;
   const commodity = sheet?.freight?.commodity || BLANK;
   const pickupDate = sheet?.pickup?.date || BLANK;
   const email = sheet?.contact?.email || BLANK;
@@ -66,6 +68,7 @@ export function formatSessionTranscript(messages, session) {
     `Destination: ${dest}`,
     `Weight: ${weight}`,
     `Pieces: ${pieces}`,
+    `Pallet size: ${palletSize}`,
     `Commodity: ${commodity}`,
     `Pickup date: ${pickupDate}`,
     `Email: ${email}`,

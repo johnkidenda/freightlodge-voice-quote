@@ -1,4 +1,6 @@
 import { formatSpokenDate, zipClarifyQuestion } from "./dialog.js";
+import { PALLET_SIZE_CHOICES } from "./pallet-size.js";
+import { SHIP_DAY_CHOICES } from "./ship-day.js";
 import { stateDisplayName } from "./zip-state.js";
 
 /** Visible label is the text submitted, so the transcript matches the button. */
@@ -20,6 +22,8 @@ export const INSIDE_CHOICES = [
 ];
 
 export const ZIP_END_CHOICES = [{ label: "Origin" }, { label: "Destination" }];
+
+export { PALLET_SIZE_CHOICES, SHIP_DAY_CHOICES };
 
 function copyChoices(list) {
   return list.map((choice) => ({ label: choice.label }));
@@ -79,6 +83,10 @@ export function quickRepliesFor(result, displayedReply = result?.reply) {
   const reply = String(displayedReply || "");
   if (!reply) return null;
 
+  if (result.session?.awaiting === "pallet_size" && result.session?.palletSizePhase !== "custom") {
+    return copyChoices(PALLET_SIZE_CHOICES);
+  }
+
   const date = result.session?.dateClarify;
   if (date?.soon && date?.later && result.extracted?.flags?.ambiguousDate) {
     const soon = formatSpokenDate(date.soon);
@@ -92,5 +100,13 @@ export function quickRepliesFor(result, displayedReply = result?.reply) {
   if (/liftgate at pickup, delivery, or both\?/i.test(reply)) return copyChoices(LIFTGATE_CHOICES);
   if (/inside pickup, inside delivery, or both\?/i.test(reply)) return copyChoices(INSIDE_CHOICES);
   if (/pallets or pieces\?/i.test(reply)) return copyChoices(PIECE_UNIT_CHOICES);
+  if (
+    result.session?.awaiting === "pickup_date" &&
+    !result.session?.shipDayPicking &&
+    !result.extracted?.flags?.ambiguousDate &&
+    /Does that work\?/.test(reply)
+  ) {
+    return copyChoices(SHIP_DAY_CHOICES);
+  }
   return null;
 }

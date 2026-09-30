@@ -73,7 +73,7 @@ import { renderThread } from "../src/ui/thread.js";
 const THU_SEP_24_2026 = new Date(2026, 8, 24, 20, 13, 0);
 
 const TO_UNIT = ["78721", "30030"];
-const TO_DATE = [...TO_UNIT, "pallets", "2", "500 pounds", "oranges"];
+const TO_DATE = [...TO_UNIT, "pallets", "2", "48x40x48", "500 pounds", "oranges"];
 const TO_ACCESSORIALS = [...TO_DATE, "October 2"];
 
 function mount(now = THU_SEP_24_2026) {
@@ -212,13 +212,18 @@ describe("quick reply catalog", () => {
       formatSpokenDate("2026-10-02"),
     ]);
 
+    const sized = replay([...TO_UNIT, "pallets", "2"]);
+    expect(sized.reply).toMatch(/What size are the pallets\?/);
+    expect(quickRepliesFor(sized).map((choice) => choice.label)).toEqual(["48x40x48", "48x48x48", "Custom"]);
+
+    const ship = replay(TO_DATE);
+    expect(ship.reply).toMatch(/Does that work\?/);
+    expect(quickRepliesFor(ship).map((choice) => choice.label)).toEqual(["Yes", "Pick another day"]);
+
     const open = [
       replay(["hello"]),
       replay(TO_UNIT.slice(0, 1)),
       replay([...TO_UNIT, "pallets"]),
-      replay([...TO_UNIT, "pallets", "2"]),
-      replay([...TO_UNIT, "pallets", "2", "500 pounds"]),
-      replay(TO_DATE),
       replay(TO_ACCESSORIALS),
       replay([...TO_ACCESSORIALS, "no"]),
     ];
@@ -320,11 +325,15 @@ describe("quick reply buttons in the thread", () => {
     expect(buttons(bubbleFor(root, /pallets or pieces\?/)).every((button) => button.disabled)).toBe(true);
 
     await send(root, "2");
+    expect(labelsOf(lastAssistant(root))).toEqual(["48x40x48", "48x48x48", "Custom"]);
+    expect(bubbleText(lastAssistant(root))).toMatch(/What size are the pallets\?/);
+    await send(root, "48x40x48");
     expect(buttons(bubbleFor(root, /total weight in pounds/))).toHaveLength(0);
     await send(root, "500 pounds");
     expect(buttons(bubbleFor(root, /What’s the commodity\?/))).toHaveLength(0);
     await send(root, "oranges");
-    expect(buttons(bubbleFor(root, /What pickup date works\?/))).toHaveLength(0);
+    expect(labelsOf(lastAssistant(root))).toEqual(["Yes", "Pick another day"]);
+    expect(bubbleText(lastAssistant(root))).toMatch(/Does that work\?/);
     await send(root, "October 2");
     expect(buttons(bubbleFor(root, /Any accessorials\?/))).toHaveLength(0);
 
@@ -438,7 +447,7 @@ describe("quick reply buttons in the thread", () => {
     root.querySelector("#send-transcript").click();
     await vi.waitFor(() => expect(snapshots).toHaveLength(1));
     expect(snapshots[0]).toContain("User [tap]: Pallets");
-    expect(snapshots[0]).toContain("Version: v0.41");
+    expect(snapshots[0]).toContain("Version: v0.42");
     expect(snapshots[0]).toMatch(/pallets or pieces/);
   });
 
